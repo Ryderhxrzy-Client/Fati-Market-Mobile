@@ -63,6 +63,25 @@ fun SignUpScreen(navController: NavController) {
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
 
+    // ── Realtime validation ───────────────────────────────────────────────
+    val emailSuffix = "@student.fatima.edu.ph"
+    val normalizedEmail = email.trim()
+
+    val isEmailEmpty = normalizedEmail.isEmpty()
+    val isEmailSuffixValid = normalizedEmail.endsWith(emailSuffix)
+
+    val hasMinLen8 = password.length >= 8
+    val hasLowercase = password.any { it.isLowerCase() }
+    val hasUppercase = password.any { it.isUpperCase() }
+    val hasDigit = password.any { it.isDigit() }
+    val allowedSpecialChars = "@$!%*?&"
+    val hasAllowedSpecialChar = password.any { allowedSpecialChars.contains(it) }
+
+    val isPasswordValid = hasMinLen8 && hasLowercase && hasUppercase && hasDigit && hasAllowedSpecialChar
+    val isConfirmPasswordEmpty = confirmPassword.isBlank()
+    val isConfirmPasswordMatch = !isConfirmPasswordEmpty && confirmPassword == password
+
+
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
@@ -281,6 +300,7 @@ fun SignUpScreen(navController: NavController) {
                     value = email,
                     onValueChange = { email = it },
                     label = { Text("Email Address") },
+                    placeholder = { Text("juan.delacruz$emailSuffix") },
                     leadingIcon = {
                         Icon(
                             Icons.Filled.Email,
@@ -291,16 +311,27 @@ fun SignUpScreen(navController: NavController) {
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                        .padding(bottom = 4.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                Text(
+                    text = if (isEmailSuffixValid) "Email format is valid" else "Email must end with $emailSuffix",
+                    color = if (isEmailSuffixValid) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                )
+
 
                 // ── Password ─────────────────────────────────────────────────────
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("Password") },
+                    placeholder = { Text("Enter strong password") },
                     leadingIcon = {
                         Icon(
                             Icons.Filled.Lock,
@@ -322,10 +353,56 @@ fun SignUpScreen(navController: NavController) {
                     else PasswordVisualTransformation(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                        .padding(bottom = 8.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                    Text(
+                        text = "Password requirements:",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+
+                    Text(
+                        text = "• At least 8 characters (min:8)",
+                        color = if (hasMinLen8) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "• At least one lowercase letter",
+                        color = if (hasLowercase) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "• At least one uppercase letter",
+                        color = if (hasUppercase) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "• At least one digit",
+                        color = if (hasDigit) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "• At least one special character (@$!%*?&)",
+                        color = if (hasAllowedSpecialChar) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp
+                    )
+
+                    if (isPasswordValid) {
+                        Text(
+                            text = "Password is valid",
+                            color = Color(0xFF2E7D32),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+
 
                 // ── Confirm Password ─────────────────────────────────────────────
                 OutlinedTextField(
@@ -339,6 +416,7 @@ fun SignUpScreen(navController: NavController) {
                             tint = MaterialTheme.colorScheme.primary
                         )
                     },
+
                     trailingIcon = {
                         IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                             Icon(
@@ -353,10 +431,24 @@ fun SignUpScreen(navController: NavController) {
                     else PasswordVisualTransformation(),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 20.dp),
+                        .padding(bottom = 4.dp),
+
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     shape = RoundedCornerShape(12.dp)
                 )
+                
+                if (!isConfirmPasswordEmpty) {
+                    Text(
+                        text = if (isConfirmPasswordMatch) "Passwords match" else "Passwords do not match",
+                        color = if (isConfirmPasswordMatch) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
 
                 // ── Section Divider ──────────────────────────────────────────────
                 Divider(
