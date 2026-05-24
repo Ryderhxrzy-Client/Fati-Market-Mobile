@@ -4975,29 +4975,31 @@ private fun EditItemPageForList(
                 ) {
                     Text(item.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
 
-                    // Price Points - NON-EDITABLE (display only)
-                    Text("Price Points", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    // Price Points - NON-EDITABLE (display only) - HIDE for public listings
+                    if (editStatus.lowercase() != "public") {
+                        Text("Price Points", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Filled.MonetizationOn, null,
-                                tint = DarkGreen, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "${item.pricePoints} pts",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DarkGreen
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.MonetizationOn, null,
+                                    tint = DarkGreen, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "${item.pricePoints} pts",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DarkGreen
+                                )
+                            }
                         }
                     }
 
