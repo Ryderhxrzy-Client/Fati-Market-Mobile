@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "314372663644",
+    "project_id": "fati-market",
+    "storage_bucket": "fati-market.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:314372663644:android:1e46bf45cdf1f7ea98b999",
+        "android_client_info": {
+          "package_name": "com.fati_market"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDP7Uopmk1KdwCNic8qsFCqkcfRtI6q3tc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
