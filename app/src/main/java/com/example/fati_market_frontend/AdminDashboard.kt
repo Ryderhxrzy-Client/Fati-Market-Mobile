@@ -1,4 +1,4 @@
-package com.example.fati_market_frontend
+package com.fati_market
 
 import android.content.Context
 import android.net.Uri
@@ -72,8 +72,8 @@ import androidx.compose.foundation.gestures.transformable
 import androidx.compose.ui.graphics.graphicsLayer
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
-import com.example.fati_market_frontend.ui.theme.DarkGreen
-import com.example.fati_market_frontend.ui.theme.DarkGreenLight
+import com.fati_market.ui.theme.DarkGreen
+import com.fati_market.ui.theme.DarkGreenLight
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -112,11 +112,11 @@ import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 
-// ── Pusher global debug state (readable from any composable) ───────────────────
+// â”€â”€ Pusher global debug state (readable from any composable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // private val pusherGlobalStatus = mutableStateOf("idle")
 // private val pusherGlobalLog    = mutableStateOf("")
 
-// ── Drawer Pages ───────────────────────────────────────────────────────────────
+// â”€â”€ Drawer Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private sealed class DrawerPage(val label: String) {
     object Dashboard         : DrawerPage("Dashboard")
@@ -144,7 +144,7 @@ private sealed class DrawerPage(val label: String) {
 
 private enum class AdminTab { HOME, CHAT, USERS, SETTINGS, PROFILE }
 
-// ── Student model (fields match the API response exactly) ──────────────────────
+// â”€â”€ Student model (fields match the API response exactly) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private data class Student(
     val studentVerificationId: Int,
@@ -176,7 +176,7 @@ private data class Student(
 
 
 
-// ── Network helpers ────────────────────────────────────────────────────────────
+// â”€â”€ Network helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private val adminHttpClient = OkHttpClient.Builder()
     .connectTimeout(15, TimeUnit.SECONDS)
@@ -207,7 +207,7 @@ private fun fetchStudents(token: String, status: String? = null): List<Student> 
 }
 
 /** Update a student's verification status. Returns true on success.
- *  action must be "approve" or "decline" — maps directly to the API endpoint path. */
+ *  action must be "approve" or "decline" â€” maps directly to the API endpoint path. */
 private fun updateStudentStatus(
     token: String,
     userId: Int,
@@ -310,7 +310,7 @@ private fun parseStudent(obj: JSONObject) = Student(
     reason                = obj.strOrNull("reason")
 )
 
-/** "2026-02-25T05:53:47.000000Z" → "Feb 25, 2026" */
+/** "2026-02-25T05:53:47.000000Z" â†’ "Feb 25, 2026" */
 private fun formatDate(raw: String?): String {
     if (raw == null) return "N/A"
     return try {
@@ -355,7 +355,7 @@ private fun statusColor(status: String) = when (status.lowercase()) {
     else       -> Color(0xFFFF9800)
 }
 
-// ── Admin Dashboard ────────────────────────────────────────────────────────────
+// â”€â”€ Admin Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () -> Unit = {}) {
@@ -513,7 +513,7 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
     }
 }
 
-// ── Drawer ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun AdminDrawerContent(
@@ -534,7 +534,7 @@ private fun AdminDrawerContent(
     var transactionsExpanded by remember { mutableStateOf(false) }
     var reportsExpanded      by remember { mutableStateOf(false) }
 
-    // ── Logout confirmation dialog ────────────────────────────────────────────
+    // â”€â”€ Logout confirmation dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -862,7 +862,7 @@ private enum class ItemStatus(val displayName: String) {
     }
 }
 
-// ── Private Offers ─────────────────────────────────────────────────────────────
+// â”€â”€ Private Offers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @Composable
 private fun AdminPrivateOffersContent(
     onMenuClick: () -> Unit,
@@ -995,7 +995,7 @@ private fun AdminPrivateOffersContent(
     }
 }
 
-// ── Generic Item List (Acquired / Public / Reserved / Sold) ────────────────────
+// â”€â”€ Generic Item List (Acquired / Public / Reserved / Sold) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @Composable
 private fun AdminItemListContent(
     title: String,
@@ -1053,7 +1053,7 @@ private fun AdminItemListContent(
 
     CompositionLocalProvider(LocalProvidesBottomBar provides showBar) {
         when {
-            // ── Edit page ───────────────────────────────────────────────────────
+            // â”€â”€ Edit page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             editingItem != null -> {
                 EditItemPageForList(
                     item = editingItem!!,
@@ -1082,7 +1082,7 @@ private fun AdminItemListContent(
                 )
             }
 
-            // ── Item detail page (view-only pages) ──────────────────────────────
+            // â”€â”€ Item detail page (view-only pages) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             selectedItem != null -> {
                 AdminItemDetailPage(
                     item   = selectedItem!!,
@@ -1090,7 +1090,7 @@ private fun AdminItemListContent(
                 )
             }
 
-            // ── List ────────────────────────────────────────────────────────────
+            // â”€â”€ List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             else -> {
                 Column(modifier = Modifier.fillMaxSize()) {
                     AdminPageHeader(title = title, onMenuClick = onMenuClick)
@@ -1160,7 +1160,7 @@ private fun AdminItemListContent(
     }
 }
 
-// ── View-only card (Public / Reserved / Sold — no Edit or Chat buttons) ────────
+// â”€â”€ View-only card (Public / Reserved / Sold â€” no Edit or Chat buttons) â”€â”€â”€â”€â”€â”€â”€â”€
 @Composable
 private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditClick: (Item) -> Unit = {}) {
     Card(
@@ -1170,7 +1170,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // ── Photo ─────────────────────────────────────────────────────────
+            // â”€â”€ Photo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             val photoUrl = item.photos.firstOrNull() ?: ""
             if (photoUrl.isNotBlank()) {
                 AsyncImage(
@@ -1201,7 +1201,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                 modifier            = Modifier.fillMaxWidth().padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // ── Title + status chip ────────────────────────────────────────
+                // â”€â”€ Title + status chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1234,7 +1234,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                     }
                 }
 
-                // ── Seller + price ─────────────────────────────────────────────
+                // â”€â”€ Seller + price â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1266,7 +1266,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3, overflow = TextOverflow.Ellipsis)
 
-                // ── Markup info row ───────────────────────────────────────────
+                // â”€â”€ Markup info row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if (item.markupPoints > 0 && item.status.lowercase() != "public") {
                     HorizontalDivider()
                     Row(verticalAlignment = Alignment.CenterVertically,
@@ -1279,7 +1279,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                     }
                 }
 
-                // ── Action buttons ──────────────────────────────────────────
+                // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1308,7 +1308,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
     }
 }
 
-// ── Item Detail Page (full-screen, view-only) ──────────────────────────────────
+// â”€â”€ Item Detail Page (full-screen, view-only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @Composable
 private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
     var currentPhotoIndex by remember { mutableStateOf(0) }
@@ -1320,7 +1320,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // ── Top bar ───────────────────────────────────────────────────────────
+        // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val statusColor = when (item.status.lowercase()) {
             "sold"     -> MaterialTheme.colorScheme.error
             "reserved" -> Color(0xFFE65100)
@@ -1371,13 +1371,13 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
             }
         }
 
-        // ── Scrollable content ────────────────────────────────────────────────
+        // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // ── Photo carousel ────────────────────────────────────────────────
+            // â”€â”€ Photo carousel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (item.photos.isNotEmpty()) {
                 Box(
                     modifier = Modifier
@@ -1481,7 +1481,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                 }
             }
 
-            // ── Details card ──────────────────────────────────────────────────
+            // â”€â”€ Details card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Card(
                 modifier  = Modifier
                     .fillMaxWidth()
@@ -1651,7 +1651,7 @@ private fun AdminPrivateOfferCard(
         }
     }
 
-    // ── Send Points Dialog ────────────────────────────────────────────────────
+    // â”€â”€ Send Points Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (showPointsDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -1714,7 +1714,7 @@ private fun AdminPrivateOfferCard(
         )
     }
 
-    // ── Chat dialog ───────────────────────────────────────────────────────────
+    // â”€â”€ Chat dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (showChatDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -1827,7 +1827,7 @@ private fun AdminPrivateOfferCard(
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // ── Photo ─────────────────────────────────────────────────────────
+            // â”€â”€ Photo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             val photoUrl = item.photos.firstOrNull() ?: ""
             if (photoUrl.isNotBlank()) {
                 AsyncImage(
@@ -1858,7 +1858,7 @@ private fun AdminPrivateOfferCard(
                 modifier            = Modifier.fillMaxWidth().padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // ── Title + current status chip ────────────────────────────────
+                // â”€â”€ Title + current status chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1893,7 +1893,7 @@ private fun AdminPrivateOfferCard(
                     }
                 }
 
-                // ── Seller + price ─────────────────────────────────────────────
+                // â”€â”€ Seller + price â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1925,7 +1925,7 @@ private fun AdminPrivateOfferCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3, overflow = TextOverflow.Ellipsis)
 
-                // ── Markup Display (Specifically for Acquired) ───────────────
+                // â”€â”€ Markup Display (Specifically for Acquired) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if (item.status.lowercase() == "acquired" && item.markupPoints > 0) {
                     Row(
                         modifier = Modifier.fillMaxWidth().background(Color(0xFF1565C0).copy(alpha = 0.05f), RoundedCornerShape(8.dp)).padding(8.dp),
@@ -1939,7 +1939,7 @@ private fun AdminPrivateOfferCard(
 
                 HorizontalDivider()
 
-                // ── Action buttons ─────────────────────────────────────────────
+                // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
@@ -1968,7 +1968,7 @@ private fun AdminPrivateOfferCard(
                         }
                     }
 
-                    // ── Send Points Button (Acquired only) ───────────────────
+                    // â”€â”€ Send Points Button (Acquired only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (item.status.lowercase() == "acquired") {
                         Button(
                             onClick = { showPointsDialog = true },
@@ -1987,7 +1987,7 @@ private fun AdminPrivateOfferCard(
     }
 }
 
-// ── Bottom Nav ─────────────────────────────────────────────────────────────────
+// â”€â”€ Bottom Nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun AdminBottomBar(
@@ -2041,7 +2041,7 @@ private fun AdminBottomBar(
                 Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         }
-        // Center FAB — sits above the bar with its label below it
+        // Center FAB â€” sits above the bar with its label below it
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -2189,7 +2189,7 @@ private fun ProfileNavItem(
     }
 }
 
-// ── Home ───────────────────────────────────────────────────────────────────────
+// â”€â”€ Home â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun AdminHomeContent(onMenuClick: () -> Unit) {
@@ -2359,7 +2359,7 @@ private fun AdminHomeContent(onMenuClick: () -> Unit) {
                 recentItemsList.take(3).forEach { item ->
                     DashboardListItem(
                         title = item["title"]?.toString() ?: "",
-                        subtitle = "${item["seller"]?.toString() ?: ""} • ${item["status"]?.toString() ?: ""}",
+                        subtitle = "${item["seller"]?.toString() ?: ""} â€¢ ${item["status"]?.toString() ?: ""}",
                         icon = Icons.Filled.ShoppingBag,
                         iconColor = DarkGreen
                     )
@@ -2439,7 +2439,7 @@ private fun DashboardListItem(
     }
 }
 
-// ── Chat data models ────────────────────────────────────────────────────────────
+// â”€â”€ Chat data models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 data class ChatItem(
     val itemId: Int,
@@ -2484,7 +2484,7 @@ data class ChatMessage(
     val sentAt: String
 )
 
-// ── Chat API ────────────────────────────────────────────────────────────────────
+// â”€â”€ Chat API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private fun fetchConversations(token: String): List<Conversation> {
     val request = Request.Builder()
@@ -2563,7 +2563,7 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
         if (!response.isSuccessful) {
             // Truncate body so the toast/error text stays readable
             val preview = body.take(200).replace("\n", " ")
-            throw Exception("HTTP ${response.code} – $preview")
+            throw Exception("HTTP ${response.code} â€“ $preview")
         }
         val list = mutableListOf<ChatMessage>()
         // Handle: bare array, {"data":[...]}, {"messages":[...]},
@@ -2582,7 +2582,7 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
                     }
             }
         }
-        arr ?: return emptyList()   // valid 200 body but no message array → truly empty
+        arr ?: return emptyList()   // valid 200 body but no message array â†’ truly empty
         for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
             val senderObj   = obj.optJSONObject("sender")
@@ -2800,7 +2800,7 @@ private fun timeAgo(dateStr: String): String {
     } catch (_: Exception) { dateStr }
 }
 
-// ── Chat ───────────────────────────────────────────────────────────────────────
+// â”€â”€ Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 fun AdminChatContent(
@@ -2872,11 +2872,11 @@ fun AdminChatContent(
         targetState = selectedConversation,
         transitionSpec = {
             if (targetState != null) {
-                // Opening a conversation — slide in from right
+                // Opening a conversation â€” slide in from right
                 slideInHorizontally(tween(300)) { it } togetherWith
                         slideOutHorizontally(tween(300)) { -it / 3 }
             } else {
-                // Going back — slide in from left
+                // Going back â€” slide in from left
                 slideInHorizontally(tween(300)) { -it / 3 } togetherWith
                         slideOutHorizontally(tween(300)) { it }
             }
@@ -2900,13 +2900,13 @@ fun AdminChatContent(
                 // val dbgLog    by pusherGlobalLog
                 // val (bannerBg, bannerDot, bannerLabel) = when (dbgStatus) {
                 //     "subscribed"                    -> Triple(Color(0xFF1B5E20), Color(0xFF69F0AE), "Live")
-                //     "connected"                     -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Authenticating…")
-                //     "reconnecting"                  -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Reconnecting…")
+                //     "connected"                     -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Authenticatingâ€¦")
+                //     "reconnecting"                  -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Reconnectingâ€¦")
                 //     "auth_failed"                   -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Auth failed")
                 //     "error"                         -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Error")
                 //     "disconnected", "disconnecting" -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Disconnected")
                 //     "idle"                          -> Triple(Color(0xFF1A237E), Color(0xFF82B1FF), "No active chat")
-                //     else                            -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Connecting…")
+                //     else                            -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Connectingâ€¦")
                 // }
                 // Row(
                 //     modifier = Modifier
@@ -2925,7 +2925,7 @@ fun AdminChatContent(
                 //     )
                 //     if (dbgLog.isNotEmpty()) {
                 //         Text(
-                //             "  —  $dbgLog",
+                //             "  â€”  $dbgLog",
                 //             fontSize = 11.sp,
                 //             color = bannerDot.copy(alpha = 0.75f),
                 //             maxLines = 1,
@@ -2972,7 +2972,7 @@ fun AdminChatContent(
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (searchQuery.isEmpty()) {
                                     Text(
-                                        "Search conversations…",
+                                        "Search conversationsâ€¦",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                         fontSize = 14.sp,
                                         lineHeight = 20.sp
@@ -2997,7 +2997,7 @@ fun AdminChatContent(
                     }
                 }
 
-                // ── Filter chips ──────────────────────────────────────────────
+                // â”€â”€ Filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3332,7 +3332,7 @@ private fun ChatDetailContent(
     val focusManager           = LocalFocusManager.current
     val textFieldFocusRequester = remember { FocusRequester() }
 
-    // ── Pusher real-time ──────────────────────────────────────────────────────
+    // â”€â”€ Pusher real-time â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Hot flow used as a thread-safe bridge between Pusher's callback thread
     // and the Compose main thread.
     // val incomingFlow = remember { MutableSharedFlow<ChatMessage>(extraBufferCapacity = 64) }
@@ -3343,7 +3343,7 @@ private fun ChatDetailContent(
     //     var pusherRef: Pusher? = null
     //
     //     try {
-    //         val tokenPreview = if (token.length > 8) "${token.take(8)}…" else "(empty)"
+    //         val tokenPreview = if (token.length > 8) "${token.take(8)}â€¦" else "(empty)"
     //         handler.post {
     //             pusherGlobalStatus.value = "connecting"
     //             pusherGlobalLog.value    = "token=$tokenPreview ch=$channelName"
@@ -3365,7 +3365,7 @@ private fun ChatDetailContent(
     //                     Log.d("Pusher", "Subscribed to $cn")
     //                     handler.post {
     //                         pusherGlobalStatus.value = "subscribed"
-    //                         pusherGlobalLog.value    = "OK — $cn"
+    //                         pusherGlobalLog.value    = "OK â€” $cn"
     //                     }
     //                 }
     //                 override fun onAuthenticationFailure(message: String, e: Exception) {
@@ -3418,7 +3418,7 @@ private fun ChatDetailContent(
     //
     //         pusher.connect(object : ConnectionEventListener {
     //             override fun onConnectionStateChange(change: ConnectionStateChange) {
-    //                 Log.d("Pusher", "${change.previousState} → ${change.currentState}")
+    //                 Log.d("Pusher", "${change.previousState} â†’ ${change.currentState}")
     //                 handler.post {
     //                     pusherGlobalStatus.value = when (change.currentState) {
     //                         ConnectionState.CONNECTING    -> "connecting"
@@ -3470,7 +3470,7 @@ private fun ChatDetailContent(
     //                     else existing
     //                 }
     //             }
-    //             // New message from the other participant — append if not already present
+    //             // New message from the other participant â€” append if not already present
     //             messages.none { it.messageId == msg.messageId } -> {
     //                 messages = messages + msg
     //                 listState.scrollToItem(messages.size - 1)
@@ -3478,7 +3478,7 @@ private fun ChatDetailContent(
     //         }
     //     }
     // }
-    // ─────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     LaunchedEffect(conversation.otherUserId, conversation.itemId) {
         chatItem = withContext(Dispatchers.IO) { fetchChatItem(token, conversation.itemId) }
@@ -3511,7 +3511,7 @@ private fun ChatDetailContent(
                     isInitialLoad = false
                 }
                 // reverseLayout=true means newest message is always at index 0 (bottom)
-                // — no scroll needed after load, the list is already at the correct position
+                // â€” no scroll needed after load, the list is already at the correct position
             }
             delay(5000) // Poll every 5 seconds
         }
@@ -3524,13 +3524,13 @@ private fun ChatDetailContent(
 
         // Resolve receiver ID:
         // 1. Use the conversation's otherUserId if it was parsed correctly (non-zero).
-        // 2. Fall back to inferring from already-loaded messages — look for a
+        // 2. Fall back to inferring from already-loaded messages â€” look for a
         //    receiver_id on messages WE sent, or a sender_id on messages THEY sent.
         // This handles the case where the conversations API omits other_user_id.
         val receiverId = conversation.otherUserId.takeIf { it != 0 }
             ?: messages.firstOrNull { it.senderId == currentUserId }?.receiverId?.takeIf { it != 0 }
             ?: messages.firstOrNull { it.senderId != currentUserId }?.senderId?.takeIf { it != 0 }
-            ?: return  // still unknown — don't send a broken request
+            ?: return  // still unknown â€” don't send a broken request
 
         messageText = ""
         isSending   = true
@@ -3552,7 +3552,7 @@ private fun ChatDetailContent(
         )
         messages = messages + optimistic
         scope.launch {
-            // reverseLayout=true keeps newest at index 0 (bottom) — no manual scroll needed
+            // reverseLayout=true keeps newest at index 0 (bottom) â€” no manual scroll needed
             withContext(Dispatchers.IO) {
                 sendMessage(token, conversation.itemId, receiverId, text)
             }
@@ -3609,7 +3609,7 @@ private fun ChatDetailContent(
     BackHandler(enabled = showItemPreview && !showEmojiPicker) { showItemPreview = false }
     BackHandler(enabled = showEditItem && !showEmojiPicker && !showItemPreview) { showEditItem = false }
 
-    // ── Item detail / Edit pages (full-screen, slides in over the chat) ────────
+    // â”€â”€ Item detail / Edit pages (full-screen, slides in over the chat) â”€â”€â”€â”€â”€â”€â”€â”€
     AnimatedContent(
         targetState = when {
             showEditItem -> "edit"
@@ -3647,14 +3647,14 @@ private fun ChatDetailContent(
                 } ?: run { showItemPreview = false }
             }
             else -> {
-                // Flat Column — mirrors Messenger's layout. No Scaffold re-measure on every
+                // Flat Column â€” mirrors Messenger's layout. No Scaffold re-measure on every
                 // keyboard frame; imePadding() only re-measures this simple Column + children.
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .imePadding()
                 ) {
-            // ── Top bar ────────────────────────────────────────────────────────
+            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3706,7 +3706,7 @@ private fun ChatDetailContent(
                         )
                     }
                 }
-                // ── Item info bar (sticky, always visible) ────────────────────
+                // â”€â”€ Item info bar (sticky, always visible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 chatItem?.let { item ->
                     HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
                     Row(
@@ -3830,7 +3830,7 @@ private fun ChatDetailContent(
                 }
             } // end top bar Column
 
-            // ── Messages ────────────────────────────────────────────────────────
+            // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -3871,7 +3871,7 @@ private fun ChatDetailContent(
                         else -> LazyColumn(
                             state = listState,
                             // reverseLayout = true: item 0 anchors to bottom.
-                            // Newest messages stay visible when keyboard opens —
+                            // Newest messages stay visible when keyboard opens â€”
                             // no programmatic scroll needed (mirrors Messenger).
                             reverseLayout = true,
                             modifier = Modifier
@@ -3888,23 +3888,23 @@ private fun ChatDetailContent(
                     }
             } // end messages Box
 
-            // ── Input bar ───────────────────────────────────────────────────────
+            // â”€â”€ Input bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Surface(
                 shadowElevation = 0.dp,
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.navigationBarsPadding()) {
-                    // ── Pusher debug status bar ───────────────────────────────
+                    // â”€â”€ Pusher debug status bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     // val (dotColor, statusLabel) = when (pusherStatus) {
                     //     "subscribed"    -> Color(0xFF4CAF50) to "Live"
-                    //     "connected"     -> Color(0xFFFF9800) to "Authenticating…"
-                    //     "reconnecting"  -> Color(0xFFFF9800) to "Reconnecting…"
+                    //     "connected"     -> Color(0xFFFF9800) to "Authenticatingâ€¦"
+                    //     "reconnecting"  -> Color(0xFFFF9800) to "Reconnectingâ€¦"
                     //     "auth_failed"   -> Color(0xFFF44336) to "Auth failed"
                     //     "error"         -> Color(0xFFF44336) to "Error"
                     //     "disconnected",
                     //     "disconnecting" -> Color(0xFFF44336) to "Disconnected"
-                    //     else            -> Color(0xFFFF9800) to "Connecting…"
+                    //     else            -> Color(0xFFFF9800) to "Connectingâ€¦"
                     // }
                     // Row(
                     //     modifier = Modifier
@@ -3923,7 +3923,7 @@ private fun ChatDetailContent(
                     //     )
                     //     if (pusherDebugLog.isNotEmpty()) {
                     //         Text(
-                    //             "  •  $pusherDebugLog",
+                    //             "  â€¢  $pusherDebugLog",
                     //             fontSize = 10.sp,
                     //             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                     //             maxLines = 1,
@@ -3932,12 +3932,12 @@ private fun ChatDetailContent(
                     //         )
                     //     }
                     // }
-                    // ─────────────────────────────────────────────────────────
+                    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
 
-                    // ── Action buttons (Mark as Reserve, Mark as Sold) ──────────
+                    // â”€â”€ Action buttons (Mark as Reserve, Mark as Sold) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     // Only show for seller when item status is public, reserved, or sold
                     val currentChatItem = chatItem
                     if (currentChatItem != null && currentUserId == currentChatItem.sellerId &&
@@ -3990,7 +3990,7 @@ private fun ChatDetailContent(
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Emoji button — toggles picker panel; restores keyboard when closing
+                        // Emoji button â€” toggles picker panel; restores keyboard when closing
                         IconButton(onClick = {
                             if (showEmojiPicker) {
                                 showEmojiPicker = false
@@ -4042,7 +4042,7 @@ private fun ChatDetailContent(
                                 ) {
                                     if (messageText.isEmpty()) {
                                         Text(
-                                            "Type a message…",
+                                            "Type a messageâ€¦",
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                             fontSize = 14.sp,
                                             lineHeight = 20.sp
@@ -4085,7 +4085,7 @@ private fun ChatDetailContent(
                             }
                         }
                     }
-                    // Emoji picker panel — shown when emoji button is toggled
+                    // Emoji picker panel â€” shown when emoji button is toggled
                     if (showEmojiPicker) {
                         EmojiPickerPanel(onEmojiClick = { messageText += it })
                     }
@@ -4257,7 +4257,7 @@ private fun EmojiPickerPanel(onEmojiClick: (String) -> Unit) {
     }
 }
 
-// ── Item Detail Page (shown when "View Item" is tapped in chat) ────────────────
+// â”€â”€ Item Detail Page (shown when "View Item" is tapped in chat) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
@@ -4266,7 +4266,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // ── Top bar ────────────────────────────────────────────────────────
+            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4291,7 +4291,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                     )
                 }
             }
-            // ── Scrollable content ──────────────────────────────────────────────
+            // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -4452,7 +4452,7 @@ private fun EditItemPage(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // ── Top bar ────────────────────────────────────────────────────────
+            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4477,7 +4477,7 @@ private fun EditItemPage(
                     )
                 }
             }
-            // ── Scrollable content ──────────────────────────────────────────────
+            // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -4696,7 +4696,7 @@ private fun EditItemPage(
 
                     HorizontalDivider()
 
-                    // ── Success Dialog ────────────────────────────────────────
+                    // â”€â”€ Success Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (showSuccessDialog) {
                         AlertDialog(
                             onDismissRequest = { showSuccessDialog = false },
@@ -4735,7 +4735,7 @@ private fun EditItemPage(
                         )
                     }
 
-                    // ── Error Dialog ──────────────────────────────────────────
+                    // â”€â”€ Error Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (showErrorDialog) {
                         AlertDialog(
                             onDismissRequest = { showErrorDialog = false },
@@ -4795,7 +4795,7 @@ private fun EditItemPage(
                                         status = editStatus,
                                         markupPoints = markupPts ?: item.markupPoints
                                     )
-                                    // Show dialog FIRST — onItemUpdated is called from Back button
+                                    // Show dialog FIRST â€” onItemUpdated is called from Back button
                                     showSuccessDialog = true
                                 } else {
                                     dialogErrorMsg = errMsg.ifBlank { "Failed to update. Please try again." }
@@ -4863,7 +4863,7 @@ private fun EditItemPageForList(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // ── Top bar ────────────────────────────────────────────────────────
+            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4889,7 +4889,7 @@ private fun EditItemPageForList(
                 }
             }
             
-            // ── Scrollable content ──────────────────────────────────────────────
+            // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -5051,7 +5051,7 @@ private fun EditItemPageForList(
                         }
                     }
 
-                    // Markup Points field — editable when status is private/acquired,
+                    // Markup Points field â€” editable when status is private/acquired,
                     // read-only (greyed card) for all other statuses.
                     // Always visible so the current value is never hidden from the admin.
                     Text("Markup Points", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
@@ -5117,7 +5117,7 @@ private fun EditItemPageForList(
 
                     HorizontalDivider()
 
-                    // ── Success Dialog ─────────────────────────────────────────
+                    // â”€â”€ Success Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (showSuccessDialog) {
                         AlertDialog(
                             onDismissRequest = { showSuccessDialog = false },
@@ -5156,7 +5156,7 @@ private fun EditItemPageForList(
                         )
                     }
 
-                    // ── Error Dialog ───────────────────────────────────────────
+                    // â”€â”€ Error Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (showErrorDialog) {
                         AlertDialog(
                             onDismissRequest = { showErrorDialog = false },
@@ -5223,7 +5223,7 @@ private fun EditItemPageForList(
                                         status = editStatus,
                                         photos = item.photos
                                     )
-                                    // Show dialog FIRST — onItemUpdated is called from the Back button
+                                    // Show dialog FIRST â€” onItemUpdated is called from the Back button
                                     showSuccessDialog = true
                                 } else {
                                     dialogErrorMsg = errMsg.ifBlank { "Failed to update. Please try again." }
@@ -5333,7 +5333,7 @@ private fun ChatBubble(msg: ChatMessage, isMe: Boolean) {
     }
 }
 
-// ── Users ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun AdminUsersContent(onMenuClick: () -> Unit) {
@@ -5350,7 +5350,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
     var refreshKey      by remember { mutableStateOf(0) }
 
-    // Always fetch ALL students — filter client-side via displayStatus so that
+    // Always fetch ALL students â€” filter client-side via displayStatus so that
     // students with is_verified=true but status="pending" on the backend still
     // appear correctly under the Approved tab.
     LaunchedEffect(refreshKey) {
@@ -5381,7 +5381,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
         }
     }
 
-    // Pre-compute counts once per students change — avoids 4x .count() on every recomposition
+    // Pre-compute counts once per students change â€” avoids 4x .count() on every recomposition
     val pendingCount  = remember(students) { students.count { it.displayStatus == "pending" } }
     val approvedCount = remember(students) { students.count { it.displayStatus == "approved" } }
     val declinedCount = remember(students) { students.count { it.displayStatus == "declined" } }
@@ -5403,7 +5403,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         AdminPageHeader(title = "User Management", onMenuClick = onMenuClick)
 
-        // ── Filter chips ─────────────────────────────────────────────────────
+        // â”€â”€ Filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val filters = listOf("All", "Pending", "Approved", "Declined", "Blocked")
         Row(
             modifier = Modifier
@@ -5435,7 +5435,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
             }
         }
 
-        // ── Content ──────────────────────────────────────────────────────────
+        // â”€â”€ Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Box(modifier = Modifier.fillMaxSize()) {
             when {
                 isLoading -> CircularProgressIndicator(
@@ -5481,7 +5481,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
     }
 }
 
-// ── Student Card ───────────────────────────────────────────────────────────────
+// â”€â”€ Student Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun StudentCard(student: Student, onClick: () -> Unit) {
@@ -5497,7 +5497,7 @@ private fun StudentCard(student: Student, onClick: () -> Unit) {
         Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically) {
 
-            // Avatar — shimmer while loading, initial on error/no URL
+            // Avatar â€” shimmer while loading, initial on error/no URL
             Box(modifier = Modifier.size(50.dp).clip(CircleShape)
                 .background(DarkGreen.copy(alpha = 0.1f))) {
                 if (student.profilePicture != null) {
@@ -5530,14 +5530,14 @@ private fun StudentCard(student: Student, onClick: () -> Unit) {
                 Text(
                     text = buildString {
                         student.verificationType?.let { append(it.replace("_", " ").replaceFirstChar { c -> c.uppercaseChar() }) }
-                        if (student.isVerified) append(" · ✓ Verified")
+                        if (student.isVerified) append(" Â· âœ“ Verified")
                     },
                     fontSize = 11.sp,
                     color = if (student.isVerified) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Status badge — uses displayStatus so is_verified:true always shows Approved
+            // Status badge â€” uses displayStatus so is_verified:true always shows Approved
             Box(modifier = Modifier.clip(RoundedCornerShape(20.dp))
                 .background(sColor.copy(alpha = 0.12f))
                 .padding(horizontal = 10.dp, vertical = 4.dp)) {
@@ -5548,7 +5548,7 @@ private fun StudentCard(student: Student, onClick: () -> Unit) {
     }
 }
 
-// ── Student Detail Page (full-screen) ─────────────────────────────────────────
+// â”€â”€ Student Detail Page (full-screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun StudentDetailDialog(
@@ -5568,7 +5568,7 @@ private fun StudentDetailDialog(
     var resultDialog     by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var showDocViewer    by remember { mutableStateOf(false) }
 
-    // ── Full-screen document viewer ───────────────────────────────────────────
+    // â”€â”€ Full-screen document viewer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (showDocViewer && student.verificationDocument != null) {
         var scale       by remember { mutableStateOf(1f) }
         var offsetX     by remember { mutableStateOf(0f) }
@@ -5627,7 +5627,7 @@ private fun StudentDetailDialog(
         }
     }
 
-    // ── Success / Error alert dialog ─────────────────────────────────────────
+    // â”€â”€ Success / Error alert dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     resultDialog?.let { (success, message) ->
         AlertDialog(
             onDismissRequest = {
@@ -5653,7 +5653,7 @@ private fun StudentDetailDialog(
         )
     }
 
-    // ── Full-screen page (Dialog that fills the whole screen) ─────────────────
+    // â”€â”€ Full-screen page (Dialog that fills the whole screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Dialog(
         onDismissRequest = { if (!actionLoading) onDismiss() },
         properties = DialogProperties(
@@ -5669,7 +5669,7 @@ private fun StudentDetailDialog(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
 
-                // ── Top App Bar ───────────────────────────────────────────────
+                // â”€â”€ Top App Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -5707,13 +5707,13 @@ private fun StudentDetailDialog(
                     }
                 }
 
-                // ── Scrollable Content ────────────────────────────────────────
+                // â”€â”€ Scrollable Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // ── Profile header ────────────────────────────────────────
+                    // â”€â”€ Profile header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -5756,7 +5756,7 @@ private fun StudentDetailDialog(
                         }
                     }
 
-                    // ── Info section ──────────────────────────────────────────
+                    // â”€â”€ Info section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     Column(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -5768,7 +5768,7 @@ private fun StudentDetailDialog(
                         InfoRow(Icons.Filled.Person,         "Full Name",       student.fullName)
                         InfoRow(Icons.Filled.Email,          "Email",           student.email)
                         InfoRow(Icons.Filled.VerifiedUser,   "Verified",
-                            if (student.isVerified) "Yes ✓" else "No",
+                            if (student.isVerified) "Yes âœ“" else "No",
                             valueColor = if (student.isVerified) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurface)
                         student.verificationType?.let {
                             InfoRow(Icons.Filled.CreditCard, "ID Type",
@@ -5788,7 +5788,7 @@ private fun StudentDetailDialog(
                         }
                     }
 
-                    // ── Verification document ─────────────────────────────────
+                    // â”€â”€ Verification document â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     student.verificationDocument?.let { docUrl ->
                         Column(
                             modifier = Modifier
@@ -5853,7 +5853,7 @@ private fun StudentDetailDialog(
                         color = MaterialTheme.colorScheme.outlineVariant
                     )
 
-                    // ── Decline reason input ──────────────────────────────────
+                    // â”€â”€ Decline reason input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (showDeclineInput) {
                         OutlinedTextField(
                             value = declineReason,
@@ -5867,7 +5867,7 @@ private fun StudentDetailDialog(
                         )
                     }
 
-                    // ── Block reason input ────────────────────────────────────
+                    // â”€â”€ Block reason input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (showBlockInput) {
                         OutlinedTextField(
                             value = blockReason,
@@ -5881,7 +5881,7 @@ private fun StudentDetailDialog(
                         )
                     }
 
-                    // ── Action buttons ────────────────────────────────────────
+                    // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     Column(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -5891,7 +5891,7 @@ private fun StudentDetailDialog(
                                 CircularProgressIndicator(color = DarkGreen, modifier = Modifier.size(32.dp))
                             }
                         } else {
-                            // Approve — shown when not already approved
+                            // Approve â€” shown when not already approved
                             if (student.displayStatus != "approved") {
                                 Button(
                                     onClick = {
@@ -5920,7 +5920,7 @@ private fun StudentDetailDialog(
                                 }
                             }
 
-                            // Decline — shown when not already declined
+                            // Decline â€” shown when not already declined
                             if (student.displayStatus != "declined") {
                                 if (!showDeclineInput) {
                                     OutlinedButton(
@@ -5966,7 +5966,7 @@ private fun StudentDetailDialog(
                                 }
                             }
 
-                            // Block — shown when not already blocked
+                            // Block â€” shown when not already blocked
                             if (student.displayStatus != "blocked") {
                                 if (!showBlockInput) {
                                     OutlinedButton(
@@ -6043,7 +6043,7 @@ private fun InfoRow(
     }
 }
 
-// ── Settings ───────────────────────────────────────────────────────────────────
+// â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 fun AdminSettingsContent(
@@ -6130,7 +6130,7 @@ private fun SettingsInfoRow(icon: ImageVector, label: String, value: String) {
     }
 }
 
-// ── Profile ────────────────────────────────────────────────────────────────────
+// â”€â”€ Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 fun AdminProfileContent(
@@ -6161,7 +6161,7 @@ fun AdminProfileContent(
         }
     }
 
-    // Image picker — uploads selected image to the profile picture API
+    // Image picker â€” uploads selected image to the profile picture API
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -6196,7 +6196,7 @@ fun AdminProfileContent(
                             prefs.edit().putString("user_profile_picture", newUrl).apply()
                             onProfilePicUpdated(newUrl)
                         }
-                        // newUrl == "" means upload succeeded but server didn't return a new URL — treat as success
+                        // newUrl == "" means upload succeeded but server didn't return a new URL â€” treat as success
                     } else {
                         uploadError = "Upload failed. Please try again."
                     }
@@ -6211,7 +6211,7 @@ fun AdminProfileContent(
 
     Column(modifier = Modifier.fillMaxSize()) {
 
-        // ── Green header (no overlay buttons — fully centred) ─────────────────
+        // â”€â”€ Green header (no overlay buttons â€” fully centred) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Column(
             modifier = Modifier.fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
@@ -6285,7 +6285,7 @@ fun AdminProfileContent(
             }
         }
 
-        // ── Info cards (scrollable) ────────────────────────────────────────────
+        // â”€â”€ Info cards (scrollable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -6302,9 +6302,9 @@ fun AdminProfileContent(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(2.dp)) {
                 Column {
-                    ProfileInfoRow(Icons.Filled.Person, "Full Name", fullName.ifBlank { "—" })
+                    ProfileInfoRow(Icons.Filled.Person, "Full Name", fullName.ifBlank { "â€”" })
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                    ProfileInfoRow(Icons.Filled.Email, "Email", email.ifBlank { "—" })
+                    ProfileInfoRow(Icons.Filled.Email, "Email", email.ifBlank { "â€”" })
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
                     ProfileInfoRow(Icons.Filled.AdminPanelSettings, "Role",
                         role.replaceFirstChar { it.uppercaseChar() })
@@ -6339,7 +6339,7 @@ private fun ProfileInfoRow(
     }
 }
 
-// ── Shared Page Header ─────────────────────────────────────────────────────────
+// â”€â”€ Shared Page Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 fun AdminPageHeader(
@@ -6466,7 +6466,7 @@ fun AdminPageHeader(
     }
 }
 
-// ── Chat item network ──────────────────────────────────────────────────────────
+// â”€â”€ Chat item network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private fun fetchChatItem(token: String, itemId: Int): ChatItem? {
     val request = Request.Builder()
@@ -6515,7 +6515,7 @@ fun performLogout(token: String): Boolean {
     } catch (_: Exception) { false }
 }
 
-// Get all information of items base on status (admin endpoint — returns all users' items)
+// Get all information of items base on status (admin endpoint â€” returns all users' items)
 private fun fetchItems(token: String, status: String): List<Item> {
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/admin/items?status=$status")
@@ -6647,6 +6647,7 @@ private fun PointsTransactionContent(
     var errorMessage by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
+        requestNotificationPermissionAndRegister(context)
         while (true) {
             try {
                 val sharedPref = context.getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE)
@@ -6785,7 +6786,7 @@ private fun PointsTransactionContent(
                             Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                                 Text(email, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(
-                                    "${if (pointsChange > 0) "+" else ""}${pointsChange} pts • $reason",
+                                    "${if (pointsChange > 0) "+" else ""}${pointsChange} pts â€¢ $reason",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (pointsChange > 0) DarkGreen else MaterialTheme.colorScheme.error
                                 )
