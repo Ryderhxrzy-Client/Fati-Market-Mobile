@@ -1,4 +1,4 @@
-package com.example.fati_market_frontend.auth
+package com.fati_market.auth
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,11 +33,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.fati_market_frontend.auth.network.loginUser
-import com.example.fati_market_frontend.auth.network.parseToken
-import com.example.fati_market_frontend.ui.theme.DarkGreen
-import com.example.fati_market_frontend.ui.theme.DarkGreenLight
-import com.example.fati_market_frontend.ui.theme.Gold
+import com.fati_market.auth.network.loginUser
+import com.fati_market.auth.network.parseToken
+import com.fati_market.ui.theme.DarkGreen
+import com.fati_market.ui.theme.DarkGreenLight
+import com.fati_market.ui.theme.Gold
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,7 +62,7 @@ fun LoginScreen(navController: NavController) {
             .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
     ) {
-        // ── Header with tab switcher ─────────────────────────────────────────────
+        // â”€â”€ Header with tab switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -102,7 +102,7 @@ fun LoginScreen(navController: NavController) {
                     color = Color.White.copy(alpha = 0.8f),
                     fontSize = 13.sp
                 )
-                // ── Login / Sign Up tab switcher ──────────────────────────────────
+                // â”€â”€ Login / Sign Up tab switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 AuthTabSwitcher(
                     isLoginSelected = true,
                     onLoginClick = { /* already here */ },
@@ -111,7 +111,7 @@ fun LoginScreen(navController: NavController) {
             }
         }
 
-        // ── Form Card ────────────────────────────────────────────────────────────
+        // â”€â”€ Form Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -209,7 +209,7 @@ fun LoginScreen(navController: NavController) {
                     )
                 }
 
-                // ── Success Dialog ────────────────────────────────────────────────
+                // â”€â”€ Success Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 successMessage?.let { msg ->
                     val role = context.getSharedPreferences("fatimarket_prefs", 0)
                         .getString("user_role", "admin") ?: "admin"
@@ -258,7 +258,7 @@ fun LoginScreen(navController: NavController) {
                     )
                 }
 
-                // ── Role Selection Toggle ──────────────────────────────────────────
+                // â”€â”€ Role Selection Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Text(
                     text = "Login as:",
                     fontSize = 14.sp,
@@ -296,7 +296,7 @@ fun LoginScreen(navController: NavController) {
                     }
                 }
 
-                // ── Login Button ──────────────────────────────────────────────────
+                // â”€â”€ Login Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Button(
                     onClick = {
                         scope.launch {
@@ -383,7 +383,7 @@ fun LoginScreen(navController: NavController) {
     }
 }
 
-// ── Shared tab switcher used by both Login and SignUp screens ──────────────────
+// â”€â”€ Shared tab switcher used by both Login and SignUp screens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 fun AuthTabSwitcher(
