@@ -2,14 +2,15 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.example.fati_market_frontend"
+    namespace = "com.fati_market"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.fati_market_frontend"
+        applicationId = "com.fati_market"
         minSdk = 33
         targetSdk = 35
         versionCode = 1
@@ -41,6 +42,8 @@ android {
 
 dependencies {
 
+    implementation(platform("com.google.firebase:firebase-bom:34.18.0"))
+    implementation("com.google.firebase:firebase-messaging")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
