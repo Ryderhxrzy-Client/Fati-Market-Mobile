@@ -1,4 +1,4 @@
-package com.example.fati_market_frontend
+package com.fati_market
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -20,9 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.fati_market_frontend.ui.theme.DarkGreen
-import com.example.fati_market_frontend.ui.theme.DarkGreenLight
-import com.example.fati_market_frontend.ui.theme.Gold
+import com.fati_market.ui.theme.DarkGreen
+import com.fati_market.ui.theme.DarkGreenLight
+import com.fati_market.ui.theme.Gold
 import kotlinx.coroutines.delay
 
 @Composable
