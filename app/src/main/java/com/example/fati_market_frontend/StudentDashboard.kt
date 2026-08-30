@@ -1,4 +1,4 @@
-package com.example.fati_market_frontend
+package com.fati_market
 
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -10,6 +10,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -40,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -49,8 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
-import com.example.fati_market_frontend.ui.theme.DarkGreen
-import com.example.fati_market_frontend.ui.theme.DarkGreenLight
+import com.fati_market.ui.theme.DarkGreen
+import com.fati_market.ui.theme.DarkGreenLight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -65,12 +70,12 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-// ── Tabs ───────────────────────────────────────────────────────────────────────
+// â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private enum class StudentTab { HOME, CHAT, ADD_ITEM, SETTINGS, PROFILE }
 private enum class SortOption { NEWEST, PRICE_LOW_HIGH, PRICE_HIGH_LOW }
 
-// ── HTTP client ────────────────────────────────────────────────────────────────
+// â”€â”€ HTTP client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private val studentHttpClient = OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
@@ -78,8 +83,9 @@ private val studentHttpClient = OkHttpClient.Builder()
     .writeTimeout(60, TimeUnit.SECONDS)
     .build()
 
-// ── Student Dashboard ──────────────────────────────────────────────────────────
+// â”€â”€ Student Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () -> Unit = {}) {
     val context = LocalContext.current
@@ -96,8 +102,9 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
     var selectedTab      by remember { mutableStateOf(StudentTab.HOME) }
     var chatConversation by remember { mutableStateOf<Conversation?>(null) }
     var showMyListings   by remember { mutableStateOf(false) }
+    val tabPagerState    = rememberPagerState { StudentTab.values().size }
 
-    // ── Global favorites state (shared across all pages) ──────────────────────
+    // â”€â”€ Global favorites state (shared across all pages) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     var favoritedIds    by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var showFavorites   by remember { mutableStateOf(false) }
     var selectedFavItem by remember { mutableStateOf<Item?>(null) }
@@ -107,11 +114,42 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
 
     BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }
 
+    // Back from a secondary tab returns to Home instead of exiting the app.
+    // Chat detail still gets priority so its own back action remains intact.
+    BackHandler(enabled = !drawerState.isOpen && (selectedTab != StudentTab.HOME || showMyListings || chatConversation != null)) {
+        when {
+            chatConversation != null -> chatConversation = null
+            showMyListings -> showMyListings = false
+            selectedTab != StudentTab.HOME -> selectedTab = StudentTab.HOME
+        }
+    }
+
+    fun selectStudentTab(tab: StudentTab) {
+        selectedTab = tab
+        showMyListings = false
+        chatConversation = null
+    }
+
+    // Keep button navigation and swipe navigation on the same page.
+    LaunchedEffect(selectedTab) {
+        if (tabPagerState.currentPage != selectedTab.ordinal) {
+            tabPagerState.animateScrollToPage(selectedTab.ordinal)
+        }
+    }
+    LaunchedEffect(tabPagerState.settledPage) {
+        val settledTab = StudentTab.values()[tabPagerState.settledPage]
+        if (settledTab != selectedTab && !showMyListings) {
+            selectedTab = settledTab
+            chatConversation = null
+        }
+    }
+
     LaunchedEffect(Unit) {
+        requestNotificationPermissionAndRegister(context)
         favoritedIds = withContext(Dispatchers.IO) { fetchFavoriteIds(token) }
     }
 
-    // ── Favorites overlays (accessible from any page) ─────────────────────────
+    // â”€â”€ Favorites overlays (accessible from any page) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     selectedFavItem?.let { item ->
         ItemDetailDialog(
             item             = item,
@@ -135,6 +173,8 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
 
     ModalNavigationDrawer(
         drawerState   = drawerState,
+        // The edge/right-swipe drawer gesture is available only on Home.
+        gesturesEnabled = selectedTab == StudentTab.HOME && !showMyListings && chatConversation == null,
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
@@ -174,9 +214,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                         userProfilePic = userProfilePic,
                         userInitial    = userFirstName.firstOrNull()?.uppercaseChar()?.toString() ?: "U",
                         onSelect       = { tab ->
-                            selectedTab      = tab
-                            showMyListings   = false
-                            chatConversation = null
+                            selectStudentTab(tab)
                         }
                     )
                 }
@@ -197,7 +235,15 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                         onGoToChat       = { showMyListings = false; selectedTab = StudentTab.CHAT }
                     )
                 } else {
-                    when (selectedTab) {
+                    HorizontalPager(
+                        state = tabPagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        // The pager handles left/right tab swipes on every tab.
+                        // ModalNavigationDrawer remains enabled on Home so its
+                        // right-edge swipe can take priority for opening the drawer.
+                        userScrollEnabled = !chatIsOpen
+                    ) { page ->
+                        when (StudentTab.values()[page]) {
                         StudentTab.HOME     -> StudentHomeContent(
                             onMenuClick          = { openDrawer() },
                             favoritedIds         = favoritedIds,
@@ -238,6 +284,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                             favoritesCount      = favoritedIds.size,
                             onFavoritesClick    = { showFavorites = true }
                         )
+                        }
                     }
                 }
             }
@@ -245,7 +292,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
     }
 }
 
-// ── Home ───────────────────────────────────────────────────────────────────────
+// â”€â”€ Home â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 internal data class Item(
     val itemId: Int,
@@ -330,7 +377,7 @@ private fun StudentHomeContent(
         }
     }
 
-    // ── Item detail overlay (home page items) ─────────────────────────────────
+    // â”€â”€ Item detail overlay (home page items) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     selectedItem?.let { item ->
         ItemDetailDialog(
             item             = item,
@@ -354,7 +401,7 @@ private fun StudentHomeContent(
             onFavoritesClick = onFavoritesClick
         )
 
-        // ── Category filter chips (always visible) ────────────────────────────
+        // â”€â”€ Category filter chips (always visible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (categories.isNotEmpty()) {
             LazyRow(
                 contentPadding        = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -394,7 +441,7 @@ private fun StudentHomeContent(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
 
-        // ── Sort + count row (always visible) ─────────────────────────────────
+        // â”€â”€ Sort + count row (always visible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         var sortExpanded by remember { mutableStateOf(false) }
         Row(
             modifier              = Modifier
@@ -420,8 +467,8 @@ private fun StudentHomeContent(
                     Spacer(Modifier.width(4.dp))
                     Text(when (sortOption) {
                         SortOption.NEWEST         -> "Newest"
-                        SortOption.PRICE_LOW_HIGH -> "Price ↑"
-                        SortOption.PRICE_HIGH_LOW -> "Price ↓"
+                        SortOption.PRICE_LOW_HIGH -> "Price â†‘"
+                        SortOption.PRICE_HIGH_LOW -> "Price â†“"
                     }, fontSize = 12.sp)
                 }
                 DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
@@ -436,7 +483,7 @@ private fun StudentHomeContent(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-        // ── Content (scrollable) ───────────────────────────────────────────────
+        // â”€â”€ Content (scrollable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Box(modifier = Modifier.fillMaxSize()) {
             when {
             isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -557,7 +604,7 @@ private fun StudentHomeContent(
     }
 }
 
-// ── Marketplace header with search ─────────────────────────────────────────────
+// â”€â”€ Marketplace header with search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun MarketplaceHeader(
@@ -697,7 +744,7 @@ private fun MarketplaceHeader(
         OutlinedTextField(
             value         = searchQuery,
             onValueChange = onSearchChange,
-            placeholder   = { Text("Search items…", color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp) },
+            placeholder   = { Text("Search itemsâ€¦", color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp) },
             leadingIcon   = { Icon(Icons.Filled.Search, null, tint = Color.White.copy(alpha = 0.75f)) },
             trailingIcon  = if (searchQuery.isNotEmpty()) {
                 { IconButton(onClick = onClearSearch) { Icon(Icons.Filled.Close, null, tint = Color.White.copy(alpha = 0.75f)) } }
@@ -721,7 +768,7 @@ private fun MarketplaceHeader(
     }
 }
 
-// ── My Listings (private, with edit) ──────────────────────────────────────────
+// â”€â”€ My Listings (private, with edit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun StudentMyListingsContent(
@@ -813,7 +860,7 @@ private fun StudentMyListingsContent(
     }
 }
 
-// ── Public item card (2-column grid, marketplace style) ────────────────────────
+// â”€â”€ Public item card (2-column grid, marketplace style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun PublicItemCard(
@@ -832,7 +879,7 @@ private fun PublicItemCard(
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column {
-            // ── Photo + category badge overlay ────────────────────────────────
+            // â”€â”€ Photo + category badge overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -899,7 +946,7 @@ private fun PublicItemCard(
                 }
             }
 
-            // ── Info ──────────────────────────────────────────────────────────
+            // â”€â”€ Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(
                 modifier            = Modifier.padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -944,7 +991,7 @@ private fun PublicItemCard(
         }
     }
 
-// ── Private item card (full-width, editable) ───────────────────────────────────
+// â”€â”€ Private item card (full-width, editable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDelete: () -> Unit, onGoToChat: () -> Unit = {}) {
@@ -1071,7 +1118,7 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
 
                 HorizontalDivider()
 
-                // ── Chat to Ofelia Store ───────────────────────────────────────
+                // â”€â”€ Chat to Ofelia Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Text(
                     "Message Ofelia Store",
                     fontSize   = 12.sp,
@@ -1155,7 +1202,7 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
                     }
                 }
 
-                // ── Action buttons ────────────────────────────────────────────
+                // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1191,7 +1238,7 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
     }
 }
 
-// ── Edit Item dialog ───────────────────────────────────────────────────────────
+// â”€â”€ Edit Item dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1509,7 +1556,7 @@ private fun EditItemDialog(
     }
 }
 
-// ── Item Detail Dialog ─────────────────────────────────────────────────────────
+// â”€â”€ Item Detail Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun ItemDetailDialog(
@@ -1526,6 +1573,7 @@ private fun ItemDetailDialog(
     var isFav             by remember { mutableStateOf(isFavorited) }
     var isToggling        by remember { mutableStateOf(false) }
     var currentImageIndex by remember { mutableStateOf(0) }
+    var showImageViewer  by remember { mutableStateOf(false) }
     var messageText       by remember { mutableStateOf("Available paba?") }
     var isSending         by remember { mutableStateOf(false) }
     var showSentDialog    by remember { mutableStateOf(false) }
@@ -1534,12 +1582,15 @@ private fun ItemDetailDialog(
     LaunchedEffect(item.itemId) {
         val detail    = withContext(Dispatchers.IO) { fetchItemDetail(token, item.itemId) }
         val favStatus = withContext(Dispatchers.IO) { checkFavorite(token, item.itemId) }
-        if (detail != null) detailItem = detail
+        if (detail != null) {
+            detailItem = detail
+            currentImageIndex = 0
+        }
         isFav     = favStatus
         isLoading = false
     }
 
-    // ── Success dialog ──────────────────────────────────────────────────────────
+    // â”€â”€ Success dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (showSentDialog) {
         AlertDialog(
             onDismissRequest = { showSentDialog = false },
@@ -1569,10 +1620,58 @@ private fun ItemDetailDialog(
         )
     }
 
+    // Full-screen image viewer. Tapping the main image opens this view.
+    if (showImageViewer && detailItem.photos.isNotEmpty()) {
+        Dialog(
+            onDismissRequest = { showImageViewer = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = Color.Black
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AsyncImage(
+                        model = detailItem.photos[currentImageIndex],
+                        contentDescription = "Full-screen item image",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { showImageViewer = false }
+                    )
+                    IconButton(
+                        onClick = { showImageViewer = false },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(8.dp)
+                    ) {
+                        Icon(Icons.Filled.Close, "Close image", tint = Color.White)
+                    }
+                    if (detailItem.photos.size > 1) {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 24.dp),
+                            color = Color.Black.copy(alpha = 0.6f),
+                            shape = RoundedCornerShape(50)
+                        ) {
+                            Text(
+                                "${currentImageIndex + 1} / ${detailItem.photos.size}",
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ── Top bar ────────────────────────────────────────────────────
+                // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1632,18 +1731,35 @@ private fun ItemDetailDialog(
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
                     ) {
-                        // ── Images ─────────────────────────────────────────────
+                        // â”€â”€ Images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         if (detailItem.photos.isNotEmpty()) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(300.dp)
+                                    .pointerInput(detailItem.photos, currentImageIndex) {
+                                        var totalDrag = 0f
+                                        detectHorizontalDragGestures(
+                                            onDragStart = { totalDrag = 0f },
+                                            onHorizontalDrag = { _, dragAmount -> totalDrag += dragAmount },
+                                            onDragEnd = {
+                                                if (kotlin.math.abs(totalDrag) < 60f) return@detectHorizontalDragGestures
+
+                                                currentImageIndex = when {
+                                                    totalDrag < 0f -> (currentImageIndex + 1).coerceAtMost(detailItem.photos.lastIndex)
+                                                    else -> (currentImageIndex - 1).coerceAtLeast(0)
+                                                }
+                                            }
+                                        )
+                                    }
                             ) {
                                 AsyncImage(
                                     model              = detailItem.photos[currentImageIndex],
                                     contentDescription = null,
                                     contentScale       = ContentScale.Crop,
-                                    modifier           = Modifier.fillMaxSize()
+                                    modifier           = Modifier
+                                        .fillMaxSize()
+                                        .clickable { showImageViewer = true }
                                 )
                                 if (detailItem.photos.size > 1) {
                                     Surface(
@@ -1701,7 +1817,7 @@ private fun ItemDetailDialog(
                             }
                         }
 
-                        // ── Info ───────────────────────────────────────────────
+                        // â”€â”€ Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         Column(
                             modifier            = Modifier
                                 .fillMaxWidth()
@@ -1758,7 +1874,7 @@ private fun ItemDetailDialog(
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                            // ── Send message ──────────────────────────────────
+                            // â”€â”€ Send message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                             sendError?.let { err ->
                                 Text(
                                     text     = err,
@@ -1841,7 +1957,7 @@ private fun ItemDetailDialog(
     }
 }
 
-// ── Favorites Screen ───────────────────────────────────────────────────────────
+// â”€â”€ Favorites Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun FavoritesScreen(
@@ -1894,7 +2010,7 @@ private fun FavoritesScreen(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ── Modern Gradient Header ──────────────────────────────────────
+                // â”€â”€ Modern Gradient Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1927,7 +2043,7 @@ private fun FavoritesScreen(
                     }
                 }
 
-                // ── Category Filter ───────────────────────────────────────────
+                // â”€â”€ Category Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if (!isLoading && favoriteItems.isNotEmpty() && categories.isNotEmpty()) {
                     LazyRow(
                         modifier = Modifier
@@ -1965,14 +2081,14 @@ private fun FavoritesScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 }
 
-                // ── Main Content Area ───────────────────────────────────────────
+                // â”€â”€ Main Content Area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 when {
                     isLoading -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 CircularProgressIndicator(color = DarkGreen, strokeWidth = 3.dp)
                                 Spacer(Modifier.height(16.dp))
-                                Text("Refreshing your items…", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 14.sp)
+                                Text("Refreshing your itemsâ€¦", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 14.sp)
                             }
                         }
                     }
@@ -2186,7 +2302,7 @@ private fun FavoriteItemCard(item: Item, isRemoving: Boolean, onClick: () -> Uni
     }
 }
 
-// ── Add Item ───────────────────────────────────────────────────────────────────
+// â”€â”€ Add Item â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private data class Category(val id: Int, val name: String)
 
@@ -2201,7 +2317,7 @@ private fun fetchCategories(token: String): List<Category> {
         val raw = response.body?.string() ?: return emptyList()
         return try {
             // Resolve the array regardless of whether the response is wrapped in an
-            // object or is a plain JSON array — preserves the exact database order.
+            // object or is a plain JSON array â€” preserves the exact database order.
             val arr = try {
                 val obj = JSONObject(raw)
                 when {
@@ -2350,7 +2466,7 @@ private fun StudentAddItemContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // ── Title ──────────────────────────────────────────────────────────
+            // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             OutlinedTextField(
                 value         = title,
                 onValueChange = { if (it.length <= 255) title = it },
@@ -2364,7 +2480,7 @@ private fun StudentAddItemContent(
                 shape           = RoundedCornerShape(12.dp)
             )
 
-            // ── Description ────────────────────────────────────────────────────
+            // â”€â”€ Description â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             OutlinedTextField(
                 value         = description,
                 onValueChange = { if (it.length <= 1000) description = it },
@@ -2379,7 +2495,7 @@ private fun StudentAddItemContent(
                 shape          = RoundedCornerShape(12.dp)
             )
 
-            // ── Category dropdown ──────────────────────────────────────────────
+            // â”€â”€ Category dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             ExposedDropdownMenuBox(
                 expanded         = categoryExpanded,
                 onExpandedChange = { if (!categoriesLoading) categoryExpanded = it }
@@ -2432,7 +2548,7 @@ private fun StudentAddItemContent(
                 }
             }
 
-            // ── Price Points ───────────────────────────────────────────────────
+            // â”€â”€ Price Points â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             OutlinedTextField(
                 value         = pricePoints,
                 onValueChange = { v -> if (v.all { it.isDigit() } && v.length <= 8) pricePoints = v },
@@ -2446,7 +2562,7 @@ private fun StudentAddItemContent(
                 shape           = RoundedCornerShape(12.dp)
             )
 
-            // ── Photos ─────────────────────────────────────────────────────────
+            // â”€â”€ Photos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     modifier            = Modifier.fillMaxWidth(),
@@ -2529,13 +2645,13 @@ private fun StudentAddItemContent(
                 }
 
                 Text(
-                    "JPG / PNG only  •  Max 5 MB each  •  Up to 5 photos",
+                    "JPG / PNG only  â€¢  Max 5 MB each  â€¢  Up to 5 photos",
                     fontSize = 11.sp,
                     color    = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // ── Error ──────────────────────────────────────────────────────────
+            // â”€â”€ Error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             errorMessage?.let { err ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -2563,7 +2679,7 @@ private fun StudentAddItemContent(
                 }
             }
 
-            // ── Submit ─────────────────────────────────────────────────────────
+            // â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Button(
                 onClick = {
                     val err = validate()
@@ -2574,7 +2690,7 @@ private fun StudentAddItemContent(
                         try {
                             val photoFiles = withContext(Dispatchers.IO) {
                                 selectedUris.mapIndexedNotNull { index, uri ->
-                                    // Normalise to jpeg or png — avoids sending heic/webp
+                                    // Normalise to jpeg or png â€” avoids sending heic/webp
                                     val rawMime = context.contentResolver.getType(uri) ?: "image/jpeg"
                                     val mimeType = if (rawMime.contains("png")) "image/png" else "image/jpeg"
                                     val ext      = if (mimeType == "image/png") "png" else "jpg"
@@ -2637,7 +2753,7 @@ private fun StudentAddItemContent(
     }
 }
 
-// ── Network ────────────────────────────────────────────────────────────────────
+// â”€â”€ Network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private fun submitItem(
     token: String,
@@ -2763,7 +2879,7 @@ private fun deleteItem(token: String, itemId: Int): Boolean {
     } catch (_: Exception) { false }
 }
 
-// ── Favorites network ──────────────────────────────────────────────────────────
+// â”€â”€ Favorites network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private fun fetchFavoriteIds(token: String): Set<Int> {
     val request = Request.Builder()
@@ -2936,7 +3052,7 @@ private fun fetchConversationCount(token: String): Int {
     } catch (_: Exception) { 0 }
 }
 
-// ── Student Drawer ─────────────────────────────────────────────────────────────
+// â”€â”€ Student Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun StudentDrawerContent(
@@ -2974,7 +3090,7 @@ private fun StudentDrawerContent(
     }
 
     Column(modifier = Modifier.fillMaxHeight().verticalScroll(rememberScrollState())) {
-        // ── Header ─────────────────────────────────────────────────────────────
+        // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3028,7 +3144,7 @@ private fun StudentDrawerContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ── Navigation items ───────────────────────────────────────────────────
+        // â”€â”€ Navigation items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         StudentDrawerItem(
             icon     = Icons.Filled.Home,
             label    = "All Listings",
@@ -3047,7 +3163,7 @@ private fun StudentDrawerContent(
             color    = MaterialTheme.colorScheme.outlineVariant
         )
 
-        // ── Logout ─────────────────────────────────────────────────────────────
+        // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3093,7 +3209,7 @@ private fun StudentDrawerItem(icon: ImageVector, label: String, selected: Boolea
     }
 }
 
-// ── Bottom Nav ─────────────────────────────────────────────────────────────────
+// â”€â”€ Bottom Nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @Composable
 private fun StudentBottomBar(
@@ -3146,7 +3262,7 @@ private fun StudentBottomBar(
                 Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         }
-        // Center FAB — Add Item
+        // Center FAB â€” Add Item
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
