@@ -1,4 +1,4 @@
-package com.example.fati_market_frontend
+package com.fati_market
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,7 +9,7 @@ import coil.Coil
 import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import com.example.fati_market_frontend.ui.theme.FatiMarketFrontendTheme
+import com.fati_market.ui.theme.FatiMarketFrontendTheme
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsAnimationCompat
