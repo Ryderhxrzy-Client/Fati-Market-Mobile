@@ -1,4 +1,4 @@
-package com.example.fati_market_frontend.auth.utils
+package com.fati_market.auth.utils
 
 import android.content.Context
 import android.net.Uri

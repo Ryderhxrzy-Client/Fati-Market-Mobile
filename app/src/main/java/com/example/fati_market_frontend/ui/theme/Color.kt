@@ -1,4 +1,4 @@
-package com.example.fati_market_frontend.ui.theme
+package com.fati_market.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
