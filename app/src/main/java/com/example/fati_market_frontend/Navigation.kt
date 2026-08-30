@@ -1,4 +1,4 @@
-package com.example.fati_market_frontend
+package com.fati_market
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -8,9 +8,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.fati_market_frontend.auth.ForgotPasswordScreen
-import com.example.fati_market_frontend.auth.LoginScreen
-import com.example.fati_market_frontend.auth.SignUpScreen
+import com.fati_market.auth.ForgotPasswordScreen
+import com.fati_market.auth.LoginScreen
+import com.fati_market.auth.SignUpScreen
 
 private const val SESSION_DURATION_MS = 2L * 60 * 60 * 1000  // 2 hours
 
