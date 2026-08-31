@@ -60,9 +60,14 @@ fun LoginScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // Edge-to-edge is on, so the screen insets itself: the last
+            // button must clear the gesture bar, and the form must rise
+            // above the keyboard.
+            .navigationBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
-        // â”€â”€ Header with tab switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Header with tab switcher ─────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -102,7 +107,7 @@ fun LoginScreen(navController: NavController) {
                     color = Color.White.copy(alpha = 0.8f),
                     fontSize = 13.sp
                 )
-                // â”€â”€ Login / Sign Up tab switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Login / Sign Up tab switcher ──────────────────────────────────
                 AuthTabSwitcher(
                     isLoginSelected = true,
                     onLoginClick = { /* already here */ },
@@ -111,7 +116,7 @@ fun LoginScreen(navController: NavController) {
             }
         }
 
-        // â”€â”€ Form Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Form Card ────────────────────────────────────────────────────────────
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -209,7 +214,7 @@ fun LoginScreen(navController: NavController) {
                     )
                 }
 
-                // â”€â”€ Success Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Success Dialog ────────────────────────────────────────────────
                 successMessage?.let { msg ->
                     val role = context.getSharedPreferences("fatimarket_prefs", 0)
                         .getString("user_role", "admin") ?: "admin"
@@ -258,7 +263,7 @@ fun LoginScreen(navController: NavController) {
                     )
                 }
 
-                // â”€â”€ Role Selection Toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Role Selection Toggle ──────────────────────────────────────────
                 Text(
                     text = "Login as:",
                     fontSize = 14.sp,
@@ -296,7 +301,7 @@ fun LoginScreen(navController: NavController) {
                     }
                 }
 
-                // â”€â”€ Login Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Login Button ──────────────────────────────────────────────────
                 Button(
                     onClick = {
                         scope.launch {
@@ -317,12 +322,23 @@ fun LoginScreen(navController: NavController) {
                                         return@launch
                                     }
                                     val editor = context.getSharedPreferences("fatimarket_prefs", 0).edit()
-                                    editor.putLong("login_timestamp", System.currentTimeMillis())
+                                    val loginAt = System.currentTimeMillis()
+                                    editor.putLong("login_timestamp", loginAt)
                                     if (responseBody != null) {
                                         parseToken(responseBody)?.let { editor.putString("auth_token", it) }
                                         try {
                                             val data = org.json.JSONObject(responseBody).optJSONObject("data")
                                             data?.let { d ->
+                                                // Age the session off this device's clock so a
+                                                // server/phone time difference cannot sign the
+                                                // user out early or keep them in past the token.
+                                                val expiresIn = d.optLong("expires_in", 0L)
+                                                if (expiresIn > 0L) {
+                                                    editor.putLong("session_expires_at", loginAt + expiresIn * 1000L)
+                                                } else {
+                                                    editor.remove("session_expires_at")
+                                                }
+
                                                 val userRole = d.optString("role", "").lowercase()
 
                                                 // VALIDATE ROLE
@@ -383,7 +399,7 @@ fun LoginScreen(navController: NavController) {
     }
 }
 
-// â”€â”€ Shared tab switcher used by both Login and SignUp screens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Shared tab switcher used by both Login and SignUp screens ──────────────────
 
 @Composable
 fun AuthTabSwitcher(

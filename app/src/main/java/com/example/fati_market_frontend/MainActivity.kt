@@ -16,6 +16,17 @@ import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : ComponentActivity() {
+
+    override fun onResume() {
+        super.onResume()
+        InAppNotifications.onEnterForeground()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        InAppNotifications.onEnterBackground()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -60,15 +71,23 @@ class MainActivity : ComponentActivity() {
             }
 
             FatiMarketFrontendTheme(darkTheme = isDarkMode) {
-                // Wrap the entire app with ProvideWindowInsets
-                androidx.compose.foundation.layout.WindowInsets.apply {
-                    AppNavigation(
-                        isDarkMode = isDarkMode,
-                        onThemeToggle = {
-                            isDarkMode = !isDarkMode
-                            prefs.edit().putBoolean("dark_mode", isDarkMode).apply()
-                        }
-                    )
+                // Insets are measured HERE, in the activity window - the one
+                // place they are always right - and carried down so even the
+                // full-screen dialogs (whose own windows report zero insets
+                // on Android 15) pad correctly. See SafeArea.kt.
+                ProvideSafeArea {
+                    // The banner wraps the whole app so a push that arrives
+                    // while the user is inside it shows here rather than as a
+                    // system notification over the screen they are using.
+                    InAppNotificationHost {
+                        AppNavigation(
+                            isDarkMode = isDarkMode,
+                            onThemeToggle = {
+                                isDarkMode = !isDarkMode
+                                prefs.edit().putBoolean("dark_mode", isDarkMode).apply()
+                            }
+                        )
+                    }
                 }
             }
         }

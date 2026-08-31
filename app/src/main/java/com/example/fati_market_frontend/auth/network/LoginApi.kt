@@ -6,14 +6,14 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
-// â”€â”€ HTTP Client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── HTTP Client ────────────────────────────────────────────────────────────────
 
 val loginHttpClient: OkHttpClient = OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
     .readTimeout(30, TimeUnit.SECONDS)
     .build()
 
-// â”€â”€ API Call â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── API Call ───────────────────────────────────────────────────────────────────
 
 fun loginUser(email: String, password: String): Triple<Boolean, String, String?> {
     val json = """{"email":"$email","password":"$password"}"""
@@ -30,14 +30,14 @@ fun loginUser(email: String, password: String): Triple<Boolean, String, String?>
     loginHttpClient.newCall(request).execute().use { response ->
         val body = response.body?.string() ?: ""
         return if (response.isSuccessful) {
-            Triple(true, "Login successful", body)   // full body â€” caller extracts token + user fields
+            Triple(true, "Login successful", body)   // full body — caller extracts token + user fields
         } else {
             Triple(false, parseLoginError(body), null)
         }
     }
 }
 
-// â”€â”€ Response Parsers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Response Parsers ───────────────────────────────────────────────────────────
 
 fun parseToken(body: String): String? {
     val match = Regex("\"token\"\\s*:\\s*\"([^\"]+)\"").find(body)

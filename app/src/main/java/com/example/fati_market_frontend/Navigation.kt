@@ -12,7 +12,12 @@ import com.fati_market.auth.ForgotPasswordScreen
 import com.fati_market.auth.LoginScreen
 import com.fati_market.auth.SignUpScreen
 
-private const val SESSION_DURATION_MS = 2L * 60 * 60 * 1000  // 2 hours
+/**
+ * How long a login stays valid when the server did not say. The API issues
+ * seven-day tokens (`SANCTUM_TOKEN_EXPIRATION`), so this only covers a login
+ * that predates the server sending `expires_in`.
+ */
+private const val SESSION_DURATION_MS = 7L * 24 * 60 * 60 * 1000  // 7 days
 
 @Composable
 fun AppNavigation(isDarkMode: Boolean, onThemeToggle: () -> Unit) {
@@ -28,14 +33,17 @@ fun AppNavigation(isDarkMode: Boolean, onThemeToggle: () -> Unit) {
         popExitTransition = { ExitTransition.None }
     ) {
         composable("splash") {
-            // Check whether a valid (<2 h) session already exists
+            // Resume straight into the app when the saved session is still live
             val destination = remember {
                 val prefs     = context.getSharedPreferences("fatimarket_prefs", 0)
                 val token     = prefs.getString("auth_token", null)
                 val loginTime = prefs.getLong("login_timestamp", 0L)
-                val elapsed   = System.currentTimeMillis() - loginTime
+                // The server tells us when its token dies; fall back to the
+                // default window for sessions saved before it did.
+                val expiresAt = prefs.getLong("session_expires_at", 0L)
+                    .takeIf { it > 0L } ?: (loginTime + SESSION_DURATION_MS)
                 val role      = prefs.getString("user_role", "admin") ?: "admin"
-                if (token != null && elapsed < SESSION_DURATION_MS) {
+                if (token != null && System.currentTimeMillis() < expiresAt) {
                     if (role == "admin") "admin_home" else "student_home"
                 } else {
                     "login"

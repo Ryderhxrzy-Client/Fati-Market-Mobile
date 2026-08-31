@@ -37,6 +37,10 @@ import java.net.URL
 private const val API_BASE = "https://fati-api.alertaraqc.com/api"
 private const val TAG = "FatiPushService"
 private const val CHANNEL_ID = "fati_chat_messages"
+
+/** Order and payment updates, separate from chat so it can be silenced apart. */
+private const val ORDER_CHANNEL_ID = "fati_order_updates"
+private const val ORDER_NOTIFICATION_TAG = "fati_order"
 private const val REPLY_KEY = "chat_reply"
 private const val AVATAR_SIZE_PX = 256
 private const val MAX_AVATAR_BYTES = 5 * 1024 * 1024
@@ -72,8 +76,32 @@ class FatiFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
-        if (data["type"] != "chat_message") return
-        showChatNotification(this, data)
+
+        // A system notification while the user is already inside the app just
+        // covers the screen they are looking at. Hand it to the in-app banner
+        // instead, which can also be replied to in place.
+        if (InAppNotifications.isForeground) {
+            // In the foreground the system tray is never used: the in-app
+            // banner shows what it can, and anything it cannot parse is
+            // dropped rather than covering the screen the user is on.
+            InAppNotifications.fromPush(data)?.let { InAppNotifications.post(it) }
+            return
+        }
+
+        when (data["type"]) {
+            "chat_message" -> showChatNotification(this, data)
+
+            // Order lifecycle: a new order for Admin, and payment verified /
+            // declined / ready / completed for the buyer.
+            "order_placed",
+            "payment_proof_submitted",
+            "order_update",
+            // Listing lifecycle: offer accepted / declined / scheduled, and
+            // the 6h / 1h / 30m meet-up reminders. Same channel - these are
+            // the seller's equivalent of an order update.
+            "item_update",
+            "meetup_reminder" -> showOrderNotification(this, data)
+        }
     }
 }
 
@@ -96,6 +124,64 @@ fun registerFcmToken(context: Context, token: String) {
             .build()
         runCatching { OkHttpClient().newCall(request).execute().close() }
     }.start()
+}
+
+/**
+ * A notification for an order event.
+ *
+ * Kept on its own channel so a buyer can silence chatter without missing the
+ * message that says their payment went through. The transaction and item ids
+ * ride along in the intent so opening it can go straight to the order.
+ */
+private fun showOrderNotification(context: Context, data: Map<String, String>) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    manager.createNotificationChannel(
+        NotificationChannel(ORDER_CHANNEL_ID, "Orders", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Order and payment updates"
+            enableVibration(true)
+            enableLights(true)
+            setShowBadge(true)
+            lightColor = 0xFF1F6B43.toInt()
+        }
+    )
+
+    val title = data["title"].orEmpty().ifBlank { "Order update" }
+    val body = data["body"].orEmpty().ifBlank { data["item_title"].orEmpty() }
+    val transactionId = data["transaction_id"].orEmpty()
+
+    val intent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        putExtra("notification_type", data["type"].orEmpty())
+        putExtra("transaction_id", transactionId)
+        putExtra("item_id", data["item_id"].orEmpty())
+        putExtra("buyer_id", data["buyer_id"].orEmpty())
+    }
+
+    val pendingIntent = PendingIntent.getActivity(
+        context,
+        transactionId.toIntOrNull() ?: 0,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    val notification = NotificationCompat.Builder(context, ORDER_CHANNEL_ID)
+        .setSmallIcon(R.drawable.push_icon)
+        .setContentTitle(title)
+        .setContentText(body)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setAutoCancel(true)
+        .setContentIntent(pendingIntent)
+        .build()
+
+    // One notification per order, so a later update replaces the earlier one
+    // rather than stacking up.
+    manager.notify(
+        ORDER_NOTIFICATION_TAG,
+        transactionId.toIntOrNull() ?: System.currentTimeMillis().toInt(),
+        notification,
+    )
 }
 
 private fun showChatNotification(context: Context, data: Map<String, String>) {

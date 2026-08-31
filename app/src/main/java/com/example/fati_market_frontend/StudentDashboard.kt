@@ -55,6 +55,34 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import com.fati_market.ui.theme.DarkGreen
+import com.fati_market.ui.components.EmptyState
+import com.fati_market.ui.components.IconInfoRow
+import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.ItemCardSkeleton
+import com.fati_market.ui.components.ItemStatusPill
+import com.fati_market.ui.components.MarketCard
+import com.fati_market.ui.components.MarketPanel
+import com.fati_market.ui.components.Overline
+import com.fati_market.ui.components.PagerDots
+import com.fati_market.ui.components.PhotoScrim
+import com.fati_market.ui.components.PointsBalanceChip
+import com.fati_market.ui.components.PriceSize
+import com.fati_market.ui.components.PriceTag
+import com.fati_market.ui.components.PrimaryButton
+import com.fati_market.ui.components.RewardChip
+import com.fati_market.ui.components.SecondaryButton
+import com.fati_market.ui.components.SectionHeader
+import com.fati_market.ui.components.ShimmerBox
+import com.fati_market.ui.components.SoftDivider
+import com.fati_market.ui.components.StatusPill
+import com.fati_market.ui.components.StatusTone
+import com.fati_market.ui.components.SummaryRow
+import com.fati_market.ui.components.TransactionStatusPill
+import com.fati_market.ui.theme.LocalMarketAccents
+import com.fati_market.ui.theme.PriceStyle
+import com.fati_market.ui.theme.PriceStyleLarge
+import com.fati_market.ui.theme.PriceStyleSmall
+import com.fati_market.ui.theme.Spacing
 import com.fati_market.ui.theme.DarkGreenLight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -70,12 +98,12 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-// â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Tabs ───────────────────────────────────────────────────────────────────────
 
 private enum class StudentTab { HOME, CHAT, ADD_ITEM, SETTINGS, PROFILE }
 private enum class SortOption { NEWEST, PRICE_LOW_HIGH, PRICE_HIGH_LOW }
 
-// â”€â”€ HTTP client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── HTTP client ────────────────────────────────────────────────────────────────
 
 private val studentHttpClient = OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
@@ -83,7 +111,7 @@ private val studentHttpClient = OkHttpClient.Builder()
     .writeTimeout(60, TimeUnit.SECONDS)
     .build()
 
-// â”€â”€ Student Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Student Dashboard ──────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -104,10 +132,16 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
     var showMyListings   by remember { mutableStateOf(false) }
     val tabPagerState    = rememberPagerState { StudentTab.values().size }
 
-    // â”€â”€ Global favorites state (shared across all pages) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Global favorites state (shared across all pages) ──────────────────────
     var favoritedIds    by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var showFavorites   by remember { mutableStateOf(false) }
     var selectedFavItem by remember { mutableStateOf<Item?>(null) }
+
+    // Checkout is a full-screen overlay so the buyer is not distracted by the
+    // tab bar while committing to a purchase.
+    var checkoutItem    by remember { mutableStateOf<Item?>(null) }
+    var showMyOrders    by remember { mutableStateOf(false) }
+    val currentUserId   = remember { prefs.getInt("user_id", 0) }
     val drawerState  = rememberDrawerState(DrawerValue.Closed)
     val scope        = rememberCoroutineScope()
     val openDrawer   = { scope.launch { drawerState.open() } }
@@ -149,7 +183,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
         favoritedIds = withContext(Dispatchers.IO) { fetchFavoriteIds(token) }
     }
 
-    // â”€â”€ Favorites overlays (accessible from any page) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Favorites overlays (accessible from any page) ─────────────────────────
     selectedFavItem?.let { item ->
         ItemDetailDialog(
             item             = item,
@@ -159,9 +193,28 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                 favoritedIds = if (nowFav) favoritedIds + itemId else favoritedIds - itemId
             },
             onGoToChat       = { selectedFavItem = null; selectedTab = StudentTab.CHAT },
-            onDismiss        = { selectedFavItem = null }
+            onDismiss        = { selectedFavItem = null },
+            onBuyNow         = { buyItem -> selectedFavItem = null; checkoutItem = buyItem },
+            currentUserId    = currentUserId
         )
     }
+    // Checkout draws over the tab content so the buyer is not distracted by
+    // navigation while committing to a purchase.
+    checkoutItem?.let { buyItem ->
+        CheckoutScreen(
+            item        = buyItem,
+            onBack      = { checkoutItem = null },
+            onCompleted = {
+                checkoutItem = null
+                showMyOrders = true
+            }
+        )
+    }
+
+    if (showMyOrders) {
+        MyOrdersScreen(onDismiss = { showMyOrders = false })
+    }
+
     if (showFavorites) {
         FavoritesScreen(
             token             = token,
@@ -193,6 +246,10 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                     onHome         = {
                         showMyListings = false
                         selectedTab    = StudentTab.HOME
+                        scope.launch { drawerState.close() }
+                    },
+                    onMyOrders     = {
+                        showMyOrders = true
                         scope.launch { drawerState.close() }
                     },
                     onMyListings   = {
@@ -245,6 +302,8 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                     ) { page ->
                         when (StudentTab.values()[page]) {
                         StudentTab.HOME     -> StudentHomeContent(
+                            onBuyNow             = { checkoutItem = it },
+                            currentUserId        = currentUserId,
                             onMenuClick          = { openDrawer() },
                             favoritedIds         = favoritedIds,
                             onFavoritedIdsChange = { favoritedIds = it },
@@ -262,7 +321,8 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                         StudentTab.ADD_ITEM -> StudentAddItemContent(
                             onMenuClick      = { openDrawer() },
                             favoritesCount   = favoritedIds.size,
-                            onFavoritesClick = { showFavorites = true }
+                            onFavoritesClick = { showFavorites = true },
+                            onItemPosted     = { selectStudentTab(StudentTab.CHAT) }
                         )
                         StudentTab.SETTINGS -> AdminSettingsContent(
                             isDarkMode       = isDarkMode,
@@ -282,7 +342,9 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                             profilePic          = userProfilePic,
                             onProfilePicUpdated = { path -> userProfilePic = path },
                             favoritesCount      = favoritedIds.size,
-                            onFavoritesClick    = { showFavorites = true }
+                            onFavoritesClick    = { showFavorites = true },
+                            onMyOrders          = { showMyOrders = true },
+                            onMySales           = { showMyListings = true }
                         )
                         }
                     }
@@ -292,25 +354,16 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
     }
 }
 
-// â”€â”€ Home â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Home ───────────────────────────────────────────────────────────────────────
 
-internal data class Item(
-    val itemId: Int,
-    val sellerId: Int,
-    val sellerEmail: String,
-    val title: String,
-    val description: String,
-    val categoryId: Int,
-    val pricePoints: Int,
-    val markupPoints: Int,
-    val status: String,
-    val photos: List<String>,
-    val createdAt: String
-)
+// Item now lives in MarketplaceModels.kt, shared with the admin dashboard, and
+// carries peso prices rather than point values.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StudentHomeContent(
+    onBuyNow: (Item) -> Unit,
+    currentUserId: Int,
     onMenuClick: () -> Unit,
     favoritedIds: Set<Int>,
     onFavoritedIdsChange: (Set<Int>) -> Unit,
@@ -364,8 +417,9 @@ private fun StudentHomeContent(
             .let { filtered ->
                 when (sortOption) {
                     SortOption.NEWEST         -> filtered
-                    SortOption.PRICE_LOW_HIGH -> filtered.sortedBy { it.markupPoints }
-                    SortOption.PRICE_HIGH_LOW -> filtered.sortedByDescending { it.markupPoints }
+                    // Price sorting uses the public cash selling price.
+                    SortOption.PRICE_LOW_HIGH -> filtered.sortedBy { Money.sortKey(it.publicPrice) }
+                    SortOption.PRICE_HIGH_LOW -> filtered.sortedByDescending { Money.sortKey(it.publicPrice) }
                 }
             }
     }
@@ -377,7 +431,7 @@ private fun StudentHomeContent(
         }
     }
 
-    // â”€â”€ Item detail overlay (home page items) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Item detail overlay (home page items) ─────────────────────────────────
     selectedItem?.let { item ->
         ItemDetailDialog(
             item             = item,
@@ -387,7 +441,9 @@ private fun StudentHomeContent(
                 onFavoritedIdsChange(if (nowFav) favoritedIds + itemId else favoritedIds - itemId)
             },
             onGoToChat       = { selectedItem = null; onGoToChat() },
-            onDismiss        = { selectedItem = null }
+            onDismiss        = { selectedItem = null },
+            onBuyNow         = { buyItem -> selectedItem = null; onBuyNow(buyItem) },
+            currentUserId    = currentUserId
         )
     }
 
@@ -401,7 +457,7 @@ private fun StudentHomeContent(
             onFavoritesClick = onFavoritesClick
         )
 
-        // â”€â”€ Category filter chips (always visible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Category filter chips (always visible) ────────────────────────────
         if (categories.isNotEmpty()) {
             LazyRow(
                 contentPadding        = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -441,7 +497,7 @@ private fun StudentHomeContent(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
 
-        // â”€â”€ Sort + count row (always visible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Sort + count row (always visible) ─────────────────────────────────
         var sortExpanded by remember { mutableStateOf(false) }
         Row(
             modifier              = Modifier
@@ -467,8 +523,8 @@ private fun StudentHomeContent(
                     Spacer(Modifier.width(4.dp))
                     Text(when (sortOption) {
                         SortOption.NEWEST         -> "Newest"
-                        SortOption.PRICE_LOW_HIGH -> "Price â†‘"
-                        SortOption.PRICE_HIGH_LOW -> "Price â†“"
+                        SortOption.PRICE_LOW_HIGH -> "Price ↑"
+                        SortOption.PRICE_HIGH_LOW -> "Price ↓"
                     }, fontSize = 12.sp)
                 }
                 DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
@@ -483,7 +539,7 @@ private fun StudentHomeContent(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-        // â”€â”€ Content (scrollable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Content (scrollable) ───────────────────────────────────────────────
         Box(modifier = Modifier.fillMaxSize()) {
             when {
             isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -604,7 +660,7 @@ private fun StudentHomeContent(
     }
 }
 
-// â”€â”€ Marketplace header with search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Marketplace header with search ─────────────────────────────────────────────
 
 @Composable
 private fun MarketplaceHeader(
@@ -744,7 +800,7 @@ private fun MarketplaceHeader(
         OutlinedTextField(
             value         = searchQuery,
             onValueChange = onSearchChange,
-            placeholder   = { Text("Search itemsâ€¦", color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp) },
+            placeholder   = { Text("Search items…", color = Color.White.copy(alpha = 0.55f), fontSize = 14.sp) },
             leadingIcon   = { Icon(Icons.Filled.Search, null, tint = Color.White.copy(alpha = 0.75f)) },
             trailingIcon  = if (searchQuery.isNotEmpty()) {
                 { IconButton(onClick = onClearSearch) { Icon(Icons.Filled.Close, null, tint = Color.White.copy(alpha = 0.75f)) } }
@@ -768,7 +824,7 @@ private fun MarketplaceHeader(
     }
 }
 
-// â”€â”€ My Listings (private, with edit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── My Listings (private, with edit) ──────────────────────────────────────────
 
 @Composable
 private fun StudentMyListingsContent(
@@ -860,7 +916,7 @@ private fun StudentMyListingsContent(
     }
 }
 
-// â”€â”€ Public item card (2-column grid, marketplace style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Public item card (2-column grid, marketplace style) ────────────────────────
 
 @Composable
 private fun PublicItemCard(
@@ -871,127 +927,143 @@ private fun PublicItemCard(
     onFavoriteToggle: () -> Unit = {},
     onItemClick: () -> Unit = {}
 ) {
-    Card(
-        modifier  = modifier.fillMaxWidth().clickable(onClick = onItemClick),
-        shape     = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border    = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.3f)),
-        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    val shape = MaterialTheme.shapes.medium
+
+    ElevatedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .clickable(onClick = onItemClick),
+        shape = shape,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ) {
         Column {
-            // â”€â”€ Photo + category badge overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // -- Photo, with the affordances floating over it --------------
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(156.dp)
             ) {
                 if (item.photos.isNotEmpty()) {
                     AsyncImage(
-                        model              = item.photos.first(),
+                        model = item.photos.first(),
                         contentDescription = null,
-                        contentScale       = ContentScale.Crop,
-                        modifier           = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
                 } else {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(MaterialTheme.colorScheme.surfaceContainer),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.Photo, null,
-                            tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(40.dp))
+                        Icon(
+                            Icons.Filled.Photo, null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                            modifier = Modifier.size(38.dp)
+                        )
                     }
                 }
-                // Heart / favorite button (top-left overlay)
+
+                // A scrim keeps the white overlay controls readable against
+                // whatever the photo happens to be.
+                PhotoScrim(
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    height = 56.dp
+                )
+
+                // Favourite toggle
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .size(30.dp)
-                        .background(Color.Black.copy(alpha = 0.35f), CircleShape)
+                        .align(Alignment.TopEnd)
+                        .padding(Spacing.sm)
+                        .size(32.dp)
+                        .background(Color.Black.copy(alpha = 0.38f), CircleShape)
                         .clickable(onClick = onFavoriteToggle),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         if (isFavorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        null,
-                        tint     = if (isFavorited) Color(0xFFFF4444) else Color.White,
-                        modifier = Modifier.size(16.dp)
+                        contentDescription = if (isFavorited) "Remove from favourites" else "Add to favourites",
+                        tint = if (isFavorited) Color(0xFFFF5A5A) else Color.White,
+                        modifier = Modifier.size(17.dp)
                     )
                 }
-                // Category badge (top-right)
+
                 if (categoryName.isNotBlank()) {
                     Surface(
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(7.dp),
-                        shape  = RoundedCornerShape(50),
-                        color  = DarkGreen.copy(alpha = 0.88f)
+                            .align(Alignment.TopStart)
+                            .padding(Spacing.sm),
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.42f)
                     ) {
                         Text(
                             categoryName,
-                            modifier  = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            fontSize  = 9.sp,
-                            color     = Color.White,
-                            fontWeight = FontWeight.Medium,
-                            maxLines  = 1,
-                            overflow  = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-
-            // â”€â”€ Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            Column(
-                modifier            = Modifier.padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                    Text(
-                        item.title,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize   = 13.sp,
-                        maxLines   = 2,
-                        overflow   = TextOverflow.Ellipsis,
-                        lineHeight = 17.sp
-                    )
-                    Row(
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Icon(Icons.Filled.MonetizationOn, null, tint = DarkGreen, modifier = Modifier.size(14.dp))
-                        Text(
-                            "${item.markupPoints} pts",
-                            fontWeight = FontWeight.Bold,
-                            color      = DarkGreen,
-                            fontSize   = 13.sp
-                        )
-                    }
-                    Row(
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Icon(Icons.Filled.Person, null,
-                            tint     = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(11.dp))
-                        Text(
-                            item.sellerEmail.substringBefore("@"),
-                            fontSize = 10.sp,
-                            color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
+
+                // The price sits on the photo so it survives the eye scanning
+                // a grid of images rather than reading each card in full.
+                Text(
+                    item.displayPrice,
+                    style = PriceStyleSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+                )
+            }
+
+            // -- Details ---------------------------------------------------
+            Column(
+                modifier = Modifier.padding(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                RewardChip(points = item.rewardPoints, compact = true)
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Icon(
+                        Icons.Filled.Storefront, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        // The catalog sells the store's stock, not the
+                        // consigning student's.
+                        "Ofelia Store",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }
+}
 
-// â”€â”€ Private item card (full-width, editable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Private item card (full-width, editable) ───────────────────────────────────
 
 @Composable
 private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDelete: () -> Unit, onGoToChat: () -> Unit = {}) {
@@ -1027,11 +1099,11 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
         )
     }
 
-    Card(
+    ElevatedCard(
         modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape     = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        colors    = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // Photo
@@ -1044,15 +1116,13 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
                     modifier           = Modifier
                         .fillMaxWidth()
                         .height(180.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(180.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(MaterialTheme.colorScheme.surfaceContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Filled.Photo, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
@@ -1073,52 +1143,96 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
                 ) {
                     Text(
                         item.title,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 17.sp,
+                        style      = MaterialTheme.typography.titleLarge,
                         maxLines   = 1,
                         overflow   = TextOverflow.Ellipsis,
-                        modifier   = Modifier.weight(1f).padding(end = 8.dp)
+                        modifier   = Modifier.weight(1f).padding(end = Spacing.sm)
                     )
-                    val statusColor = when (item.status.lowercase()) {
-                        "approved" -> DarkGreen
-                        "rejected" -> MaterialTheme.colorScheme.error
-                        else       -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                    val statusBg = when (item.status.lowercase()) {
-                        "approved" -> DarkGreen.copy(alpha = 0.12f)
-                        "rejected" -> MaterialTheme.colorScheme.errorContainer
-                        else       -> MaterialTheme.colorScheme.surfaceVariant
-                    }
-                    Surface(shape = RoundedCornerShape(50), color = statusBg) {
-                        Text(
-                            item.status.replaceFirstChar { it.uppercaseChar() },
-                            modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            fontSize   = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color      = statusColor
-                        )
-                    }
+                    ItemStatusPill(item.status, offerAccepted = item.offerAccepted)
                 }
 
-                Text(item.description, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    item.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-                HorizontalDivider()
+                // Tell the seller exactly where their listing stands. Nothing
+                // here mentions points - the reward is a buyer-side figure.
+                when {
+                    // Accepted but not yet handed over: the QR window.
+                    item.isPending && item.offerAccepted -> {
+                        InfoBanner(
+                            title = "Offer accepted - ${Money.format(item.acquisitionPrice)}",
+                            text  = buildString {
+                                append("Bring the item to Ofelia Store and show your QR code. ")
+                                append(
+                                    item.meetupSchedule?.let { Dates.short(it) }
+                                        ?.let { "Meet-up: $it." }
+                                        ?: "Ofelia will message you the meet-up schedule."
+                                )
+                            },
+                            tone  = StatusTone.Success,
+                            icon  = Icons.Filled.CheckCircle
+                        )
+
+                        ItemQrButton(item = item, modifier = Modifier.fillMaxWidth())
+                    }
+                    item.isPending -> InfoBanner(
+                        title = "Waiting for review",
+                        text  = "Ofelia will message you here to agree a price and arrange " +
+                                "the hand-over. You will be paid in cash once she has checked the item.",
+                        tone  = StatusTone.Warning,
+                        icon  = Icons.Filled.HourglassTop
+                    )
+                    item.isRejected -> InfoBanner(
+                        title = "Not accepted",
+                        text  = item.rejectedReason ?: "Ofelia did not accept this item.",
+                        tone  = StatusTone.Danger,
+                        icon  = Icons.Filled.ErrorOutline
+                    )
+                    item.sellerIsPaid -> InfoBanner(
+                        title = "You have been paid",
+                        text  = "${Money.format(item.sellerPayoutAmount)} was handed over for this item.",
+                        tone  = StatusTone.Success,
+                        icon  = Icons.Filled.CheckCircle
+                    )
+                    item.isTurnoverVerified -> InfoBanner(
+                        title = "Item received",
+                        text  = "Ofelia has the item. Your cash payout is being prepared.",
+                        tone  = StatusTone.Info,
+                        icon  = Icons.Filled.Inventory
+                    )
+                }
+
+                SoftDivider()
 
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Filled.MonetizationOn, null, tint = DarkGreen, modifier = Modifier.size(16.dp))
-                        Text("${item.pricePoints} pts", fontWeight = FontWeight.Bold, color = DarkGreen, fontSize = 14.sp)
+                    // The seller sees their own asking price only. Reward points
+                    // are a buyer-side figure and must not appear here.
+                    Column {
+                        Text(
+                            "Asking Price",
+                            fontSize = 10.sp,
+                            color    = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            item.displayAskingPrice,
+                            fontWeight = FontWeight.Bold,
+                            color      = DarkGreen,
+                            fontSize   = 15.sp
+                        )
                     }
                     Text("Cat. [${item.categoryId}]", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
                 HorizontalDivider()
 
-                // â”€â”€ Chat to Ofelia Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Chat to Ofelia Store ───────────────────────────────────────
                 Text(
                     "Message Ofelia Store",
                     fontSize   = 12.sp,
@@ -1202,7 +1316,7 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
                     }
                 }
 
-                // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Action buttons ────────────────────────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1238,7 +1352,7 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
     }
 }
 
-// â”€â”€ Edit Item dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Edit Item dialog ───────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1253,7 +1367,7 @@ private fun EditItemDialog(
 
     var title             by remember { mutableStateOf(item.title) }
     var description       by remember { mutableStateOf(item.description) }
-    var pricePoints       by remember { mutableStateOf(item.pricePoints.toString()) }
+    var askingPrice       by remember { mutableStateOf(Money.formatPlain(item.sellerAskingPrice).replace(",", "")) }
     var selectedCategory  by remember { mutableStateOf<Category?>(null) }
     var categories        by remember { mutableStateOf<List<Category>>(emptyList()) }
     var categoriesLoading by remember { mutableStateOf(true) }
@@ -1278,12 +1392,12 @@ private fun EditItemDialog(
         if (title.isBlank())                        return "Title is required"
         if (description.isBlank())                  return "Description is required"
         if (selectedCategory == null)               return "Category is required"
-        if (pricePoints.isBlank())                  return "Price points is required"
-        if ((pricePoints.toIntOrNull() ?: -1) < 0) return "Price points must be 0 or more"
+        if (askingPrice.isBlank())                  return "Asking price is required"
+        if (Money.normalizeInput(askingPrice) == null) return "Enter a valid peso amount, e.g. 200 or 199.50"
         return null
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
 
             if (showSuccess) {
@@ -1320,6 +1434,7 @@ private fun EditItemDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .safeAreaBottom()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -1386,11 +1501,11 @@ private fun EditItemDialog(
                         }
                     }
 
-                    // Price Points
+                    // Asking price, in pesos
                     OutlinedTextField(
-                        value           = pricePoints,
-                        onValueChange   = { v -> if (v.all { it.isDigit() } && v.length <= 8) pricePoints = v },
-                        label           = { Text("Price Points") },
+                        value           = askingPrice,
+                        onValueChange   = { v -> if (Money.isValidPriceInput(v)) askingPrice = v },
+                        label           = { Text("Asking Price (${Money.PESO})") },
                         leadingIcon     = { Icon(Icons.Filled.MonetizationOn, null, tint = DarkGreen) },
                         singleLine      = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1523,7 +1638,7 @@ private fun EditItemDialog(
                                             title       = title.trim(),
                                             description = description.trim(),
                                             categoryId  = selectedCategory!!.id,
-                                            pricePoints = pricePoints.toInt(),
+                                            askingPrice = Money.normalizeInput(askingPrice)!!,
                                             photoFiles  = photoFiles
                                         )
                                     }
@@ -1556,16 +1671,20 @@ private fun EditItemDialog(
     }
 }
 
-// â”€â”€ Item Detail Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Item Detail Dialog ─────────────────────────────────────────────────────────
 
 @Composable
-private fun ItemDetailDialog(
+internal fun ItemDetailDialog(
     item: Item,
     token: String,
     isFavorited: Boolean,
     onFavoriteToggle: (itemId: Int, nowFav: Boolean) -> Unit,
     onGoToChat: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** Opens checkout. Absent for surfaces where buying does not apply. */
+    onBuyNow: (Item) -> Unit = {},
+    /** Used to stop a seller buying their own listing. */
+    currentUserId: Int = 0
 ) {
     val scope = rememberCoroutineScope()
     var detailItem        by remember { mutableStateOf(item) }
@@ -1590,7 +1709,7 @@ private fun ItemDetailDialog(
         isLoading = false
     }
 
-    // â”€â”€ Success dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Success dialog ──────────────────────────────────────────────────────────
     if (showSentDialog) {
         AlertDialog(
             onDismissRequest = { showSentDialog = false },
@@ -1624,7 +1743,7 @@ private fun ItemDetailDialog(
     if (showImageViewer && detailItem.photos.isNotEmpty()) {
         Dialog(
             onDismissRequest = { showImageViewer = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
@@ -1643,7 +1762,7 @@ private fun ItemDetailDialog(
                         onClick = { showImageViewer = false },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .statusBarsPadding()
+                            .safeAreaTop()
                             .padding(8.dp)
                     ) {
                         Icon(Icons.Filled.Close, "Close image", tint = Color.White)
@@ -1652,6 +1771,7 @@ private fun ItemDetailDialog(
                         Surface(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
+                                .safeAreaBottom()
                                 .padding(bottom = 24.dp),
                             color = Color.Black.copy(alpha = 0.6f),
                             shape = RoundedCornerShape(50)
@@ -1668,16 +1788,18 @@ private fun ItemDetailDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            Column(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                // ── Top bar ────────────────────────────────────────────────────
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(DarkGreen)
                 ) {
-                    Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                    Spacer(Modifier.safeAreaTopHeight())
                     Row(
                         modifier          = Modifier
                             .fillMaxWidth()
@@ -1731,7 +1853,7 @@ private fun ItemDetailDialog(
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
                     ) {
-                        // â”€â”€ Images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                        // ── Images ─────────────────────────────────────────────
                         if (detailItem.photos.isNotEmpty()) {
                             Box(
                                 modifier = Modifier
@@ -1817,7 +1939,7 @@ private fun ItemDetailDialog(
                             }
                         }
 
-                        // â”€â”€ Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                        // ── Info ───────────────────────────────────────────────
                         Column(
                             modifier            = Modifier
                                 .fillMaxWidth()
@@ -1826,44 +1948,65 @@ private fun ItemDetailDialog(
                         ) {
                             Text(detailItem.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
 
+                            // Price, what it earns, and whether it can be
+                            // bought - one line, read in a single glance.
                             Row(
-                                verticalAlignment     = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(Icons.Filled.MonetizationOn, null, tint = DarkGreen, modifier = Modifier.size(22.dp))
-                                Text("${detailItem.markupPoints} pts", fontWeight = FontWeight.Bold, color = DarkGreen, fontSize = 20.sp)
-                            }
-
-                            // Status chip
-                            val statusColor = when (detailItem.status.lowercase()) {
-                                "approved" -> DarkGreen
-                                "rejected" -> MaterialTheme.colorScheme.error
-                                else       -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(50),
-                                color = statusColor.copy(alpha = 0.12f)
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    detailItem.status.replaceFirstChar { it.uppercaseChar() },
-                                    modifier   = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                                    fontSize   = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color      = statusColor
+                                    detailItem.displayPrice,
+                                    fontWeight = FontWeight.Bold,
+                                    color      = DarkGreen,
+                                    fontSize   = 24.sp
+                                )
+                                RewardChip(points = detailItem.rewardPoints, compact = true)
+                                ItemStatusPill(detailItem.status)
+                            }
+
+                            // -- Availability ---------------------------------
+                            // Buying itself lives on the pinned bar below. The
+                            // store owns a published item, so even its
+                            // original seller may buy it back.
+                            if (detailItem.isReserved) {
+                                InfoBanner(
+                                    text = "Someone is already checking this item out. " +
+                                           "It becomes available again if their reservation expires.",
+                                    tone = StatusTone.Warning,
+                                    icon = Icons.Filled.Lock
+                                )
+                            } else if (detailItem.isSold) {
+                                InfoBanner(
+                                    text = "This item has been sold.",
+                                    tone = StatusTone.Neutral,
+                                    icon = Icons.Filled.Inventory
                                 )
                             }
 
-                            HorizontalDivider()
+                            SoftDivider()
 
-                            // Seller
+                            // Seller. Once the store has acquired the item it
+                            // is the store selling it - the student who
+                            // consigned it is not the counterparty a buyer
+                            // deals with.
+                            val storeOwned = detailItem.isAcquired || detailItem.isPublic ||
+                                detailItem.isReserved || detailItem.isSold
+
                             Row(
                                 verticalAlignment     = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Filled.Person, null,
+                                Icon(
+                                    if (storeOwned) Icons.Filled.Storefront else Icons.Filled.Person,
+                                    null,
                                     tint     = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp))
-                                Text(detailItem.sellerEmail, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    if (storeOwned) "Sold by Ofelia Store" else detailItem.sellerEmail,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
 
                             HorizontalDivider()
@@ -1874,7 +2017,7 @@ private fun ItemDetailDialog(
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
-                            // â”€â”€ Send message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                            // ── Send message ──────────────────────────────────
                             sendError?.let { err ->
                                 Text(
                                     text     = err,
@@ -1949,15 +2092,33 @@ private fun ItemDetailDialog(
                                 }
                             }
                             }   // closes send Row
+
+                            // ── Buy ──────────────────────────────────────
+                            // At the end of the page rather than welded to
+                            // the window: scrolled content never has to
+                            // fight the gesture bar for its last few pixels.
+                            if (detailItem.isPublic) {
+                                SoftDivider()
+
+                                PrimaryButton(
+                                    text = "Buy Now for ${detailItem.displayPrice}",
+                                    onClick = { onBuyNow(detailItem) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    icon = Icons.Filled.ShoppingCart
+                                )
+                            }
+
+                            SafeAreaBottomSpacer()
                         }
                     }
+
                 }
             }
         }
     }
 }
 
-// â”€â”€ Favorites Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Favorites Screen ───────────────────────────────────────────────────────────
 
 @Composable
 private fun FavoritesScreen(
@@ -2007,10 +2168,10 @@ private fun FavoritesScreen(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // â”€â”€ Modern Gradient Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Modern Gradient Header ──────────────────────────────────────
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2019,7 +2180,7 @@ private fun FavoritesScreen(
                         )
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                        Spacer(Modifier.safeAreaTopHeight())
                         // Navigation Bar (Clean Centered Title)
                         // Navigation Bar (Left-aligned Title)
                         Row(
@@ -2043,7 +2204,7 @@ private fun FavoritesScreen(
                     }
                 }
 
-                // â”€â”€ Category Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Category Filter ───────────────────────────────────────────
                 if (!isLoading && favoriteItems.isNotEmpty() && categories.isNotEmpty()) {
                     LazyRow(
                         modifier = Modifier
@@ -2081,14 +2242,14 @@ private fun FavoritesScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                 }
 
-                // â”€â”€ Main Content Area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Main Content Area ───────────────────────────────────────────
                 when {
                     isLoading -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 CircularProgressIndicator(color = DarkGreen, strokeWidth = 3.dp)
                                 Spacer(Modifier.height(16.dp))
-                                Text("Refreshing your itemsâ€¦", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 14.sp)
+                                Text("Refreshing your items…", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 14.sp)
                             }
                         }
                     }
@@ -2164,7 +2325,7 @@ private fun FavoritesScreen(
                                         onRemove = { pendingRemove = item }
                                     )
                                 }
-                                item(span = { GridItemSpan(2) }) { Spacer(Modifier.height(24.dp)) }
+                                item(span = { GridItemSpan(2) }) { Spacer(Modifier.safeAreaBottom().height(24.dp)) }
                             }
                         }
                     }
@@ -2225,7 +2386,7 @@ private fun FavoriteItemCard(item: Item, isRemoving: Boolean, onClick: () -> Uni
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
                         Text(
-                            "${item.markupPoints} pts",
+                            item.displayPrice,
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -2276,12 +2437,12 @@ private fun FavoriteItemCard(item: Item, isRemoving: Boolean, onClick: () -> Uni
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(
-                            Icons.Filled.Person, null,
+                            Icons.Filled.Storefront, null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(12.dp)
                         )
                         Text(
-                            item.sellerEmail.substringBefore("@"),
+                            "Ofelia Store",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -2302,7 +2463,7 @@ private fun FavoriteItemCard(item: Item, isRemoving: Boolean, onClick: () -> Uni
     }
 }
 
-// â”€â”€ Add Item â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Add Item ───────────────────────────────────────────────────────────────────
 
 private data class Category(val id: Int, val name: String)
 
@@ -2317,7 +2478,7 @@ private fun fetchCategories(token: String): List<Category> {
         val raw = response.body?.string() ?: return emptyList()
         return try {
             // Resolve the array regardless of whether the response is wrapped in an
-            // object or is a plain JSON array â€” preserves the exact database order.
+            // object or is a plain JSON array — preserves the exact database order.
             val arr = try {
                 val obj = JSONObject(raw)
                 when {
@@ -2350,27 +2511,7 @@ private fun fetchItems(token: String, status: String): List<Item> {
         return try {
             val json = JSONObject(raw)
             val arr  = json.getJSONArray("data")
-            (0 until arr.length()).map { i ->
-                val rawObj    = arr.getJSONObject(i)
-                val obj       = rawObj.optJSONObject("item") ?: rawObj
-                val photosArr = obj.optJSONArray("photos") ?: rawObj.optJSONArray("photos")
-                val photos    = if (photosArr != null) {
-                    (0 until photosArr.length()).map { j -> photosArr.getString(j) }
-                } else emptyList()
-                Item(
-                    itemId       = obj.optInt("item_id"),
-                    sellerId     = obj.optInt("seller_id"),
-                    sellerEmail  = obj.optString("seller_email").takeIf { it.isNotBlank() } ?: rawObj.optString("seller_email"),
-                    title        = obj.optString("title"),
-                    description  = obj.optString("description"),
-                    categoryId   = obj.optInt("category_id"),
-                    pricePoints  = obj.optInt("price_points").takeIf { it != 0 } ?: obj.optInt("points").takeIf { it != 0 } ?: rawObj.optInt("price_points"),
-                    markupPoints = obj.optInt("markup_points"),
-                    status       = obj.optString("status").takeIf { it.isNotBlank() } ?: rawObj.optString("status"),
-                    photos       = photos,
-                    createdAt    = obj.optString("created_at")
-                )
-            }
+            (0 until arr.length()).map { i -> parseItem(arr.getJSONObject(i)) }
         } catch (_: Exception) { emptyList() }
     }
 }
@@ -2380,7 +2521,13 @@ private fun fetchItems(token: String, status: String): List<Item> {
 private fun StudentAddItemContent(
     onMenuClick: () -> Unit = {},
     favoritesCount: Int = 0,
-    onFavoritesClick: () -> Unit = {}
+    onFavoritesClick: () -> Unit = {},
+    /**
+     * Called once the listing is up. The server has already opened the item's
+     * conversation with the offer, so the seller is taken straight there to
+     * see it sitting with Ofelia's store.
+     */
+    onItemPosted: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs   = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
@@ -2390,14 +2537,13 @@ private fun StudentAddItemContent(
     var title              by remember { mutableStateOf("") }
     var description        by remember { mutableStateOf("") }
     var selectedCategory   by remember { mutableStateOf<Category?>(null) }
-    var pricePoints        by remember { mutableStateOf("") }
+    var askingPrice        by remember { mutableStateOf("") }
     var selectedUris       by remember { mutableStateOf<List<Uri>>(emptyList()) }
     var categoryExpanded   by remember { mutableStateOf(false) }
     var categories         by remember { mutableStateOf<List<Category>>(emptyList()) }
     var categoriesLoading  by remember { mutableStateOf(true) }
     var isLoading          by remember { mutableStateOf(false) }
     var errorMessage       by remember { mutableStateOf<String?>(null) }
-    var showSuccess        by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         categories        = withContext(Dispatchers.IO) { fetchCategories(token) }
@@ -2418,8 +2564,8 @@ private fun StudentAddItemContent(
         if (description.isBlank())                   return "Description is required"
         if (description.length > 1000)               return "Description must be under 1000 characters"
         if (selectedCategory == null)                return "Category is required"
-        if (pricePoints.isBlank())                   return "Price points is required"
-        if ((pricePoints.toIntOrNull() ?: -1) < 0)   return "Price points must be 0 or more"
+        if (askingPrice.isBlank())                   return "Asking price is required"
+        if (Money.normalizeInput(askingPrice) == null) return "Enter a valid peso amount, e.g. 200 or 199.50"
         if (selectedUris.isEmpty())                  return "At least one photo is required"
         return null
     }
@@ -2428,30 +2574,8 @@ private fun StudentAddItemContent(
         title            = ""
         description      = ""
         selectedCategory = null
-        pricePoints      = ""
+        askingPrice      = ""
         selectedUris     = emptyList()
-        showSuccess      = false
-    }
-
-    // Success dialog
-    if (showSuccess) {
-        AlertDialog(
-            onDismissRequest = { resetForm() },
-            icon = {
-                Icon(
-                    Icons.Filled.CheckCircle, null,
-                    tint = DarkGreen, modifier = Modifier.size(40.dp)
-                )
-            },
-            title = { Text("Item Submitted!", fontWeight = FontWeight.Bold) },
-            text  = { Text("Your item has been sent to the admin.") },
-            confirmButton = {
-                Button(
-                    onClick = { resetForm() },
-                    colors  = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                ) { Text("Done", color = Color.White, fontWeight = FontWeight.SemiBold) }
-            }
-        )
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -2466,7 +2590,7 @@ private fun StudentAddItemContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Title ──────────────────────────────────────────────────────────
             OutlinedTextField(
                 value         = title,
                 onValueChange = { if (it.length <= 255) title = it },
@@ -2480,7 +2604,7 @@ private fun StudentAddItemContent(
                 shape           = RoundedCornerShape(12.dp)
             )
 
-            // â”€â”€ Description â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Description ────────────────────────────────────────────────────
             OutlinedTextField(
                 value         = description,
                 onValueChange = { if (it.length <= 1000) description = it },
@@ -2495,7 +2619,7 @@ private fun StudentAddItemContent(
                 shape          = RoundedCornerShape(12.dp)
             )
 
-            // â”€â”€ Category dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Category dropdown ──────────────────────────────────────────────
             ExposedDropdownMenuBox(
                 expanded         = categoryExpanded,
                 onExpandedChange = { if (!categoriesLoading) categoryExpanded = it }
@@ -2548,21 +2672,24 @@ private fun StudentAddItemContent(
                 }
             }
 
-            // â”€â”€ Price Points â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // -- Asking Price (PHP) ----------------------------------------
             OutlinedTextField(
-                value         = pricePoints,
-                onValueChange = { v -> if (v.all { it.isDigit() } && v.length <= 8) pricePoints = v },
-                label         = { Text("Price Points") },
+                value         = askingPrice,
+                onValueChange = { v -> if (Money.isValidPriceInput(v)) askingPrice = v },
+                label         = { Text("Asking Price (${Money.PESO})") },
                 leadingIcon   = {
                     Icon(Icons.Filled.MonetizationOn, null, tint = DarkGreen)
                 },
+                supportingText  = {
+                    Text("The amount in pesos you want for this item. Ofelia will review it before it is listed.")
+                },
                 singleLine      = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier        = Modifier.fillMaxWidth(),
                 shape           = RoundedCornerShape(12.dp)
             )
 
-            // â”€â”€ Photos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Photos ─────────────────────────────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
                     modifier            = Modifier.fillMaxWidth(),
@@ -2645,13 +2772,13 @@ private fun StudentAddItemContent(
                 }
 
                 Text(
-                    "JPG / PNG only  â€¢  Max 5 MB each  â€¢  Up to 5 photos",
+                    "JPG / PNG only  •  Max 5 MB each  •  Up to 5 photos",
                     fontSize = 11.sp,
                     color    = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // â”€â”€ Error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Error ──────────────────────────────────────────────────────────
             errorMessage?.let { err ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -2679,7 +2806,7 @@ private fun StudentAddItemContent(
                 }
             }
 
-            // â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Submit ─────────────────────────────────────────────────────────
             Button(
                 onClick = {
                     val err = validate()
@@ -2690,7 +2817,7 @@ private fun StudentAddItemContent(
                         try {
                             val photoFiles = withContext(Dispatchers.IO) {
                                 selectedUris.mapIndexedNotNull { index, uri ->
-                                    // Normalise to jpeg or png â€” avoids sending heic/webp
+                                    // Normalise to jpeg or png — avoids sending heic/webp
                                     val rawMime = context.contentResolver.getType(uri) ?: "image/jpeg"
                                     val mimeType = if (rawMime.contains("png")) "image/png" else "image/jpeg"
                                     val ext      = if (mimeType == "image/png") "png" else "jpg"
@@ -2716,11 +2843,16 @@ private fun StudentAddItemContent(
                                     title       = title.trim(),
                                     description = description.trim(),
                                     categoryId  = selectedCategory!!.id,
-                                    pricePoints = pricePoints.toInt(),
+                                    askingPrice = Money.normalizeInput(askingPrice)!!,
                                     photoFiles  = photoFiles
                                 )
                             }
-                            if (success) showSuccess = true else errorMessage = msg
+                            if (success) {
+                                // No dialog to dismiss: the offer is already
+                                // in the chat, so go show it there.
+                                resetForm()
+                                onItemPosted()
+                            } else errorMessage = msg
                         } catch (e: Exception) {
                             errorMessage = "Unexpected error: ${e.message}"
                         } finally {
@@ -2753,21 +2885,21 @@ private fun StudentAddItemContent(
     }
 }
 
-// â”€â”€ Network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Network ────────────────────────────────────────────────────────────────────
 
 private fun submitItem(
     token: String,
     title: String,
     description: String,
     categoryId: Int,
-    pricePoints: Int,
+    askingPrice: String,
     photoFiles: List<Pair<File, String>>
 ): Pair<Boolean, String> {
     val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
     builder.addFormDataPart("title", title)
     builder.addFormDataPart("description", description)
     builder.addFormDataPart("category_id", categoryId.toString())
-    builder.addFormDataPart("price_points", pricePoints.toString())
+    builder.addFormDataPart("seller_asking_price", askingPrice)
     photoFiles.forEach { (file, mimeType) ->
         builder.addFormDataPart(
             "photos[]",
@@ -2818,7 +2950,7 @@ private fun updateItem(
     title: String,
     description: String,
     categoryId: Int,
-    pricePoints: Int,
+    askingPrice: String,
     photoFiles: List<Pair<File, String>>
 ): Pair<Boolean, String> {
     val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
@@ -2826,7 +2958,7 @@ private fun updateItem(
     builder.addFormDataPart("title", title)
     builder.addFormDataPart("description", description)
     builder.addFormDataPart("category_id", categoryId.toString())
-    builder.addFormDataPart("price_points", pricePoints.toString())
+    builder.addFormDataPart("seller_asking_price", askingPrice)
     photoFiles.forEach { (file, mimeType) ->
         builder.addFormDataPart("photos[]", file.name, file.asRequestBody(mimeType.toMediaType()))
     }
@@ -2879,7 +3011,7 @@ private fun deleteItem(token: String, itemId: Int): Boolean {
     } catch (_: Exception) { false }
 }
 
-// â”€â”€ Favorites network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Favorites network ──────────────────────────────────────────────────────────
 
 private fun fetchFavoriteIds(token: String): Set<Int> {
     val request = Request.Builder()
@@ -2919,25 +3051,7 @@ private fun fetchFavoriteItems(token: String): List<Item> {
                 org.json.JSONArray(raw)
             }
             (0 until arr.length()).mapNotNull { i ->
-                val rawObj    = arr.optJSONObject(i) ?: return@mapNotNull null
-                val obj       = rawObj.optJSONObject("item") ?: rawObj
-                val photosArr = obj.optJSONArray("photos") ?: rawObj.optJSONArray("photos")
-                val photos = if (photosArr != null) {
-                    (0 until photosArr.length()).map { j -> photosArr.getString(j) }
-                } else emptyList()
-                Item(
-                    itemId       = obj.optInt("item_id"),
-                    sellerId     = obj.optInt("seller_id"),
-                    sellerEmail  = obj.optString("seller_email").takeIf { it.isNotBlank() } ?: rawObj.optString("seller_email"),
-                    title        = obj.optString("title"),
-                    description  = obj.optString("description"),
-                    categoryId   = obj.optInt("category_id"),
-                    pricePoints  = obj.optInt("price_points").takeIf { it != 0 } ?: obj.optInt("points").takeIf { it != 0 } ?: rawObj.optInt("price_points"),
-                    markupPoints = obj.optInt("markup_points"),
-                    status       = obj.optString("status").takeIf { it.isNotBlank() } ?: rawObj.optString("status"),
-                    photos       = photos,
-                    createdAt    = obj.optString("created_at")
-                )
+                arr.optJSONObject(i)?.let { parseItem(it) }
             }
         } catch (_: Exception) { emptyList() }
     }
@@ -2998,24 +3112,7 @@ private fun fetchItemDetail(token: String, itemId: Int): Item? {
         studentHttpClient.newCall(request).execute().use { response ->
             val raw = response.body?.string() ?: return null
             val json = JSONObject(raw)
-            val obj  = json.optJSONObject("data") ?: json
-            val photosArr = obj.optJSONArray("photos")
-            val photos = if (photosArr != null) {
-                (0 until photosArr.length()).map { j -> photosArr.getString(j) }
-            } else emptyList()
-            Item(
-                itemId       = obj.optInt("item_id"),
-                sellerId     = obj.optInt("seller_id"),
-                sellerEmail  = obj.optString("seller_email"),
-                title        = obj.optString("title"),
-                description  = obj.optString("description"),
-                categoryId   = obj.optInt("category_id"),
-                pricePoints  = obj.optInt("price_points").takeIf { it != 0 } ?: obj.optInt("points"),
-                markupPoints = obj.optInt("markup_points"),
-                status       = obj.optString("status"),
-                photos       = photos,
-                createdAt    = obj.optString("created_at")
-            )
+            parseItem(json.optJSONObject("data") ?: json)
         }
     } catch (_: Exception) { null }
 }
@@ -3052,7 +3149,7 @@ private fun fetchConversationCount(token: String): Int {
     } catch (_: Exception) { 0 }
 }
 
-// â”€â”€ Student Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Student Drawer ─────────────────────────────────────────────────────────────
 
 @Composable
 private fun StudentDrawerContent(
@@ -3064,6 +3161,8 @@ private fun StudentDrawerContent(
     userProfilePic: String,
     onHome: () -> Unit,
     onMyListings: () -> Unit,
+    /** Opens the order history, which is also where receipts live. */
+    onMyOrders: () -> Unit,
     onLogout: () -> Unit
 ) {
     val fullName = "$userFirstName $userLastName".trim().ifBlank { "Student" }
@@ -3089,8 +3188,8 @@ private fun StudentDrawerContent(
         )
     }
 
-    Column(modifier = Modifier.fillMaxHeight().verticalScroll(rememberScrollState())) {
-        // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    Column(modifier = Modifier.fillMaxHeight().navigationBarsPadding().verticalScroll(rememberScrollState())) {
+        // ── Header ─────────────────────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3144,7 +3243,7 @@ private fun StudentDrawerContent(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // â”€â”€ Navigation items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Navigation items ───────────────────────────────────────────────────
         StudentDrawerItem(
             icon     = Icons.Filled.Home,
             label    = "All Listings",
@@ -3157,13 +3256,19 @@ private fun StudentDrawerContent(
             selected = showMyListings,
             onClick  = onMyListings
         )
+        StudentDrawerItem(
+            icon     = Icons.Filled.ReceiptLong,
+            label    = "My Orders",
+            selected = false,
+            onClick  = onMyOrders
+        )
 
         HorizontalDivider(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             color    = MaterialTheme.colorScheme.outlineVariant
         )
 
-        // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Logout ─────────────────────────────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3209,7 +3314,7 @@ private fun StudentDrawerItem(icon: ImageVector, label: String, selected: Boolea
     }
 }
 
-// â”€â”€ Bottom Nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Bottom Nav ─────────────────────────────────────────────────────────────────
 
 @Composable
 private fun StudentBottomBar(
@@ -3262,7 +3367,7 @@ private fun StudentBottomBar(
                 Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         }
-        // Center FAB â€” Add Item
+        // Center FAB — Add Item
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)

@@ -63,7 +63,7 @@ fun SignUpScreen(navController: NavController) {
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
 
-    // â”€â”€ Realtime validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Realtime validation ───────────────────────────────────────────────
     val emailSuffix = "@student.fatima.edu.ph"
     val normalizedEmail = email.trim()
 
@@ -127,9 +127,14 @@ fun SignUpScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // Edge-to-edge is on, so the screen insets itself: the last
+            // button must clear the gesture bar, and the form must rise
+            // above the keyboard.
+            .navigationBarsPadding()
+            .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
-        // â”€â”€ Header with tab switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Header with tab switcher ─────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -141,7 +146,7 @@ fun SignUpScreen(navController: NavController) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Logo â€” same as login screen
+                // Logo — same as login screen
                 Box(
                     modifier = Modifier
                         .size(72.dp)
@@ -169,7 +174,7 @@ fun SignUpScreen(navController: NavController) {
                     color = Color.White.copy(alpha = 0.8f),
                     fontSize = 13.sp
                 )
-                // â”€â”€ Login / Sign Up tab switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Login / Sign Up tab switcher ──────────────────────────────────
                 AuthTabSwitcher(
                     isLoginSelected = false,
                     onLoginClick = { navController.navigate("login") },
@@ -178,7 +183,7 @@ fun SignUpScreen(navController: NavController) {
             }
         }
 
-        // â”€â”€ Floating Form Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Floating Form Card ─────────────────────────────────────────────────
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -193,7 +198,7 @@ fun SignUpScreen(navController: NavController) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
 
-                // â”€â”€ Profile Picture â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Profile Picture ──────────────────────────────────────────────
                 Text(
                     text = "Profile Photo",
                     fontSize = 13.sp,
@@ -255,7 +260,7 @@ fun SignUpScreen(navController: NavController) {
                     }
                 }
 
-                // â”€â”€ First Name â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── First Name ───────────────────────────────────────────────────
                 OutlinedTextField(
                     value = firstName,
                     onValueChange = { firstName = it },
@@ -275,7 +280,7 @@ fun SignUpScreen(navController: NavController) {
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // â”€â”€ Last Name â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Last Name ────────────────────────────────────────────────────
                 OutlinedTextField(
                     value = lastName,
                     onValueChange = { lastName = it },
@@ -295,7 +300,7 @@ fun SignUpScreen(navController: NavController) {
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // â”€â”€ Email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Email ────────────────────────────────────────────────────────
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
@@ -326,7 +331,7 @@ fun SignUpScreen(navController: NavController) {
                 )
 
 
-                // â”€â”€ Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Password ─────────────────────────────────────────────────────
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
@@ -368,27 +373,27 @@ fun SignUpScreen(navController: NavController) {
                     )
 
                     Text(
-                        text = "â€¢ At least 8 characters (min:8)",
+                        text = "• At least 8 characters (min:8)",
                         color = if (hasMinLen8) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "â€¢ At least one lowercase letter",
+                        text = "• At least one lowercase letter",
                         color = if (hasLowercase) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "â€¢ At least one uppercase letter",
+                        text = "• At least one uppercase letter",
                         color = if (hasUppercase) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "â€¢ At least one digit",
+                        text = "• At least one digit",
                         color = if (hasDigit) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "â€¢ At least one special character (@$!%*?&)",
+                        text = "• At least one special character (@$!%*?&)",
                         color = if (hasAllowedSpecialChar) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
                         fontSize = 12.sp
                     )
@@ -404,7 +409,7 @@ fun SignUpScreen(navController: NavController) {
                 }
 
 
-                // â”€â”€ Confirm Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Confirm Password ─────────────────────────────────────────────
                 OutlinedTextField(
                     value = confirmPassword,
                     onValueChange = { confirmPassword = it },
@@ -450,7 +455,7 @@ fun SignUpScreen(navController: NavController) {
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                // â”€â”€ Section Divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Section Divider ──────────────────────────────────────────────
                 Divider(
                     modifier = Modifier.padding(bottom = 16.dp),
                     color = MaterialTheme.colorScheme.outlineVariant
@@ -477,7 +482,7 @@ fun SignUpScreen(navController: NavController) {
                     )
                 }
 
-                // â”€â”€ Verification Type Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Verification Type Dropdown ───────────────────────────────────
                 ExposedDropdownMenuBox(
                     expanded = verificationExpanded,
                     onExpandedChange = { verificationExpanded = !verificationExpanded },
@@ -530,7 +535,7 @@ fun SignUpScreen(navController: NavController) {
                     }
                 }
 
-                // â”€â”€ File Upload Section (shows when a type is selected) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── File Upload Section (shows when a type is selected) ───────────
                 if (selectedVerification.isNotEmpty()) {
                     Text(
                         text = "Upload $selectedVerification",
@@ -580,7 +585,7 @@ fun SignUpScreen(navController: NavController) {
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "JPG, PNG accepted Â· Max 5 MB",
+                                    text = "JPG, PNG accepted · Max 5 MB",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(top = 4.dp)
@@ -640,7 +645,7 @@ fun SignUpScreen(navController: NavController) {
                     }
                 }
 
-                // â”€â”€ Success Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Success Dialog ────────────────────────────────────────────────
                 successMessage?.let { msg ->
                     AlertDialog(
                         onDismissRequest = {
@@ -671,7 +676,7 @@ fun SignUpScreen(navController: NavController) {
                     )
                 }
 
-                // â”€â”€ Error Message â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Error Message ─────────────────────────────────────────────────
                 errorMessage?.let { msg ->
                     Text(
                         text = msg,
@@ -683,7 +688,7 @@ fun SignUpScreen(navController: NavController) {
                     )
                 }
 
-                // â”€â”€ Sign Up Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Sign Up Button ────────────────────────────────────────────────
                 Button(
                     onClick = {
                         scope.launch {
@@ -705,7 +710,7 @@ fun SignUpScreen(navController: NavController) {
                             if (selectedVerification.isEmpty()) { errorMessage = "Please select a verification type"; return@launch }
                             if (documentUri == null) { errorMessage = "Please upload your $selectedVerification"; return@launch }
 
-                            // Map display label â†’ API value
+                            // Map display label → API value
                             val verificationUseValue = when (selectedVerification) {
                                 "Student ID" -> "student_id"
                                 "Registration Card" -> "registration_card"
