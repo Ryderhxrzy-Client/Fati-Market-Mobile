@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -71,8 +72,38 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.ui.graphics.graphicsLayer
 import coil.compose.AsyncImage
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import coil.compose.SubcomposeAsyncImage
 import com.fati_market.ui.theme.DarkGreen
+import com.fati_market.ui.components.EmptyState
+import com.fati_market.ui.components.IconInfoRow
+import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.ItemCardSkeleton
+import com.fati_market.ui.components.ItemStatusPill
+import com.fati_market.ui.components.MarketCard
+import com.fati_market.ui.components.MarketPanel
+import com.fati_market.ui.components.Overline
+import com.fati_market.ui.components.PagerDots
+import com.fati_market.ui.components.PhotoScrim
+import com.fati_market.ui.components.PointsBalanceChip
+import com.fati_market.ui.components.PriceSize
+import com.fati_market.ui.components.PriceTag
+import com.fati_market.ui.components.PrimaryButton
+import com.fati_market.ui.components.RewardChip
+import com.fati_market.ui.components.SecondaryButton
+import com.fati_market.ui.components.SectionHeader
+import com.fati_market.ui.components.ShimmerBox
+import com.fati_market.ui.components.SoftDivider
+import com.fati_market.ui.components.StatusPill
+import com.fati_market.ui.components.StatusTone
+import com.fati_market.ui.components.SummaryRow
+import com.fati_market.ui.components.TransactionStatusPill
+import com.fati_market.ui.theme.LocalMarketAccents
+import com.fati_market.ui.theme.PriceStyle
+import com.fati_market.ui.theme.PriceStyleLarge
+import com.fati_market.ui.theme.PriceStyleSmall
+import com.fati_market.ui.theme.Spacing
 import com.fati_market.ui.theme.DarkGreenLight
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -112,11 +143,11 @@ import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 
-// â”€â”€ Pusher global debug state (readable from any composable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Pusher global debug state (readable from any composable) ───────────────────
 // private val pusherGlobalStatus = mutableStateOf("idle")
 // private val pusherGlobalLog    = mutableStateOf("")
 
-// â”€â”€ Drawer Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Drawer Pages ───────────────────────────────────────────────────────────────
 
 private sealed class DrawerPage(val label: String) {
     object Dashboard         : DrawerPage("Dashboard")
@@ -131,6 +162,8 @@ private sealed class DrawerPage(val label: String) {
     object CashTransactions  : DrawerPage("Cash Transactions")
     object TradeTransactions : DrawerPage("Trade Transactions")
     object TransactionHistory: DrawerPage("Transaction History")
+    /** Buyer orders, with payment verification and completion. */
+    object ManageOrders      : DrawerPage("Manage Orders")
     object ProfitSummary     : DrawerPage("Profit Summary")
     object TotalItemAcquired : DrawerPage("Total Item Acquired")
     object TotalItemSold     : DrawerPage("Total Item Sold")
@@ -144,7 +177,7 @@ private sealed class DrawerPage(val label: String) {
 
 private enum class AdminTab { HOME, CHAT, USERS, SETTINGS, PROFILE }
 
-// â”€â”€ Student model (fields match the API response exactly) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Student model (fields match the API response exactly) ──────────────────────
 
 private data class Student(
     val studentVerificationId: Int,
@@ -176,7 +209,7 @@ private data class Student(
 
 
 
-// â”€â”€ Network helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Network helpers ────────────────────────────────────────────────────────────
 
 private val adminHttpClient = OkHttpClient.Builder()
     .connectTimeout(15, TimeUnit.SECONDS)
@@ -207,7 +240,7 @@ private fun fetchStudents(token: String, status: String? = null): List<Student> 
 }
 
 /** Update a student's verification status. Returns true on success.
- *  action must be "approve" or "decline" â€” maps directly to the API endpoint path. */
+ *  action must be "approve" or "decline" — maps directly to the API endpoint path. */
 private fun updateStudentStatus(
     token: String,
     userId: Int,
@@ -310,7 +343,7 @@ private fun parseStudent(obj: JSONObject) = Student(
     reason                = obj.strOrNull("reason")
 )
 
-/** "2026-02-25T05:53:47.000000Z" â†’ "Feb 25, 2026" */
+/** "2026-02-25T05:53:47.000000Z" → "Feb 25, 2026" */
 private fun formatDate(raw: String?): String {
     if (raw == null) return "N/A"
     return try {
@@ -355,7 +388,7 @@ private fun statusColor(status: String) = when (status.lowercase()) {
     else       -> Color(0xFFFF9800)
 }
 
-// â”€â”€ Admin Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Admin Dashboard ────────────────────────────────────────────────────────────
 
 @Composable
 fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () -> Unit = {}) {
@@ -372,6 +405,28 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
 
     var selectedTab       by remember { mutableStateOf(AdminTab.HOME) }
     var drawerPage        by remember { mutableStateOf<DrawerPage?>(null) }
+
+    // The walk-in scanner. The camera screen comes from zxing; a decoded code
+    // opens the counter screen, which owns everything after that.
+    var scannedCode by remember { mutableStateOf<String?>(null) }
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        result.contents?.let { scannedCode = it }
+    }
+
+    fun launchScanner() {
+        scanLauncher.launch(
+            ScanOptions().apply {
+                setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                setPrompt("Point the camera at the buyer's pickup code")
+                setBeepEnabled(false)
+                // Our own activity is what keeps the scanner in portrait -
+                // the library's default CaptureActivity is landscape. The
+                // runtime lock is off so the manifest orientation wins.
+                setCaptureActivity(PortraitCaptureActivity::class.java)
+                setOrientationLocked(false)
+            },
+        )
+    }
     var chatConversation  by remember { mutableStateOf<Conversation?>(null) }
     val showBottomBar     = remember { mutableStateOf(true) }
     val drawerState       = rememberDrawerState(DrawerValue.Closed)
@@ -412,6 +467,8 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
     }
 
     // Handle back button - redirect to dashboard when drawer or chat is open
+    BackHandler(enabled = scannedCode != null) { scannedCode = null }
+
     BackHandler(enabled = drawerPage != null || (selectedTab == AdminTab.CHAT && chatConversation != null)) {
         if (drawerPage != null) {
             drawerPage = null
@@ -455,11 +512,12 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
         val chatIsOpen = selectedTab == AdminTab.CHAT && chatConversation != null
         Scaffold(
             bottomBar = {
-                if (!chatIsOpen && drawerPage == null && showBottomBar.value) {
+                if (!chatIsOpen && drawerPage == null && scannedCode == null && showBottomBar.value) {
                     AdminBottomBar(
                         selected       = selectedTab,
                         userProfilePic = userProfilePic,
                         userInitial    = userFirstName.firstOrNull()?.uppercaseChar()?.toString() ?: "A",
+                        onScan         = { launchScanner() },
                         onSelect       = { tab ->
                             selectedTab      = tab
                             drawerPage       = null
@@ -474,16 +532,36 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = if (chatIsOpen || drawerPage != null || !showBottomBar.value) 0.dp else innerPadding.calculateBottomPadding())
+                    .padding(bottom = if (chatIsOpen || drawerPage != null || scannedCode != null || !showBottomBar.value) 0.dp else innerPadding.calculateBottomPadding())
             ) {
-                if (drawerPage != null) {
-                    DrawerPageContent(
-                        page                 = drawerPage!!,
-                        onMenuClick          = openDrawer,
-                        onGoToChat           = { drawerPage = null; selectedTab = AdminTab.CHAT },
-                        onNavigateToPage     = { drawerPage = it },
-                        onShowBottomBarChange = { showBottomBar.value = it }
-                    )
+                if (scannedCode != null) {
+                    // One scanner, two code families: an item turnover QR
+                    // opens the acquire screen, an order pickup QR opens the
+                    // completion screen.
+                    if (scannedCode!!.startsWith("FMITEM1.")) {
+                        AdminAcquireScreen(
+                            scannedCode = scannedCode!!,
+                            onClose = { scannedCode = null },
+                        )
+                    } else {
+                        AdminScanScreen(
+                            scannedCode = scannedCode!!,
+                            onClose = { scannedCode = null },
+                        )
+                    }
+                } else if (drawerPage != null) {
+                    // Drawer pages run without the bottom bar and without the
+                    // Scaffold's padding, so the inset is applied here once
+                    // for all of them.
+                    Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
+                        DrawerPageContent(
+                            page                 = drawerPage!!,
+                            onMenuClick          = openDrawer,
+                            onGoToChat           = { drawerPage = null; selectedTab = AdminTab.CHAT },
+                            onNavigateToPage     = { drawerPage = it },
+                            onShowBottomBarChange = { showBottomBar.value = it }
+                        )
+                    }
                 } else {
                     when (selectedTab) {
                         AdminTab.HOME     -> AdminHomeContent(onMenuClick = openDrawer)
@@ -504,7 +582,9 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                             profilePic         = userProfilePic,
                             onProfilePicUpdated = { path ->
                                 userProfilePic = path
-                            }
+                            },
+                            onManageOrders     = { drawerPage = DrawerPage.ManageOrders },
+                            onManageStudents   = { selectedTab = AdminTab.USERS }
                         )
                     }
                 }
@@ -513,7 +593,7 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
     }
 }
 
-// â”€â”€ Drawer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Drawer ─────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun AdminDrawerContent(
@@ -534,7 +614,7 @@ private fun AdminDrawerContent(
     var transactionsExpanded by remember { mutableStateOf(false) }
     var reportsExpanded      by remember { mutableStateOf(false) }
 
-    // â”€â”€ Logout confirmation dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Logout confirmation dialog ────────────────────────────────────────────
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -564,7 +644,8 @@ private fun AdminDrawerContent(
 
             is DrawerPage.PointsGiven, is DrawerPage.PointsReceived,
             is DrawerPage.CashTransactions, is DrawerPage.TradeTransactions,
-            is DrawerPage.TransactionHistory, is DrawerPage.ProfitSummary -> transactionsExpanded = true
+            is DrawerPage.TransactionHistory, is DrawerPage.ProfitSummary,
+            is DrawerPage.ManageOrders -> transactionsExpanded = true
             is DrawerPage.TotalItemAcquired, is DrawerPage.TotalItemSold,
             is DrawerPage.TotalProfit, is DrawerPage.MostSoldCategory,
             is DrawerPage.ActiveUsers -> reportsExpanded = true
@@ -618,7 +699,7 @@ private fun AdminDrawerContent(
         }
 
         // Scrollable content
-        Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState())) {
             Spacer(modifier = Modifier.height(8.dp))
         DrawerItem(Icons.Filled.Dashboard, "Dashboard",
             selected = currentPage == null || currentPage == DrawerPage.Dashboard
@@ -642,6 +723,7 @@ private fun AdminDrawerContent(
         DrawerSectionHeader(Icons.Filled.Receipt, "Transactions", transactionsExpanded) { transactionsExpanded = !transactionsExpanded }
         AnimatedVisibility(visible = transactionsExpanded) {
             Column {
+                DrawerSubItem("Manage Orders",       currentPage == DrawerPage.ManageOrders)       { onPageSelect(DrawerPage.ManageOrders) }
                 DrawerSubItem("Points Given",        currentPage == DrawerPage.PointsGiven)        { onPageSelect(DrawerPage.PointsGiven) }
                 DrawerSubItem("Points Received",     currentPage == DrawerPage.PointsReceived)     { onPageSelect(DrawerPage.PointsReceived) }
                 DrawerSubItem("Cash Transactions",   currentPage == DrawerPage.CashTransactions)   { onPageSelect(DrawerPage.CashTransactions) }
@@ -816,6 +898,10 @@ private fun DrawerPageContent(
         DrawerPage.CashTransactions -> TransactionsContent(title = "Cash Transactions", endpoint = "/api/admin/transactions/cash", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.TradeTransactions -> TransactionsContent(title = "Trade Transactions", endpoint = "/api/admin/transactions/trade", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.TransactionHistory -> TransactionsContent(title = "Transaction History", endpoint = "/api/admin/transactions", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        DrawerPage.ManageOrders -> AdminTransactionsContent(
+            onMenuClick = onMenuClick,
+            onOpenChat = { onGoToChat() }
+        )
         DrawerPage.ProfitSummary -> ProfitSummaryContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.TotalItemAcquired -> SalesReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.TotalItemSold -> SalesReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
@@ -862,7 +948,7 @@ private enum class ItemStatus(val displayName: String) {
     }
 }
 
-// â”€â”€ Private Offers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Private Offers ─────────────────────────────────────────────────────────────
 @Composable
 private fun AdminPrivateOffersContent(
     onMenuClick: () -> Unit,
@@ -926,7 +1012,17 @@ private fun AdminPrivateOffersContent(
                         } else {
                             itemList = itemList.map {
                                 if (it.itemId == updatedItem.itemId) {
-                                    it.copy(status = updatedItem.status, markupPoints = updatedItem.markupPoints)
+                                    // updatedItem is a ChatItem, so carry the
+                                    // changed fields over rather than replacing
+                                    // the Item wholesale.
+                                    it.copy(
+                                        status             = updatedItem.status,
+                                        acquisitionPrice   = updatedItem.acquisitionPrice,
+                                        publicPrice        = updatedItem.publicPrice,
+                                        rewardPoints       = updatedItem.rewardPoints,
+                                        sellerPayoutStatus = updatedItem.sellerPayoutStatus,
+                                        isTurnoverVerified = updatedItem.isTurnoverVerified
+                                    )
                                 } else it
                             }
                         }
@@ -995,7 +1091,7 @@ private fun AdminPrivateOffersContent(
     }
 }
 
-// â”€â”€ Generic Item List (Acquired / Public / Reserved / Sold) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Generic Item List (Acquired / Public / Reserved / Sold) ────────────────────
 @Composable
 private fun AdminItemListContent(
     title: String,
@@ -1053,7 +1149,7 @@ private fun AdminItemListContent(
 
     CompositionLocalProvider(LocalProvidesBottomBar provides showBar) {
         when {
-            // â”€â”€ Edit page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Edit page ───────────────────────────────────────────────────────
             editingItem != null -> {
                 EditItemPageForList(
                     item = editingItem!!,
@@ -1073,7 +1169,14 @@ private fun AdminItemListContent(
                         } else {
                             itemList = itemList.map {
                                 if (it.itemId == updatedItem.itemId)
-                                    it.copy(status = updatedItem.status, markupPoints = updatedItem.markupPoints)
+                                    it.copy(
+                                        status             = updatedItem.status,
+                                        acquisitionPrice   = updatedItem.acquisitionPrice,
+                                        publicPrice        = updatedItem.publicPrice,
+                                        rewardPoints       = updatedItem.rewardPoints,
+                                        sellerPayoutStatus = updatedItem.sellerPayoutStatus,
+                                        isTurnoverVerified = updatedItem.isTurnoverVerified
+                                    )
                                 else it
                             }
                         }
@@ -1082,7 +1185,7 @@ private fun AdminItemListContent(
                 )
             }
 
-            // â”€â”€ Item detail page (view-only pages) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Item detail page (view-only pages) ──────────────────────────────
             selectedItem != null -> {
                 AdminItemDetailPage(
                     item   = selectedItem!!,
@@ -1090,7 +1193,7 @@ private fun AdminItemListContent(
                 )
             }
 
-            // â”€â”€ List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── List ────────────────────────────────────────────────────────────
             else -> {
                 Column(modifier = Modifier.fillMaxSize()) {
                     AdminPageHeader(title = title, onMenuClick = onMenuClick)
@@ -1160,7 +1263,7 @@ private fun AdminItemListContent(
     }
 }
 
-// â”€â”€ View-only card (Public / Reserved / Sold â€” no Edit or Chat buttons) â”€â”€â”€â”€â”€â”€â”€â”€
+// ── View-only card (Public / Reserved / Sold — no Edit or Chat buttons) ────────
 @Composable
 private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditClick: (Item) -> Unit = {}) {
     Card(
@@ -1170,7 +1273,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // â”€â”€ Photo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Photo ─────────────────────────────────────────────────────────
             val photoUrl = item.photos.firstOrNull() ?: ""
             if (photoUrl.isNotBlank()) {
                 AsyncImage(
@@ -1201,7 +1304,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                 modifier            = Modifier.fillMaxWidth().padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // â”€â”€ Title + status chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Title + status chip ────────────────────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1234,7 +1337,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                     }
                 }
 
-                // â”€â”€ Seller + price â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Seller + price ─────────────────────────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1257,7 +1360,11 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Filled.MonetizationOn, null,
                             tint = DarkGreen, modifier = Modifier.size(14.dp))
-                        Text("${if (item.status.lowercase() in listOf("public", "reserved", "sold")) item.markupPoints else item.pricePoints} pts", fontWeight = FontWeight.Bold,
+                        // Published items show the selling price; earlier
+                        // stages show what the student asked for.
+                        Text(
+                            if (item.publicPrice != null) item.displayPrice else item.displayAskingPrice,
+                            fontWeight = FontWeight.Bold,
                             color = DarkGreen, fontSize = 13.sp)
                     }
                 }
@@ -1266,20 +1373,21 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3, overflow = TextOverflow.Ellipsis)
 
-                // â”€â”€ Markup info row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                if (item.markupPoints > 0 && item.status.lowercase() != "public") {
+                // ── Markup info row ───────────────────────────────────────────
+                if (item.markup != null) {
                     HorizontalDivider()
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Filled.TrendingUp, null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(14.dp))
-                        Text("Markup: ${item.markupPoints} pts", fontSize = 12.sp,
+                        // Profit = public price - acquisition price.
+                        Text("Markup: ${Money.format(item.markup)}", fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
-                // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Action buttons ──────────────────────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1308,7 +1416,7 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
     }
 }
 
-// â”€â”€ Item Detail Page (full-screen, view-only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Item Detail Page (full-screen, view-only) ──────────────────────────────────
 @Composable
 private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
     var currentPhotoIndex by remember { mutableStateOf(0) }
@@ -1320,7 +1428,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Top bar ───────────────────────────────────────────────────────────
         val statusColor = when (item.status.lowercase()) {
             "sold"     -> MaterialTheme.colorScheme.error
             "reserved" -> Color(0xFFE65100)
@@ -1371,13 +1479,13 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
             }
         }
 
-        // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Scrollable content ────────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // â”€â”€ Photo carousel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Photo carousel ────────────────────────────────────────────────
             if (item.photos.isNotEmpty()) {
                 Box(
                     modifier = Modifier
@@ -1481,7 +1589,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                 }
             }
 
-            // â”€â”€ Details card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Details card ──────────────────────────────────────────────────
             Card(
                 modifier  = Modifier
                     .fillMaxWidth()
@@ -1520,7 +1628,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                             Icon(Icons.Filled.MonetizationOn, null,
                                 tint = DarkGreen, modifier = Modifier.size(20.dp))
                             Text(
-                                "${if (item.status.lowercase() in listOf("public", "reserved", "sold")) item.markupPoints else item.pricePoints} pts",
+                                if (item.publicPrice != null) item.displayPrice else item.displayAskingPrice,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize   = 20.sp,
                                 color      = DarkGreen
@@ -1561,8 +1669,8 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                         Text(item.description, fontSize = 14.sp, lineHeight = 22.sp)
                     }
 
-                    // Markup (if set)
-                    if (item.markupPoints > 0) {
+                    // Markup (public price minus acquisition price)
+                    if (item.markup != null) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         Row(verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1579,7 +1687,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                             Column {
                                 Text("Markup", fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("${item.markupPoints} pts", fontSize = 14.sp,
+                                Text(Money.format(item.markup), fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold, color = Color(0xFF1565C0))
                             }
                         }
@@ -1638,83 +1746,97 @@ private fun AdminPrivateOfferCard(
     var chatError         by remember { mutableStateOf<String?>(null) }
     var chatSent          by remember { mutableStateOf(false) }
 
-    var showPointsDialog  by remember { mutableStateOf(false) }
-    var isSendingPoints   by remember { mutableStateOf(false) }
-    var pointsError       by remember { mutableStateOf<String?>(null) }
-    var pointsSuccess     by remember { mutableStateOf(false) }
-    var pointsAlreadySent by remember { mutableStateOf(false) }
+    // Physical turnover and the seller cash payout. These replace the old
+    // "Send Points & Finalize" flow, which paid sellers in wallet points.
+    var showTurnoverDialog by remember { mutableStateOf(false) }
+    var showPayoutDialog   by remember { mutableStateOf(false) }
+    var acquisitionInput   by remember(item.itemId) {
+        mutableStateOf(Money.formatPlain(item.acquisitionPrice ?: item.sellerAskingPrice).replace(",", ""))
+    }
+    var turnoverNotes      by remember(item.itemId) { mutableStateOf("") }
+    var isWorking          by remember { mutableStateOf(false) }
+    var actionError        by remember { mutableStateOf<String?>(null) }
 
-    // Check points status when dialog is shown
-    LaunchedEffect(showPointsDialog) {
-        if (showPointsDialog) {
-            pointsAlreadySent = withContext(Dispatchers.IO) { checkPointsStatus(token, item.itemId) }
-        }
+    // -- Verify physical turnover --------------------------------------
+    if (showTurnoverDialog) {
+        // The same Mark Acquired the conversation uses: proof photos captured
+        // in place, the agreed price settled here when chat never fixed one,
+        // and one wording everywhere.
+        AcquireOfferDialog(
+            listing = item,
+            token = token,
+            onDismiss = { showTurnoverDialog = false },
+            onFinished = { error ->
+                showTurnoverDialog = false
+
+                if (error == null) {
+                    onStatusSaved("acquired")
+                } else {
+                    android.widget.Toast.makeText(context, error, android.widget.Toast.LENGTH_LONG).show()
+                }
+            },
+        )
     }
 
-    // â”€â”€ Send Points Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if (showPointsDialog) {
+    // -- Record the seller cash payout ---------------------------------
+    if (showPayoutDialog) {
+        val payable = item.sellerPayoutAmount ?: item.acquisitionPrice
+
         AlertDialog(
-            onDismissRequest = {
-                if (!isSendingPoints) { showPointsDialog = false; pointsError = null; pointsSuccess = false; pointsAlreadySent = false }
-            },
-            title = { Text("Send Points", fontWeight = FontWeight.Bold) },
+            onDismissRequest = { if (!isWorking) { showPayoutDialog = false; actionError = null } },
+            title = { Text("Record Cash Payout", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("This will send ${item.pricePoints} points to ${item.sellerEmail} with sale reason.", fontSize = 14.sp)
-                    if (pointsSuccess) {
-                        Text("Points sent successfully!", color = DarkGreen, fontWeight = FontWeight.SemiBold)
-                    }
-                    pointsError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                    }
+                    Text(
+                        "Confirm you have paid ${Money.format(payable)} in cash to ${item.sellerEmail}.",
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        "This records the seller payout only. It does not give the seller any points.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    actionError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
                 }
             },
             confirmButton = {
-                if (pointsSuccess) {
-                    Button(onClick = { showPointsDialog = false; pointsSuccess = false; onPointsSent() }, colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                        Text("Close", color = Color.White)
-                    }
-                } else if (pointsAlreadySent) {
-                    Button(
-                        onClick = { showPointsDialog = false; pointsAlreadySent = false },
-                        enabled = true,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
-                    ) {
-                        Text("Points Already Given", color = Color.White)
-                    }
-                } else {
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                isSendingPoints = true
-                                pointsError = null
-                                // Send points to student/receiver with reason "sale" (student is selling)
-                                val (okPoints, errorMsg) = withContext(Dispatchers.IO) { sendPointsToUser(token, item.sellerId, item.pricePoints, "sale", item.itemId) }
-                                if (okPoints) {
-                                    pointsSuccess = true
-                                } else {
-                                    pointsError = errorMsg ?: "Failed to send points."
-                                }
-                                isSendingPoints = false
+                Button(
+                    onClick = {
+                        scope.launch {
+                            isWorking = true
+                            actionError = null
+                            val result = withContext(Dispatchers.IO) {
+                                MarketplaceApi.recordSellerPayout(token, item.itemId, null)
                             }
-                        },
-                        enabled = !isSendingPoints,
-                        colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                    ) {
-                        if (isSendingPoints) CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                        else Text("Confirm Send", color = Color.White)
+                            isWorking = false
+                            when (result) {
+                                is MarketplaceApi.Result.Ok -> {
+                                    showPayoutDialog = false
+                                    onPointsSent()
+                                }
+                                is MarketplaceApi.Result.Failure -> actionError = result.message
+                            }
+                        }
+                    },
+                    enabled = !isWorking,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
+                ) {
+                    if (isWorking) {
+                        CircularProgressIndicator(Modifier.size(18.dp), Color.White, 2.dp)
+                    } else {
+                        Text("Mark as Paid", color = Color.White)
                     }
                 }
             },
             dismissButton = {
-                if (!pointsSuccess && !pointsAlreadySent) {
-                    TextButton(onClick = { showPointsDialog = false }, enabled = !isSendingPoints) { Text("Cancel") }
-                }
+                TextButton(onClick = { showPayoutDialog = false }, enabled = !isWorking) { Text("Cancel") }
             }
         )
     }
 
-    // â”€â”€ Chat dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Send Points Dialog ────────────────────────────────────────────────────
+
+    // ── Chat dialog ───────────────────────────────────────────────────────────
     if (showChatDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -1827,7 +1949,7 @@ private fun AdminPrivateOfferCard(
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // â”€â”€ Photo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Photo ─────────────────────────────────────────────────────────
             val photoUrl = item.photos.firstOrNull() ?: ""
             if (photoUrl.isNotBlank()) {
                 AsyncImage(
@@ -1858,7 +1980,7 @@ private fun AdminPrivateOfferCard(
                 modifier            = Modifier.fillMaxWidth().padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // â”€â”€ Title + current status chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Title + current status chip ────────────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1893,7 +2015,7 @@ private fun AdminPrivateOfferCard(
                     }
                 }
 
-                // â”€â”€ Seller + price â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Seller + price ─────────────────────────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1912,12 +2034,11 @@ private fun AdminPrivateOfferCard(
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false))
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Filled.MonetizationOn, null,
-                            tint = DarkGreen, modifier = Modifier.size(14.dp))
-                        Text("${item.pricePoints} pts", fontWeight = FontWeight.Bold,
-                            color = DarkGreen, fontSize = 13.sp)
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Asking", fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(item.displayAskingPrice, fontWeight = FontWeight.Bold,
+                            color = DarkGreen, fontSize = 14.sp)
                     }
                 }
 
@@ -1925,21 +2046,56 @@ private fun AdminPrivateOfferCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3, overflow = TextOverflow.Ellipsis)
 
-                // â”€â”€ Markup Display (Specifically for Acquired) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                if (item.status.lowercase() == "acquired" && item.markupPoints > 0) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(Color(0xFF1565C0).copy(alpha = 0.05f), RoundedCornerShape(8.dp)).padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // -- Negotiation and turnover state --------------------
+                if (item.acquisitionPrice != null || item.isTurnoverVerified) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1565C0).copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Filled.TrendingUp, null, tint = Color(0xFF1565C0), modifier = Modifier.size(16.dp))
-                        Text("Markup: ${item.markupPoints} pts", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1565C0))
+                        item.acquisitionPrice?.let {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Agreed acquisition", fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(Money.format(it), fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold, color = Color(0xFF1565C0))
+                            }
+                        }
+                        if (item.isTurnoverVerified) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(Icons.Filled.CheckCircle, null,
+                                    tint = DarkGreen, modifier = Modifier.size(14.dp))
+                                Text("Received and verified", fontSize = 12.sp, color = DarkGreen)
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Seller payout", fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (item.sellerIsPaid) "Paid" else "Unpaid",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (item.sellerIsPaid) DarkGreen else Color(0xFFE65100)
+                            )
+                        }
                     }
                 }
 
+
                 HorizontalDivider()
 
-                // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Action buttons ─────────────────────────────────────────────
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
@@ -1968,17 +2124,50 @@ private fun AdminPrivateOfferCard(
                         }
                     }
 
-                    // â”€â”€ Send Points Button (Acquired only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                    if (item.status.lowercase() == "acquired") {
+                    // -- Turnover, then cash payout ----------------------
+                    // The seller is paid in cash after Ofelia verifies the
+                    // physical item. No points change hands here.
+                    if (!item.isTurnoverVerified && !item.isSold) {
                         Button(
-                            onClick = { showPointsDialog = true },
+                            onClick = { showTurnoverDialog = true },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
                         ) {
-                            Icon(Icons.Filled.Send, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Icon(Icons.Filled.Inventory, null, modifier = Modifier.size(16.dp), tint = Color.White)
                             Spacer(Modifier.width(8.dp))
-                            Text("Send Points & Finalize", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Mark Acquired", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    if (item.isTurnoverVerified && !item.sellerIsPaid) {
+                        Button(
+                            onClick = { showPayoutDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                        ) {
+                            Icon(Icons.Filled.Payments, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Pay Seller ${Money.format(item.sellerPayoutAmount ?: item.acquisitionPrice)}",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    if (item.isTurnoverVerified && !item.isPublic && !item.isSold) {
+                        OutlinedButton(
+                            onClick = { onEditClick(item) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFF1565C0)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF1565C0))
+                        ) {
+                            Icon(Icons.Filled.Storefront, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Set Selling Price & Publish", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1987,13 +2176,14 @@ private fun AdminPrivateOfferCard(
     }
 }
 
-// â”€â”€ Bottom Nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Bottom Nav ─────────────────────────────────────────────────────────────────
 
 @Composable
 private fun AdminBottomBar(
     selected: AdminTab,
     userProfilePic: String,
     userInitial: String,
+    onScan: () -> Unit,
     onSelect: (AdminTab) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
@@ -2041,7 +2231,9 @@ private fun AdminBottomBar(
                 Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         }
-        // Center FAB â€” sits above the bar with its label below it
+        // Center FAB — the counter action. A buyer at the store shows their
+        // pickup QR and this is the button that reads it. Student management,
+        // which used to live here, moved to the Profile tab.
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -2049,25 +2241,23 @@ private fun AdminBottomBar(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             FloatingActionButton(
-                onClick = { onSelect(AdminTab.USERS) },
+                onClick = onScan,
                 modifier = Modifier
                     .size(54.dp)
                     .border(3.dp, MaterialTheme.colorScheme.surface, CircleShape),
                 shape = CircleShape,
-                containerColor = if (selected == AdminTab.USERS) DarkGreenLight else DarkGreen,
+                containerColor = DarkGreen,
                 contentColor = Color.White,
                 elevation = FloatingActionButtonDefaults.elevation(
                     defaultElevation = 6.dp, pressedElevation = 10.dp
                 )
             ) {
-                Icon(Icons.Filled.Group, "Users", modifier = Modifier.size(24.dp))
+                Icon(Icons.Filled.QrCodeScanner, "Scan pickup code", modifier = Modifier.size(24.dp))
             }
             Text(
-                text = "Users",
+                text = "Scan",
                 fontSize = 10.sp,
-                fontWeight = if (selected == AdminTab.USERS) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected == AdminTab.USERS) DarkGreen
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.padding(top = 3.dp)
             )
         }
@@ -2189,7 +2379,7 @@ private fun ProfileNavItem(
     }
 }
 
-// â”€â”€ Home â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Home ───────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun AdminHomeContent(onMenuClick: () -> Unit) {
@@ -2279,7 +2469,7 @@ private fun AdminHomeContent(onMenuClick: () -> Unit) {
                                         "title" to obj.optString("title", ""),
                                         "seller" to obj.optString("seller", ""),
                                         "status" to obj.optString("status", ""),
-                                        "price_points" to obj.optInt("price_points"),
+                                        "asking_price" to obj.optString("seller_asking_price", "0.00"),
                                         "created_at" to obj.optString("created_at", "")
                                     )
                                 }
@@ -2359,7 +2549,7 @@ private fun AdminHomeContent(onMenuClick: () -> Unit) {
                 recentItemsList.take(3).forEach { item ->
                     DashboardListItem(
                         title = item["title"]?.toString() ?: "",
-                        subtitle = "${item["seller"]?.toString() ?: ""} â€¢ ${item["status"]?.toString() ?: ""}",
+                        subtitle = "${item["seller"]?.toString() ?: ""} • ${item["status"]?.toString() ?: ""}",
                         icon = Icons.Filled.ShoppingBag,
                         iconColor = DarkGreen
                     )
@@ -2439,14 +2629,21 @@ private fun DashboardListItem(
     }
 }
 
-// â”€â”€ Chat data models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Chat data models ────────────────────────────────────────────────────────────
 
 data class ChatItem(
     val itemId: Int,
     val title: String,
     val description: String,
-    val pricePoints: Int,
-    val markupPoints: Int,
+    /** The student's asking price, in pesos. */
+    val askingPrice: String?,
+    /** What Admin agreed to pay the seller, once negotiated. */
+    val acquisitionPrice: String?,
+    /** The buyer-facing selling price, once published. */
+    val publicPrice: String?,
+    val rewardPoints: Int,
+    val sellerPayoutStatus: String,
+    val isTurnoverVerified: Boolean,
     val sellerId: Int,
     val sellerEmail: String,
     val status: String,
@@ -2460,6 +2657,8 @@ data class Conversation(
     val lastName: String,
     val profilePicture: String,
     val itemId: Int,
+    /** Admin has priced the offer - "Negotiating" becomes "Offer Accepted". */
+    val itemOfferAccepted: Boolean = false,
     val itemTitle: String,
     val itemStatus: String = "",
     val itemPhoto: String = "",
@@ -2470,7 +2669,7 @@ data class Conversation(
     val lastMessageSenderId: Int = 0
 )
 
-data class ChatMessage(
+internal data class ChatMessage(
     val messageId: Int,
     val itemId: Int,
     val itemTitle: String,
@@ -2481,10 +2680,32 @@ data class ChatMessage(
     val receiverName: String,
     val receiverProfilePicture: String,
     val message: String,
-    val sentAt: String
-)
+    val sentAt: String,
 
-// â”€â”€ Chat API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    /**
+     * What this message is: "text" for something a person typed, or one of the
+     * order kinds, which are drawn as a card instead of a bubble.
+     */
+    val kind: String = "text",
+
+    /**
+     * The order the card describes, as the server currently sees it.
+     *
+     * It is re-read on every poll, so a card posted at checkout shows the
+     * payment as unpaid and then as paid once Admin verifies it - the buyer
+     * never has to look anywhere else to know where their money stands.
+     */
+    val order: MarketTransaction? = null,
+
+    /** The listing behind an "item_listed" offer message. */
+    val listedItem: Item? = null,
+) {
+    val isOrderCard: Boolean get() = kind != "text" && order != null
+
+    val isItemCard: Boolean get() = kind == "item_listed" && listedItem != null
+}
+
+// ── Chat API ────────────────────────────────────────────────────────────────────
 
 private fun fetchConversations(token: String): List<Conversation> {
     val request = Request.Builder()
@@ -2526,6 +2747,7 @@ private fun fetchConversations(token: String): List<Conversation> {
                     lastName         = obj.optString("last_name"),
                     profilePicture   = obj.optString("profile_picture"),
                     itemId           = itemId,
+                    itemOfferAccepted = obj.optBoolean("item_offer_accepted", false),
                     itemTitle        = obj.optString("item_title").ifBlank { obj.optString("title") },
                     itemStatus       = obj.optString("item_status").ifBlank { obj.optString("status") },
                     itemPhoto        = obj.optString("item_photo"),
@@ -2563,7 +2785,7 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
         if (!response.isSuccessful) {
             // Truncate body so the toast/error text stays readable
             val preview = body.take(200).replace("\n", " ")
-            throw Exception("HTTP ${response.code} â€“ $preview")
+            throw Exception("HTTP ${response.code} – $preview")
         }
         val list = mutableListOf<ChatMessage>()
         // Handle: bare array, {"data":[...]}, {"messages":[...]},
@@ -2582,7 +2804,7 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
                     }
             }
         }
-        arr ?: return emptyList()   // valid 200 body but no message array â†’ truly empty
+        arr ?: return emptyList()   // valid 200 body but no message array → truly empty
         for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
             val senderObj   = obj.optJSONObject("sender")
@@ -2607,7 +2829,10 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
                 receiverProfilePicture = obj.optString("receiver_profile_picture").ifBlank {
                                          receiverObj?.optString("profile_picture") ?: "" },
                 message                = obj.optString("message").ifBlank { obj.optString("content") },
-                sentAt                 = obj.optString("sent_at").ifBlank { obj.optString("created_at") }
+                sentAt                 = obj.optString("sent_at").ifBlank { obj.optString("created_at") },
+                kind                   = obj.optString("kind").ifBlank { "text" },
+                order                  = obj.optJSONObject("order")?.let { parseTransaction(it) },
+                listedItem             = obj.optJSONObject("item_card")?.let { parseItem(it) }
             ))
         }
         return list
@@ -2775,7 +3000,7 @@ private suspend fun fetchEmojisByCategory(slug: String): List<EmojiItem> = withC
     result
 }
 
-private fun timeAgo(dateStr: String): String {
+internal fun timeAgo(dateStr: String): String {
     return try {
         val date = if (dateStr.contains("T")) {
             val cleaned = dateStr.replace(Regex("\\.\\d+Z?$"), "")
@@ -2800,7 +3025,7 @@ private fun timeAgo(dateStr: String): String {
     } catch (_: Exception) { dateStr }
 }
 
-// â”€â”€ Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Chat ───────────────────────────────────────────────────────────────────────
 
 @Composable
 fun AdminChatContent(
@@ -2872,11 +3097,11 @@ fun AdminChatContent(
         targetState = selectedConversation,
         transitionSpec = {
             if (targetState != null) {
-                // Opening a conversation â€” slide in from right
+                // Opening a conversation — slide in from right
                 slideInHorizontally(tween(300)) { it } togetherWith
                         slideOutHorizontally(tween(300)) { -it / 3 }
             } else {
-                // Going back â€” slide in from left
+                // Going back — slide in from left
                 slideInHorizontally(tween(300)) { -it / 3 } togetherWith
                         slideOutHorizontally(tween(300)) { it }
             }
@@ -2900,13 +3125,13 @@ fun AdminChatContent(
                 // val dbgLog    by pusherGlobalLog
                 // val (bannerBg, bannerDot, bannerLabel) = when (dbgStatus) {
                 //     "subscribed"                    -> Triple(Color(0xFF1B5E20), Color(0xFF69F0AE), "Live")
-                //     "connected"                     -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Authenticatingâ€¦")
-                //     "reconnecting"                  -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Reconnectingâ€¦")
+                //     "connected"                     -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Authenticating…")
+                //     "reconnecting"                  -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Reconnecting…")
                 //     "auth_failed"                   -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Auth failed")
                 //     "error"                         -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Error")
                 //     "disconnected", "disconnecting" -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Disconnected")
                 //     "idle"                          -> Triple(Color(0xFF1A237E), Color(0xFF82B1FF), "No active chat")
-                //     else                            -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Connectingâ€¦")
+                //     else                            -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Connecting…")
                 // }
                 // Row(
                 //     modifier = Modifier
@@ -2925,7 +3150,7 @@ fun AdminChatContent(
                 //     )
                 //     if (dbgLog.isNotEmpty()) {
                 //         Text(
-                //             "  â€”  $dbgLog",
+                //             "  —  $dbgLog",
                 //             fontSize = 11.sp,
                 //             color = bannerDot.copy(alpha = 0.75f),
                 //             maxLines = 1,
@@ -2972,7 +3197,7 @@ fun AdminChatContent(
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (searchQuery.isEmpty()) {
                                     Text(
-                                        "Search conversationsâ€¦",
+                                        "Search conversations…",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                         fontSize = 14.sp,
                                         lineHeight = 20.sp
@@ -2997,7 +3222,7 @@ fun AdminChatContent(
                     }
                 }
 
-                // â”€â”€ Filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Filter chips ──────────────────────────────────────────────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3240,22 +3465,47 @@ private fun ConversationItem(conversation: Conversation, onClick: () -> Unit, is
                 val statusText = conversation.itemStatus.ifBlank { "Unknown" }
                 val statusLower = statusText.lowercase()
 
+                // The same words the conversation header uses, acceptance
+                // included, so the list and the thread can never disagree.
+                val sellerStageLabel = when {
+                    statusLower == "pending" || statusLower == "private" ->
+                        if (conversation.itemOfferAccepted) "Offer Accepted" else "Negotiating"
+                    statusLower == "acquired" -> "Item Acquired"
+                    else -> statusText.replaceFirstChar { it.uppercaseChar() }
+                }
+
                 val (badgeText, badgeColor) = if (isAdmin) {
                     // Admin view: "Status - Category"
                     val isBuyer = statusLower == "public" || statusLower == "reserved" || statusLower == "sold"
                     val categoryLabel = if (isBuyer) "Student Buyer" else "Student Seller"
-                    val statusDisplay = statusText.replaceFirstChar { it.uppercaseChar() }
+                    val statusDisplay = if (isBuyer) {
+                        statusText.replaceFirstChar { it.uppercaseChar() }
+                    } else {
+                        sellerStageLabel
+                    }
                     val text = "$statusDisplay - $categoryLabel"
-                    val color = if (isBuyer) Color(0xFF2196F3) else Color(0xFF4CAF50)
+                    val color = when {
+                        isBuyer -> Color(0xFF2196F3)
+                        conversation.itemOfferAccepted && (statusLower == "pending" || statusLower == "private") ->
+                            Color(0xFF4CAF50)
+                        else -> Color(0xFFFF9800)
+                    }
                     text to color
                 } else {
                     // Student view: simple status labels
                     val (text, color) = when (statusLower) {
-                        "private", "acquired" -> "Negotiating" to Color(0xFFFF9800) // Orange
+                        "pending", "private" ->
+                            if (conversation.itemOfferAccepted) {
+                                "Offer Accepted" to Color(0xFF4CAF50)
+                            } else {
+                                "Negotiating" to Color(0xFFFF9800)
+                            }
+                        "acquired" -> "Item Acquired" to Color(0xFF4CAF50)
                         "public" -> "Item Available" to Color(0xFF4CAF50) // Green
                         "reserved" -> "Item Reserved" to Color(0xFFFF9800) // Orange
                         "sold" -> "Item Sold" to Color(0xFFE53935) // Red
-                        else -> "Unknown" to Color(0xFF999999)
+                        "rejected" -> "Not Accepted" to Color(0xFFE53935)
+                        else -> "Negotiating" to Color(0xFF999999)
                     }
                     text to color
                 }
@@ -3320,6 +3570,12 @@ private fun ChatDetailContent(
     var showEmojiPicker        by remember { mutableStateOf(false) }
     var chatItem               by remember { mutableStateOf<ChatItem?>(null) }
     var showItemPreview        by remember { mutableStateOf(false) }
+
+    // The student's View Item: the same ItemDetailDialog the Home screen
+    // opens - Buy Now bar and all - floating over the chat, with checkout
+    // reachable right from it. Admin keeps the management page instead.
+    var studentViewItem        by remember { mutableStateOf(false) }
+    var chatBuyItem            by remember { mutableStateOf<Item?>(null) }
     var showEditItem           by remember { mutableStateOf(false) }
     var showConfirmDialog      by remember { mutableStateOf<String?>(null) } // "sold" or "reserved"
     var isProcessing           by remember { mutableStateOf(false) }
@@ -3332,7 +3588,7 @@ private fun ChatDetailContent(
     val focusManager           = LocalFocusManager.current
     val textFieldFocusRequester = remember { FocusRequester() }
 
-    // â”€â”€ Pusher real-time â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Pusher real-time ──────────────────────────────────────────────────────
     // Hot flow used as a thread-safe bridge between Pusher's callback thread
     // and the Compose main thread.
     // val incomingFlow = remember { MutableSharedFlow<ChatMessage>(extraBufferCapacity = 64) }
@@ -3343,7 +3599,7 @@ private fun ChatDetailContent(
     //     var pusherRef: Pusher? = null
     //
     //     try {
-    //         val tokenPreview = if (token.length > 8) "${token.take(8)}â€¦" else "(empty)"
+    //         val tokenPreview = if (token.length > 8) "${token.take(8)}…" else "(empty)"
     //         handler.post {
     //             pusherGlobalStatus.value = "connecting"
     //             pusherGlobalLog.value    = "token=$tokenPreview ch=$channelName"
@@ -3365,7 +3621,7 @@ private fun ChatDetailContent(
     //                     Log.d("Pusher", "Subscribed to $cn")
     //                     handler.post {
     //                         pusherGlobalStatus.value = "subscribed"
-    //                         pusherGlobalLog.value    = "OK â€” $cn"
+    //                         pusherGlobalLog.value    = "OK — $cn"
     //                     }
     //                 }
     //                 override fun onAuthenticationFailure(message: String, e: Exception) {
@@ -3418,7 +3674,7 @@ private fun ChatDetailContent(
     //
     //         pusher.connect(object : ConnectionEventListener {
     //             override fun onConnectionStateChange(change: ConnectionStateChange) {
-    //                 Log.d("Pusher", "${change.previousState} â†’ ${change.currentState}")
+    //                 Log.d("Pusher", "${change.previousState} → ${change.currentState}")
     //                 handler.post {
     //                     pusherGlobalStatus.value = when (change.currentState) {
     //                         ConnectionState.CONNECTING    -> "connecting"
@@ -3470,7 +3726,7 @@ private fun ChatDetailContent(
     //                     else existing
     //                 }
     //             }
-    //             // New message from the other participant â€” append if not already present
+    //             // New message from the other participant — append if not already present
     //             messages.none { it.messageId == msg.messageId } -> {
     //                 messages = messages + msg
     //                 listState.scrollToItem(messages.size - 1)
@@ -3478,7 +3734,7 @@ private fun ChatDetailContent(
     //         }
     //     }
     // }
-    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─────────────────────────────────────────────────────────────────────────
 
     LaunchedEffect(conversation.otherUserId, conversation.itemId) {
         chatItem = withContext(Dispatchers.IO) { fetchChatItem(token, conversation.itemId) }
@@ -3511,7 +3767,7 @@ private fun ChatDetailContent(
                     isInitialLoad = false
                 }
                 // reverseLayout=true means newest message is always at index 0 (bottom)
-                // â€” no scroll needed after load, the list is already at the correct position
+                // — no scroll needed after load, the list is already at the correct position
             }
             delay(5000) // Poll every 5 seconds
         }
@@ -3524,13 +3780,13 @@ private fun ChatDetailContent(
 
         // Resolve receiver ID:
         // 1. Use the conversation's otherUserId if it was parsed correctly (non-zero).
-        // 2. Fall back to inferring from already-loaded messages â€” look for a
+        // 2. Fall back to inferring from already-loaded messages — look for a
         //    receiver_id on messages WE sent, or a sender_id on messages THEY sent.
         // This handles the case where the conversations API omits other_user_id.
         val receiverId = conversation.otherUserId.takeIf { it != 0 }
             ?: messages.firstOrNull { it.senderId == currentUserId }?.receiverId?.takeIf { it != 0 }
             ?: messages.firstOrNull { it.senderId != currentUserId }?.senderId?.takeIf { it != 0 }
-            ?: return  // still unknown â€” don't send a broken request
+            ?: return  // still unknown — don't send a broken request
 
         messageText = ""
         isSending   = true
@@ -3552,7 +3808,7 @@ private fun ChatDetailContent(
         )
         messages = messages + optimistic
         scope.launch {
-            // reverseLayout=true keeps newest at index 0 (bottom) â€” no manual scroll needed
+            // reverseLayout=true keeps newest at index 0 (bottom) — no manual scroll needed
             withContext(Dispatchers.IO) {
                 sendMessage(token, conversation.itemId, receiverId, text)
             }
@@ -3607,9 +3863,49 @@ private fun ChatDetailContent(
     BackHandler { onBack() }
     BackHandler(enabled = showEmojiPicker) { showEmojiPicker = false }
     BackHandler(enabled = showItemPreview && !showEmojiPicker) { showItemPreview = false }
+
+    if (studentViewItem) {
+        chatItem?.let { item ->
+            ItemDetailDialog(
+                item = Item(
+                    itemId = item.itemId,
+                    sellerId = item.sellerId,
+                    sellerEmail = item.sellerEmail,
+                    title = item.title,
+                    description = item.description,
+                    categoryId = 0,
+                    status = item.status,
+                    photos = item.photos,
+                    createdAt = "",
+                    sellerAskingPrice = item.askingPrice,
+                    acquisitionPrice = item.acquisitionPrice,
+                    publicPrice = item.publicPrice,
+                    rewardPoints = item.rewardPoints,
+                ),
+                token = token,
+                isFavorited = false,
+                onFavoriteToggle = { _, _ -> },
+                onGoToChat = { studentViewItem = false },
+                onDismiss = { studentViewItem = false },
+                onBuyNow = { buyItem ->
+                    studentViewItem = false
+                    chatBuyItem = buyItem
+                },
+                currentUserId = currentUserId,
+            )
+        } ?: run { studentViewItem = false }
+    }
+
+    chatBuyItem?.let { buyItem ->
+        CheckoutScreen(
+            item = buyItem,
+            onBack = { chatBuyItem = null },
+            onCompleted = { chatBuyItem = null },
+        )
+    }
     BackHandler(enabled = showEditItem && !showEmojiPicker && !showItemPreview) { showEditItem = false }
 
-    // â”€â”€ Item detail / Edit pages (full-screen, slides in over the chat) â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Item detail / Edit pages (full-screen, slides in over the chat) ────────
     AnimatedContent(
         targetState = when {
             showEditItem -> "edit"
@@ -3630,31 +3926,38 @@ private fun ChatDetailContent(
         when (state) {
             "edit" -> {
                 chatItem?.let { item ->
-                    EditItemPage(
-                        item = item,
-                        token = token,
-                        onBack = { showEditItem = false },
-                        onItemUpdated = { updatedItem ->
-                            chatItem = updatedItem
-                            showEditItem = false
-                        }
-                    )
+                    // Rendered in the chat's unpadded area, so the form insets
+                    // itself: the Save button must clear the gesture bar and
+                    // rise above the keyboard.
+                    Box(modifier = Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+                        EditItemPage(
+                            item = item,
+                            token = token,
+                            onBack = { showEditItem = false },
+                            onItemUpdated = { updatedItem ->
+                                chatItem = updatedItem
+                                showEditItem = false
+                            }
+                        )
+                    }
                 } ?: run { showEditItem = false }
             }
             "view" -> {
                 chatItem?.let { item ->
-                    ChatItemDetailPage(item = item, onBack = { showItemPreview = false })
+                    Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
+                        ChatItemDetailPage(item = item, onBack = { showItemPreview = false })
+                    }
                 } ?: run { showItemPreview = false }
             }
             else -> {
-                // Flat Column â€” mirrors Messenger's layout. No Scaffold re-measure on every
+                // Flat Column — mirrors Messenger's layout. No Scaffold re-measure on every
                 // keyboard frame; imePadding() only re-measures this simple Column + children.
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .imePadding()
                 ) {
-            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Top bar ────────────────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3706,7 +4009,30 @@ private fun ChatDetailContent(
                         )
                     }
                 }
-                // â”€â”€ Item info bar (sticky, always visible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Order banner ──────────────────────────────────────────────
+                // Conversations are per item and per buyer, so when this thread
+                // has a live order behind it the admin can settle it here
+                // instead of switching to the transactions screen.
+                if (isAdmin) {
+                    ChatOrderPanel(
+                        itemId = conversation.itemId,
+                        buyerId = conversation.otherUserId,
+                        token = token,
+                        onChanged = { retryTrigger++ }
+                    )
+                }
+
+                // ── Offer banner ─────────────────────────────────────────────
+                // The listing's own decisions - accept, decline, schedule,
+                // acquire, and the seller's turnover QR - pinned above the
+                // thread so a long chat can never bury them.
+                ItemOfferPanel(
+                    itemId = conversation.itemId,
+                    expectedSellerId = if (isAdmin) conversation.otherUserId else currentUserId,
+                    token = token,
+                )
+
+                // ── Item info bar (sticky, always visible) ────────────────────
                 chatItem?.let { item ->
                     HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
                     Row(
@@ -3754,9 +4080,8 @@ private fun ChatDetailContent(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                // Points
-                                val pointsToShow = if (item.status.lowercase() in listOf("public", "reserved", "sold", "acquired"))
-                                    item.markupPoints else item.pricePoints
+                                // Selling price once published, asking price before.
+                                val priceToShow = item.publicPrice ?: item.askingPrice
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -3765,7 +4090,7 @@ private fun ChatDetailContent(
                                         tint = Color.White.copy(alpha = 0.85f),
                                         modifier = Modifier.size(11.dp))
                                     Text(
-                                        "$pointsToShow pts",
+                                        Money.format(priceToShow),
                                         fontSize = 11.sp,
                                         color = Color.White.copy(alpha = 0.85f),
                                         fontWeight = FontWeight.Medium
@@ -3773,13 +4098,21 @@ private fun ChatDetailContent(
                                 }
                                 // Status badge (moved next to points)
                                 val isPrivate = item.status.lowercase() == "pending"
+                                val offerAccepted = isPrivate && item.acquisitionPrice != null
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
-                                    color = if (isPrivate) Color(0xFFFF8F00).copy(alpha = 0.30f)
-                                            else Color.White.copy(alpha = 0.20f)
+                                    color = when {
+                                        offerAccepted -> Color(0xFF2E7D32).copy(alpha = 0.45f)
+                                        isPrivate -> Color(0xFFFF8F00).copy(alpha = 0.30f)
+                                        else -> Color.White.copy(alpha = 0.20f)
+                                    }
                                 ) {
                                     Text(
-                                        if (isPrivate) "Negotiating" else item.status.replaceFirstChar { it.uppercaseChar() },
+                                        when {
+                                            offerAccepted -> "Offer Accepted"
+                                            isPrivate -> "Negotiating"
+                                            else -> item.status.replaceFirstChar { it.uppercaseChar() }
+                                        },
                                         fontSize   = 9.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color      = Color.White,
@@ -3816,7 +4149,9 @@ private fun ChatDetailContent(
 
                             // View Item button
                             OutlinedButton(
-                                onClick = { showItemPreview = true },
+                                onClick = {
+                                    if (isAdmin) showItemPreview = true else studentViewItem = true
+                                },
                                 shape = RoundedCornerShape(8.dp),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
@@ -3830,7 +4165,7 @@ private fun ChatDetailContent(
                 }
             } // end top bar Column
 
-            // â”€â”€ Messages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Messages ────────────────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -3871,7 +4206,7 @@ private fun ChatDetailContent(
                         else -> LazyColumn(
                             state = listState,
                             // reverseLayout = true: item 0 anchors to bottom.
-                            // Newest messages stay visible when keyboard opens â€”
+                            // Newest messages stay visible when keyboard opens —
                             // no programmatic scroll needed (mirrors Messenger).
                             reverseLayout = true,
                             modifier = Modifier
@@ -3888,23 +4223,23 @@ private fun ChatDetailContent(
                     }
             } // end messages Box
 
-            // â”€â”€ Input bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Input bar ───────────────────────────────────────────────────────
             Surface(
                 shadowElevation = 0.dp,
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.navigationBarsPadding()) {
-                    // â”€â”€ Pusher debug status bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Pusher debug status bar ───────────────────────────────
                     // val (dotColor, statusLabel) = when (pusherStatus) {
                     //     "subscribed"    -> Color(0xFF4CAF50) to "Live"
-                    //     "connected"     -> Color(0xFFFF9800) to "Authenticatingâ€¦"
-                    //     "reconnecting"  -> Color(0xFFFF9800) to "Reconnectingâ€¦"
+                    //     "connected"     -> Color(0xFFFF9800) to "Authenticating…"
+                    //     "reconnecting"  -> Color(0xFFFF9800) to "Reconnecting…"
                     //     "auth_failed"   -> Color(0xFFF44336) to "Auth failed"
                     //     "error"         -> Color(0xFFF44336) to "Error"
                     //     "disconnected",
                     //     "disconnecting" -> Color(0xFFF44336) to "Disconnected"
-                    //     else            -> Color(0xFFFF9800) to "Connectingâ€¦"
+                    //     else            -> Color(0xFFFF9800) to "Connecting…"
                     // }
                     // Row(
                     //     modifier = Modifier
@@ -3923,7 +4258,7 @@ private fun ChatDetailContent(
                     //     )
                     //     if (pusherDebugLog.isNotEmpty()) {
                     //         Text(
-                    //             "  â€¢  $pusherDebugLog",
+                    //             "  •  $pusherDebugLog",
                     //             fontSize = 10.sp,
                     //             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                     //             maxLines = 1,
@@ -3932,57 +4267,16 @@ private fun ChatDetailContent(
                     //         )
                     //     }
                     // }
-                    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ─────────────────────────────────────────────────────────
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
 
-                    // â”€â”€ Action buttons (Mark as Reserve, Mark as Sold) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                    // Only show for seller when item status is public, reserved, or sold
-                    val currentChatItem = chatItem
-                    if (currentChatItem != null && currentUserId == currentChatItem.sellerId &&
-                        currentChatItem.status.lowercase() in listOf("public", "reserved", "sold")) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { showConfirmDialog = "reserved" },
-                                enabled = !isProcessing,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(36.dp),
-                                border = BorderStroke(1.dp, DarkGreen),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    "Mark as Reserve",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = DarkGreen
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = { showConfirmDialog = "sold" },
-                                enabled = !isProcessing,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(36.dp),
-                                border = BorderStroke(1.dp, DarkGreen),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text(
-                                    "Mark as Sold",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = DarkGreen
-                                )
-                            }
-                        }
-                    }
+                    // Mark-as-Reserve / Mark-as-Sold used to appear here for
+                    // the student seller once their item went public - but a
+                    // published item belongs to the store, and its lifecycle
+                    // (reserve on checkout, sold on completion) is the
+                    // server's to run. The student has no say past turnover.
 
                     Row(
                         modifier = Modifier
@@ -3990,7 +4284,7 @@ private fun ChatDetailContent(
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Emoji button â€” toggles picker panel; restores keyboard when closing
+                        // Emoji button — toggles picker panel; restores keyboard when closing
                         IconButton(onClick = {
                             if (showEmojiPicker) {
                                 showEmojiPicker = false
@@ -4042,7 +4336,7 @@ private fun ChatDetailContent(
                                 ) {
                                     if (messageText.isEmpty()) {
                                         Text(
-                                            "Type a messageâ€¦",
+                                            "Type a message…",
                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                             fontSize = 14.sp,
                                             lineHeight = 20.sp
@@ -4085,7 +4379,7 @@ private fun ChatDetailContent(
                             }
                         }
                     }
-                    // Emoji picker panel â€” shown when emoji button is toggled
+                    // Emoji picker panel — shown when emoji button is toggled
                     if (showEmojiPicker) {
                         EmojiPickerPanel(onEmojiClick = { messageText += it })
                     }
@@ -4257,7 +4551,7 @@ private fun EmojiPickerPanel(onEmojiClick: (String) -> Unit) {
     }
 }
 
-// â”€â”€ Item Detail Page (shown when "View Item" is tapped in chat) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Item Detail Page (shown when "View Item" is tapped in chat) ────────────────
 
 @Composable
 private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
@@ -4266,7 +4560,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Top bar ────────────────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4291,7 +4585,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                     )
                 }
             }
-            // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Scrollable content ──────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -4380,7 +4674,17 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(Icons.Filled.MonetizationOn, null, tint = DarkGreen, modifier = Modifier.size(22.dp))
-                        Text("${item.pricePoints} pts", fontWeight = FontWeight.Bold, color = DarkGreen, fontSize = 20.sp)
+                        Text(
+                            Money.format(item.publicPrice ?: item.askingPrice),
+                            fontWeight = FontWeight.Bold, color = DarkGreen, fontSize = 20.sp
+                        )
+                    }
+                    if (item.publicPrice != null && item.rewardPoints > 0) {
+                        Text(
+                            LoyaltyRules.rewardLabel(item.rewardPoints),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     val statusColor = when (item.status.lowercase()) {
                         "approved" -> DarkGreen
@@ -4431,12 +4735,19 @@ private fun EditItemPage(
     // Status dropdown
     var expanded by remember { mutableStateOf(false) }
     var editStatus by remember { mutableStateOf(item.status) }
-    val statusOptions = listOf("private", "acquired", "public", "reserved", "sold")
+    // "acquired" and "sold" are reached through turnover verification and
+    // checkout completion, so they are not offered as manual choices here.
+    val statusOptions = listOf("pending", "acquired", "public", "reserved", "sold")
 
-    // Markup points - editable only if CURRENTLY SELECTED status is private/acquired
-    var editMarkupPoints by remember { mutableStateOf(item.markupPoints.toString()) }
-    val canEditMarkup = editStatus.lowercase() == "private" ||
-                       editStatus.lowercase() == "acquired"
+    // The public selling price, in pesos. Reward points are derived from it by
+    // the server; the figure shown here is only a preview.
+    var editPublicPrice by remember {
+        mutableStateOf(Money.formatPlain(item.publicPrice).replace(",", "").takeIf { it != "-" } ?: "")
+    }
+    val rewardPreview = LoyaltyRules.rewardPointsFor(Money.normalizeInput(editPublicPrice))
+    val canEditPrice = editStatus.lowercase() in listOf("acquired", "public")
+    val acquisitionRef = item.acquisitionPrice
+    val turnoverVerifiedRef = item.isTurnoverVerified
 
     var isSaving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
@@ -4452,7 +4763,7 @@ private fun EditItemPage(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Top bar ────────────────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4477,7 +4788,7 @@ private fun EditItemPage(
                     )
                 }
             }
-            // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Scrollable content ──────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -4562,8 +4873,8 @@ private fun EditItemPage(
                 ) {
                     Text(item.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
 
-                    // Price Points - NON-EDITABLE (display only)
-                    Text("Price Points", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    // Seller asking price - read-only reference
+                    Text("Seller Asking Price", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -4580,7 +4891,7 @@ private fun EditItemPage(
                                 tint = DarkGreen, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                "${item.pricePoints} pts",
+                                Money.format(item.askingPrice),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = DarkGreen
@@ -4636,23 +4947,93 @@ private fun EditItemPage(
                         }
                     }
 
-                    // Markup Points field (editable only if SELECTED status is private or acquired)
-                    Text("Markup Points", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    // Public selling price, with the reward the buyer will earn.
+                    Text("Public Selling Price (${Money.PESO})", fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-                    if (canEditMarkup) {
+                    if (canEditPrice) {
                         OutlinedTextField(
-                            value = editMarkupPoints,
-                            onValueChange = { editMarkupPoints = it; saveError = null },
+                            value = editPublicPrice,
+                            onValueChange = {
+                                if (Money.isValidPriceInput(it)) { editPublicPrice = it; saveError = null }
+                            },
+                            leadingIcon = { Text(Money.PESO, style = MaterialTheme.typography.titleMedium) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp),
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal,
+                                imeAction = ImeAction.Done
+                            ),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = DarkGreen,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
                         )
+
+                        // Reward preview and expected profit, both derived from
+                        // the price above. The server recalculates on publish.
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = DarkGreen.copy(alpha = 0.07f)
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Buyer earns", fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        "$rewardPreview point${if (rewardPreview == 1) "" else "s"}",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DarkGreen
+                                    )
+                                }
+                                acquisitionRef?.let { acquired ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Acquisition price", fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(Money.format(acquired), fontSize = 13.sp)
+                                    }
+                                    val priced = Money.parse(Money.normalizeInput(editPublicPrice))
+                                    val acq = Money.parse(acquired)
+                                    if (priced != null && acq != null) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Expected profit", fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                Money.format(priced.subtract(acq).toPlainString()),
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1565C0)
+                                            )
+                                        }
+                                    }
+                                }
+                                if (!turnoverVerifiedRef) {
+                                    Text(
+                                        "This item cannot be published until it has been received and verified.",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFE65100)
+                                    )
+                                }
+                            }
+                        }
                     } else {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -4670,7 +5051,7 @@ private fun EditItemPage(
                                     modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    editMarkupPoints,
+                                    Money.format(item.publicPrice),
                                     fontSize = 16.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -4696,7 +5077,7 @@ private fun EditItemPage(
 
                     HorizontalDivider()
 
-                    // â”€â”€ Success Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Success Dialog ────────────────────────────────────────
                     if (showSuccessDialog) {
                         AlertDialog(
                             onDismissRequest = { showSuccessDialog = false },
@@ -4735,7 +5116,7 @@ private fun EditItemPage(
                         )
                     }
 
-                    // â”€â”€ Error Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Error Dialog ──────────────────────────────────────────
                     if (showErrorDialog) {
                         AlertDialog(
                             onDismissRequest = { showErrorDialog = false },
@@ -4772,9 +5153,16 @@ private fun EditItemPage(
                                 showErrorDialog = true
                                 return@Button
                             }
-                            val markupPts = editMarkupPoints.toIntOrNull()
-                            if (canEditMarkup && editMarkupPoints.isNotBlank() && markupPts == null) {
-                                dialogErrorMsg = "Markup points must be a valid number."
+                            // Publishing needs a real peso price, and the server
+                            // additionally refuses if turnover is unverified.
+                            val normalizedPrice = Money.normalizeInput(editPublicPrice)
+                            if (canEditPrice && editPublicPrice.isNotBlank() && normalizedPrice == null) {
+                                dialogErrorMsg = "Enter a valid selling price, e.g. 250 or 249.50."
+                                showErrorDialog = true
+                                return@Button
+                            }
+                            if (editStatus.lowercase() == "public" && normalizedPrice == null) {
+                                dialogErrorMsg = "A public selling price is required before publishing."
                                 showErrorDialog = true
                                 return@Button
                             }
@@ -4785,7 +5173,7 @@ private fun EditItemPage(
                                         token,
                                         item.itemId,
                                         status = editStatus,
-                                        markupPoints = if (canEditMarkup) markupPts else null
+                                        publicPrice = normalizedPrice
                                     )
                                 }
                                 isSaving = false
@@ -4793,9 +5181,12 @@ private fun EditItemPage(
                                     saveSuccess = true
                                     savedChatItem = item.copy(
                                         status = editStatus,
-                                        markupPoints = markupPts ?: item.markupPoints
+                                        publicPrice = normalizedPrice ?: item.publicPrice,
+                                        rewardPoints = LoyaltyRules.rewardPointsFor(
+                                            normalizedPrice ?: item.publicPrice
+                                        )
                                     )
-                                    // Show dialog FIRST â€” onItemUpdated is called from Back button
+                                    // Show dialog FIRST — onItemUpdated is called from Back button
                                     showSuccessDialog = true
                                 } else {
                                     dialogErrorMsg = errMsg.ifBlank { "Failed to update. Please try again." }
@@ -4842,12 +5233,19 @@ private fun EditItemPageForList(
     // Status dropdown
     var expanded by remember { mutableStateOf(false) }
     var editStatus by remember { mutableStateOf(item.status) }
-    val statusOptions = listOf("private", "acquired", "public", "reserved", "sold")
+    // "acquired" and "sold" are reached through turnover verification and
+    // checkout completion, so they are not offered as manual choices here.
+    val statusOptions = listOf("pending", "acquired", "public", "reserved", "sold")
 
-    // Markup points - editable only if CURRENTLY SELECTED status is private/acquired
-    var editMarkupPoints by remember { mutableStateOf(item.markupPoints.toString()) }
-    val canEditMarkup = editStatus.lowercase() == "private" ||
-                       editStatus.lowercase() == "acquired"
+    // The public selling price, in pesos. Reward points are derived from it by
+    // the server; the figure shown here is only a preview.
+    var editPublicPrice by remember {
+        mutableStateOf(Money.formatPlain(item.publicPrice).replace(",", "").takeIf { it != "-" } ?: "")
+    }
+    val rewardPreview = LoyaltyRules.rewardPointsFor(Money.normalizeInput(editPublicPrice))
+    val canEditPrice = editStatus.lowercase() in listOf("acquired", "public")
+    val acquisitionRef = item.acquisitionPrice
+    val turnoverVerifiedRef = item.isTurnoverVerified
 
     var isSaving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
@@ -4863,7 +5261,7 @@ private fun EditItemPageForList(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Top bar ────────────────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4889,7 +5287,7 @@ private fun EditItemPageForList(
                 }
             }
             
-            // â”€â”€ Scrollable content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Scrollable content ──────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -4975,9 +5373,10 @@ private fun EditItemPageForList(
                 ) {
                     Text(item.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
 
-                    // Price Points - NON-EDITABLE (display only) - HIDE for public listings
+                    // Seller asking price - read-only reference, hidden once the
+                    // item is on the public catalog and the selling price rules.
                     if (editStatus.lowercase() != "public") {
-                        Text("Price Points", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        Text("Seller Asking Price", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -4994,7 +5393,7 @@ private fun EditItemPageForList(
                                     tint = DarkGreen, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    "${item.pricePoints} pts",
+                                    item.displayAskingPrice,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = DarkGreen
@@ -5051,27 +5450,93 @@ private fun EditItemPageForList(
                         }
                     }
 
-                    // Markup Points field â€” editable when status is private/acquired,
-                    // read-only (greyed card) for all other statuses.
-                    // Always visible so the current value is never hidden from the admin.
-                    Text("Markup Points", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    // Public selling price. Reward points are derived from it by
+                    // the server; what is shown here is a preview only.
+                    Text("Public Selling Price (${Money.PESO})", fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
-                    if (canEditMarkup) {
+                    if (canEditPrice) {
                         OutlinedTextField(
-                            value = editMarkupPoints,
-                            onValueChange = { editMarkupPoints = it; saveError = null },
+                            value = editPublicPrice,
+                            onValueChange = {
+                                if (Money.isValidPriceInput(it)) { editPublicPrice = it; saveError = null }
+                            },
+                            leadingIcon = { Text(Money.PESO, style = MaterialTheme.typography.titleMedium) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(10.dp),
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal,
+                                imeAction = ImeAction.Done
+                            ),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = DarkGreen,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
                         )
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = DarkGreen.copy(alpha = 0.07f)
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Buyer earns", fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        "$rewardPreview point${if (rewardPreview == 1) "" else "s"}",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DarkGreen
+                                    )
+                                }
+                                acquisitionRef?.let { acquired ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Acquisition price", fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text(Money.format(acquired), fontSize = 13.sp)
+                                    }
+                                    val priced = Money.parse(Money.normalizeInput(editPublicPrice))
+                                    val acq = Money.parse(acquired)
+                                    if (priced != null && acq != null) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Expected profit", fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text(
+                                                Money.format(priced.subtract(acq).toPlainString()),
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1565C0)
+                                            )
+                                        }
+                                    }
+                                }
+                                if (!turnoverVerifiedRef) {
+                                    Text(
+                                        "This item cannot be published until it has been received and verified.",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFFE65100)
+                                    )
+                                }
+                            }
+                        }
                     } else {
-                        // Show the actual markup_points value from the item (read-only)
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
@@ -5088,8 +5553,7 @@ private fun EditItemPageForList(
                                     modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text = if (item.markupPoints > 0) "${item.markupPoints} pts"
-                                           else "Not set",
+                                    text = item.publicPrice?.let { Money.format(it) } ?: "Not set",
                                     fontSize = 16.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -5117,7 +5581,7 @@ private fun EditItemPageForList(
 
                     HorizontalDivider()
 
-                    // â”€â”€ Success Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Success Dialog ─────────────────────────────────────────
                     if (showSuccessDialog) {
                         AlertDialog(
                             onDismissRequest = { showSuccessDialog = false },
@@ -5156,7 +5620,7 @@ private fun EditItemPageForList(
                         )
                     }
 
-                    // â”€â”€ Error Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Error Dialog ───────────────────────────────────────────
                     if (showErrorDialog) {
                         AlertDialog(
                             onDismissRequest = { showErrorDialog = false },
@@ -5193,9 +5657,16 @@ private fun EditItemPageForList(
                                 showErrorDialog = true
                                 return@Button
                             }
-                            val markupPts = editMarkupPoints.toIntOrNull()
-                            if (canEditMarkup && editMarkupPoints.isNotBlank() && markupPts == null) {
-                                dialogErrorMsg = "Markup points must be a valid number."
+                            // Publishing needs a real peso price, and the server
+                            // additionally refuses if turnover is unverified.
+                            val normalizedPrice = Money.normalizeInput(editPublicPrice)
+                            if (canEditPrice && editPublicPrice.isNotBlank() && normalizedPrice == null) {
+                                dialogErrorMsg = "Enter a valid selling price, e.g. 250 or 249.50."
+                                showErrorDialog = true
+                                return@Button
+                            }
+                            if (editStatus.lowercase() == "public" && normalizedPrice == null) {
+                                dialogErrorMsg = "A public selling price is required before publishing."
                                 showErrorDialog = true
                                 return@Button
                             }
@@ -5206,7 +5677,7 @@ private fun EditItemPageForList(
                                         token,
                                         item.itemId,
                                         status = editStatus,
-                                        markupPoints = if (canEditMarkup) markupPts else null
+                                        publicPrice = normalizedPrice
                                     )
                                 }
                                 isSaving = false
@@ -5216,14 +5687,20 @@ private fun EditItemPageForList(
                                         itemId = item.itemId,
                                         title = item.title,
                                         description = item.description,
-                                        pricePoints = item.pricePoints,
-                                        markupPoints = markupPts ?: item.markupPoints,
+                                        askingPrice = item.sellerAskingPrice,
+                                        acquisitionPrice = item.acquisitionPrice,
+                                        publicPrice = normalizedPrice ?: item.publicPrice,
+                                        rewardPoints = LoyaltyRules.rewardPointsFor(
+                                            normalizedPrice ?: item.publicPrice
+                                        ),
+                                        sellerPayoutStatus = item.sellerPayoutStatus,
+                                        isTurnoverVerified = item.isTurnoverVerified,
                                         sellerId = item.sellerId,
                                         sellerEmail = item.sellerEmail,
                                         status = editStatus,
                                         photos = item.photos
                                     )
-                                    // Show dialog FIRST â€” onItemUpdated is called from the Back button
+                                    // Show dialog FIRST — onItemUpdated is called from the Back button
                                     showSuccessDialog = true
                                 } else {
                                     dialogErrorMsg = errMsg.ifBlank { "Failed to update. Please try again." }
@@ -5258,6 +5735,20 @@ private fun EditItemPageForList(
 
 @Composable
 private fun ChatBubble(msg: ChatMessage, isMe: Boolean) {
+    // An order is a card, not a sentence: the item, its photo, what is owed,
+    // how it is being paid and whether that has happened yet.
+    if (msg.isOrderCard) {
+        ChatOrderCard(msg = msg, isMe = isMe)
+        return
+    }
+
+    // A fresh listing is an offer card: the item, its asking price, and the
+    // review decisions on Admin's side.
+    if (msg.isItemCard) {
+        ItemOfferCard(msg = msg, isMe = isMe)
+        return
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
@@ -5333,7 +5824,7 @@ private fun ChatBubble(msg: ChatMessage, isMe: Boolean) {
     }
 }
 
-// â”€â”€ Users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Users ──────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun AdminUsersContent(onMenuClick: () -> Unit) {
@@ -5350,7 +5841,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
     var refreshKey      by remember { mutableStateOf(0) }
 
-    // Always fetch ALL students â€” filter client-side via displayStatus so that
+    // Always fetch ALL students — filter client-side via displayStatus so that
     // students with is_verified=true but status="pending" on the backend still
     // appear correctly under the Approved tab.
     LaunchedEffect(refreshKey) {
@@ -5381,7 +5872,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
         }
     }
 
-    // Pre-compute counts once per students change â€” avoids 4x .count() on every recomposition
+    // Pre-compute counts once per students change — avoids 4x .count() on every recomposition
     val pendingCount  = remember(students) { students.count { it.displayStatus == "pending" } }
     val approvedCount = remember(students) { students.count { it.displayStatus == "approved" } }
     val declinedCount = remember(students) { students.count { it.displayStatus == "declined" } }
@@ -5403,7 +5894,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize()) {
         AdminPageHeader(title = "User Management", onMenuClick = onMenuClick)
 
-        // â”€â”€ Filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Filter chips ─────────────────────────────────────────────────────
         val filters = listOf("All", "Pending", "Approved", "Declined", "Blocked")
         Row(
             modifier = Modifier
@@ -5435,7 +5926,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
             }
         }
 
-        // â”€â”€ Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Content ──────────────────────────────────────────────────────────
         Box(modifier = Modifier.fillMaxSize()) {
             when {
                 isLoading -> CircularProgressIndicator(
@@ -5481,7 +5972,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
     }
 }
 
-// â”€â”€ Student Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Student Card ───────────────────────────────────────────────────────────────
 
 @Composable
 private fun StudentCard(student: Student, onClick: () -> Unit) {
@@ -5497,7 +5988,7 @@ private fun StudentCard(student: Student, onClick: () -> Unit) {
         Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically) {
 
-            // Avatar â€” shimmer while loading, initial on error/no URL
+            // Avatar — shimmer while loading, initial on error/no URL
             Box(modifier = Modifier.size(50.dp).clip(CircleShape)
                 .background(DarkGreen.copy(alpha = 0.1f))) {
                 if (student.profilePicture != null) {
@@ -5530,14 +6021,14 @@ private fun StudentCard(student: Student, onClick: () -> Unit) {
                 Text(
                     text = buildString {
                         student.verificationType?.let { append(it.replace("_", " ").replaceFirstChar { c -> c.uppercaseChar() }) }
-                        if (student.isVerified) append(" Â· âœ“ Verified")
+                        if (student.isVerified) append(" · ✓ Verified")
                     },
                     fontSize = 11.sp,
                     color = if (student.isVerified) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Status badge â€” uses displayStatus so is_verified:true always shows Approved
+            // Status badge — uses displayStatus so is_verified:true always shows Approved
             Box(modifier = Modifier.clip(RoundedCornerShape(20.dp))
                 .background(sColor.copy(alpha = 0.12f))
                 .padding(horizontal = 10.dp, vertical = 4.dp)) {
@@ -5548,7 +6039,7 @@ private fun StudentCard(student: Student, onClick: () -> Unit) {
     }
 }
 
-// â”€â”€ Student Detail Page (full-screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Student Detail Page (full-screen) ─────────────────────────────────────────
 
 @Composable
 private fun StudentDetailDialog(
@@ -5568,7 +6059,7 @@ private fun StudentDetailDialog(
     var resultDialog     by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var showDocViewer    by remember { mutableStateOf(false) }
 
-    // â”€â”€ Full-screen document viewer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Full-screen document viewer ───────────────────────────────────────────
     if (showDocViewer && student.verificationDocument != null) {
         var scale       by remember { mutableStateOf(1f) }
         var offsetX     by remember { mutableStateOf(0f) }
@@ -5580,7 +6071,7 @@ private fun StudentDetailDialog(
         }
         Dialog(
             onDismissRequest = { showDocViewer = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnBackPress = true)
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnBackPress = true)
         ) {
             Box(
                 modifier = Modifier
@@ -5627,7 +6118,7 @@ private fun StudentDetailDialog(
         }
     }
 
-    // â”€â”€ Success / Error alert dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Success / Error alert dialog ─────────────────────────────────────────
     resultDialog?.let { (success, message) ->
         AlertDialog(
             onDismissRequest = {
@@ -5653,11 +6144,11 @@ private fun StudentDetailDialog(
         )
     }
 
-    // â”€â”€ Full-screen page (Dialog that fills the whole screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Full-screen page (Dialog that fills the whole screen) ─────────────────
     Dialog(
         onDismissRequest = { if (!actionLoading) onDismiss() },
         properties = DialogProperties(
-            usePlatformDefaultWidth = false,
+            usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
             dismissOnBackPress = true,
             dismissOnClickOutside = false
         )
@@ -5669,13 +6160,13 @@ private fun StudentDetailDialog(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
 
-                // â”€â”€ Top App Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Top App Bar ───────────────────────────────────────────────
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
                 ) {
-                    Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                    Spacer(modifier = Modifier.safeAreaTopHeight())
                     Row(
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -5707,13 +6198,14 @@ private fun StudentDetailDialog(
                     }
                 }
 
-                // â”€â”€ Scrollable Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ── Scrollable Content ────────────────────────────────────────
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .safeAreaBottom()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // â”€â”€ Profile header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Profile header ────────────────────────────────────────
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -5756,7 +6248,7 @@ private fun StudentDetailDialog(
                         }
                     }
 
-                    // â”€â”€ Info section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Info section ──────────────────────────────────────────
                     Column(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -5768,7 +6260,7 @@ private fun StudentDetailDialog(
                         InfoRow(Icons.Filled.Person,         "Full Name",       student.fullName)
                         InfoRow(Icons.Filled.Email,          "Email",           student.email)
                         InfoRow(Icons.Filled.VerifiedUser,   "Verified",
-                            if (student.isVerified) "Yes âœ“" else "No",
+                            if (student.isVerified) "Yes ✓" else "No",
                             valueColor = if (student.isVerified) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurface)
                         student.verificationType?.let {
                             InfoRow(Icons.Filled.CreditCard, "ID Type",
@@ -5788,7 +6280,7 @@ private fun StudentDetailDialog(
                         }
                     }
 
-                    // â”€â”€ Verification document â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Verification document ─────────────────────────────────
                     student.verificationDocument?.let { docUrl ->
                         Column(
                             modifier = Modifier
@@ -5853,7 +6345,7 @@ private fun StudentDetailDialog(
                         color = MaterialTheme.colorScheme.outlineVariant
                     )
 
-                    // â”€â”€ Decline reason input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Decline reason input ──────────────────────────────────
                     if (showDeclineInput) {
                         OutlinedTextField(
                             value = declineReason,
@@ -5867,7 +6359,7 @@ private fun StudentDetailDialog(
                         )
                     }
 
-                    // â”€â”€ Block reason input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Block reason input ────────────────────────────────────
                     if (showBlockInput) {
                         OutlinedTextField(
                             value = blockReason,
@@ -5881,7 +6373,7 @@ private fun StudentDetailDialog(
                         )
                     }
 
-                    // â”€â”€ Action buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    // ── Action buttons ────────────────────────────────────────
                     Column(
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -5891,7 +6383,7 @@ private fun StudentDetailDialog(
                                 CircularProgressIndicator(color = DarkGreen, modifier = Modifier.size(32.dp))
                             }
                         } else {
-                            // Approve â€” shown when not already approved
+                            // Approve — shown when not already approved
                             if (student.displayStatus != "approved") {
                                 Button(
                                     onClick = {
@@ -5920,7 +6412,7 @@ private fun StudentDetailDialog(
                                 }
                             }
 
-                            // Decline â€” shown when not already declined
+                            // Decline — shown when not already declined
                             if (student.displayStatus != "declined") {
                                 if (!showDeclineInput) {
                                     OutlinedButton(
@@ -5966,7 +6458,7 @@ private fun StudentDetailDialog(
                                 }
                             }
 
-                            // Block â€” shown when not already blocked
+                            // Block — shown when not already blocked
                             if (student.displayStatus != "blocked") {
                                 if (!showBlockInput) {
                                     OutlinedButton(
@@ -6043,7 +6535,7 @@ private fun InfoRow(
     }
 }
 
-// â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Settings ───────────────────────────────────────────────────────────────────
 
 @Composable
 fun AdminSettingsContent(
@@ -6130,7 +6622,7 @@ private fun SettingsInfoRow(icon: ImageVector, label: String, value: String) {
     }
 }
 
-// â”€â”€ Profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Profile ────────────────────────────────────────────────────────────────────
 
 @Composable
 fun AdminProfileContent(
@@ -6143,7 +6635,18 @@ fun AdminProfileContent(
     profilePic: String,
     onProfilePicUpdated: (String) -> Unit,
     favoritesCount: Int = 0,
-    onFavoritesClick: () -> Unit = {}
+    onFavoritesClick: () -> Unit = {},
+    /**
+     * Opens the buyer's purchases. Absent for admin, who has the full
+     * transactions screen instead.
+     */
+    onMyOrders: (() -> Unit)? = null,
+    /** Student-only: the listings they are selling, turnover state and all. */
+    onMySales: (() -> Unit)? = null,
+    /** Admin-only: the full transactions screen. */
+    onManageOrders: (() -> Unit)? = null,
+    /** Admin-only: student management, which used to sit on the bottom bar. */
+    onManageStudents: (() -> Unit)? = null
 ) {
     val context     = LocalContext.current
     val prefs       = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
@@ -6161,7 +6664,7 @@ fun AdminProfileContent(
         }
     }
 
-    // Image picker â€” uploads selected image to the profile picture API
+    // Image picker — uploads selected image to the profile picture API
     val imagePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -6196,7 +6699,7 @@ fun AdminProfileContent(
                             prefs.edit().putString("user_profile_picture", newUrl).apply()
                             onProfilePicUpdated(newUrl)
                         }
-                        // newUrl == "" means upload succeeded but server didn't return a new URL â€” treat as success
+                        // newUrl == "" means upload succeeded but server didn't return a new URL — treat as success
                     } else {
                         uploadError = "Upload failed. Please try again."
                     }
@@ -6209,30 +6712,41 @@ fun AdminProfileContent(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // The page header stays put; everything below it scrolls as one piece, so
+    // the avatar block no longer sits frozen above a moving list.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        AdminPageHeader(title = "Profile", onMenuClick = onMenuClick, favoritesCount = favoritesCount, onFavoritesClick = onFavoritesClick)
 
-        // â”€â”€ Green header (no overlay buttons â€” fully centred) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
+
+        // ── Identity block (scrolls with the rest) ────────────────────────────
         Column(
             modifier = Modifier.fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
-                .padding(bottom = 28.dp),
+                .padding(top = 20.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            AdminPageHeader(title = "Profile", onMenuClick = onMenuClick, favoritesCount = favoritesCount, onFavoritesClick = onFavoritesClick)
             Spacer(modifier = Modifier.height(8.dp))
 
             // Avatar with camera-icon overlay
             Box(contentAlignment = Alignment.BottomEnd) {
                 Box(
                     modifier = Modifier.size(96.dp).clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .border(3.dp, Color.White.copy(alpha = 0.5f), CircleShape),
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .border(3.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isUploading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(48.dp),
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             strokeWidth = 3.dp
                         )
                     } else if (profilePic.isNotBlank()) {
@@ -6244,12 +6758,14 @@ fun AdminProfileContent(
                             loading = { ShimmerEffect(Modifier.fillMaxSize()) },
                             error = {
                                 Text(initial, fontSize = 36.sp,
-                                    fontWeight = FontWeight.Bold, color = Color.White)
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer)
                             }
                         )
                     } else {
                         Text(initial, fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold, color = Color.White)
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
                 // Camera badge
@@ -6258,7 +6774,7 @@ fun AdminProfileContent(
                         .size(30.dp)
                         .clip(CircleShape)
                         .background(if (isUploading) DarkGreen.copy(alpha = 0.5f) else DarkGreen)
-                        .border(2.dp, Color.White, CircleShape)
+                        .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
                         .clickable(enabled = !isUploading) { imagePicker.launch("image/*") },
                     contentAlignment = Alignment.Center
                 ) {
@@ -6269,9 +6785,9 @@ fun AdminProfileContent(
 
             Spacer(modifier = Modifier.height(12.dp))
             Text(fullName, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                color = Color.White, textAlign = TextAlign.Center)
+                color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
             Text(role.replaceFirstChar { it.uppercaseChar() },
-                fontSize = 14.sp, color = Color.White.copy(alpha = 0.75f),
+                fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center)
             if (uploadError != null) {
                 Spacer(modifier = Modifier.height(6.dp))
@@ -6285,35 +6801,198 @@ fun AdminProfileContent(
             }
         }
 
-        // â”€â”€ Info cards (scrollable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── Sections ──────────────────────────────────────────────────────────
+        // Grouped by what each thing *is*: who you are, what you have earned,
+        // and what you can do. Mixing an action into the identity list made
+        // both harder to scan.
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
 
-            Text("ACCOUNT INFORMATION", fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                color = DarkGreen, letterSpacing = 1.sp,
-                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp))
+            // ── Account ───────────────────────────────────────────────────
+            ProfileSection(title = "Account") {
+                ProfileInfoRow(Icons.Filled.Person, "Full Name", fullName.ifBlank { "—" })
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                ProfileInfoRow(Icons.Filled.Email, "Email", email.ifBlank { "—" })
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                ProfileInfoRow(
+                    Icons.Filled.AdminPanelSettings, "Role",
+                    role.replaceFirstChar { it.uppercaseChar() }
+                )
+            }
 
-            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(2.dp)) {
-                Column {
-                    ProfileInfoRow(Icons.Filled.Person, "Full Name", fullName.ifBlank { "â€”" })
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                    ProfileInfoRow(Icons.Filled.Email, "Email", email.ifBlank { "â€”" })
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                    ProfileInfoRow(Icons.Filled.AdminPanelSettings, "Role",
-                        role.replaceFirstChar { it.uppercaseChar() })
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                    ProfileInfoRow(Icons.Filled.AccountBalanceWallet, "Wallet Points",
-                        "$walletPoints pts", valueColor = DarkGreen)
+            // ── Rewards ───────────────────────────────────────────────────
+            ProfileSection(title = "Rewards") {
+                ProfileInfoRow(
+                    Icons.Filled.Stars, "Points balance",
+                    "$walletPoints pts", valueColor = DarkGreen
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                // Points mean nothing to a buyer until they are shown in pesos.
+                ProfileInfoRow(
+                    Icons.Filled.Savings, "Worth at checkout",
+                    Money.format(
+                        LoyaltyRules.discountFor(walletPoints).toPlainString()
+                    ) + " off"
+                )
+            }
+
+            // ── Store management ─────────────────────────────────────────
+            // The admin's day-to-day: every order in one screen, and the
+            // student roster that used to occupy the bottom bar.
+            if (onManageOrders != null || onManageStudents != null) {
+                ProfileSection(title = "Store") {
+                    onManageOrders?.let { openOrders ->
+                        ProfileActionRow(
+                            icon = Icons.Filled.ReceiptLong,
+                            title = "Transactions",
+                            subtitle = "Every order - pending, reserved, unpaid, completed",
+                            onClick = openOrders
+                        )
+                    }
+
+                    if (onManageOrders != null && onManageStudents != null) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp
+                        )
+                    }
+
+                    onManageStudents?.let { openStudents ->
+                        ProfileActionRow(
+                            icon = Icons.Filled.Group,
+                            title = "Students",
+                            subtitle = "Approve, decline or block student accounts",
+                            onClick = openStudents
+                        )
+                    }
                 }
             }
+
+            // ── Activity ──────────────────────────────────────────────────
+            // Only buyers get this group; admin has the full transactions
+            // screen and does not shop.
+            onMyOrders?.let { openOrders ->
+                ProfileSection(title = "Activity") {
+                    ProfileActionRow(
+                        icon = Icons.Filled.ReceiptLong,
+                        title = "My Purchases",
+                        subtitle = "Track payments and download receipts",
+                        onClick = openOrders
+                    )
+                    onMySales?.let { openSales ->
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp
+                        )
+                        ProfileActionRow(
+                            icon = Icons.Filled.Sell,
+                            title = "My Sales",
+                            subtitle = "Items you listed, offers and turnover",
+                            onClick = openSales
+                        )
+                    }
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp
+                    )
+                    ProfileActionRow(
+                        icon = Icons.Filled.Favorite,
+                        title = "Favourites",
+                        subtitle = if (favoritesCount > 0) {
+                            "$favoritesCount saved item${if (favoritesCount == 1) "" else "s"}"
+                        } else {
+                            "Items you saved for later"
+                        },
+                        onClick = onFavoritesClick
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
         }
+        }
+    }
+}
+
+/** A titled group of related rows. */
+@Composable
+private fun ProfileSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            title.uppercase(),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = DarkGreen,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(2.dp)
+        ) {
+            Column(content = content)
+        }
+    }
+}
+
+/** A row that goes somewhere, distinguished from an info row by the chevron. */
+@Composable
+private fun ProfileActionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(DarkGreen.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = DarkGreen, modifier = Modifier.size(18.dp))
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                subtitle,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Icon(
+            Icons.Filled.ChevronRight,
+            null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
@@ -6339,7 +7018,7 @@ private fun ProfileInfoRow(
     }
 }
 
-// â”€â”€ Shared Page Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Shared Page Header ─────────────────────────────────────────────────────────
 
 @Composable
 fun AdminPageHeader(
@@ -6466,7 +7145,7 @@ fun AdminPageHeader(
     }
 }
 
-// â”€â”€ Chat item network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Chat item network ──────────────────────────────────────────────────────────
 
 private fun fetchChatItem(token: String, itemId: Int): ChatItem? {
     val request = Request.Builder()
@@ -6479,27 +7158,51 @@ private fun fetchChatItem(token: String, itemId: Int): ChatItem? {
         adminHttpClient.newCall(request).execute().use { response ->
             val raw = response.body?.string() ?: return null
             val json = JSONObject(raw)
-            val obj  = json.optJSONObject("data") ?: json
-            val photosArr = obj.optJSONArray("photos")
-            val photos = if (photosArr != null) {
-                (0 until photosArr.length()).map { j -> photosArr.getString(j) }
-            } else emptyList()
+            val parsed = parseItem(json.optJSONObject("data") ?: json)
             ChatItem(
-                itemId       = obj.optInt("item_id"),
-                title        = obj.optString("title"),
-                description  = obj.optString("description"),
-                pricePoints  = obj.optInt("price_points").takeIf { it != 0 } ?: obj.optInt("points").takeIf { it != 0 } ?: obj.optInt("price_points"),
-                markupPoints = obj.optInt("markup_points"),
-                sellerId     = obj.optInt("seller_id"),
-                sellerEmail  = obj.optString("seller_email"),
-                status       = obj.optString("status"),
-                photos       = photos
+                itemId             = parsed.itemId,
+                title              = parsed.title,
+                description        = parsed.description,
+                askingPrice        = parsed.sellerAskingPrice,
+                acquisitionPrice   = parsed.acquisitionPrice,
+                publicPrice        = parsed.publicPrice,
+                rewardPoints       = parsed.rewardPoints,
+                sellerPayoutStatus = parsed.sellerPayoutStatus,
+                isTurnoverVerified = parsed.isTurnoverVerified,
+                sellerId           = parsed.sellerId,
+                sellerEmail        = parsed.sellerEmail,
+                status             = parsed.status,
+                photos             = parsed.photos
             )
         }
     } catch (_: Exception) { null }
 }
 
 fun performLogout(token: String): Boolean {
+    // Pushes follow the account, not the phone. Unregister this device from
+    // the account being left, then discard the FCM token itself - the next
+    // sign-in (possibly a different person) triggers a fresh token, which the
+    // dashboard registers to whoever is actually logged in, with no new
+    // permission prompt since that is device-level and already granted.
+    runCatching {
+        val messaging = com.google.firebase.messaging.FirebaseMessaging.getInstance()
+        val fcmToken = com.google.android.gms.tasks.Tasks.await(messaging.token)
+
+        val unregister = Request.Builder()
+            .url("https://fati-api.alertaraqc.com/api/device-tokens")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .method(
+                "DELETE",
+                JSONObject().put("token", fcmToken).toString()
+                    .toRequestBody("application/json".toMediaType()),
+            )
+            .build()
+
+        adminHttpClient.newCall(unregister).execute().close()
+        com.google.android.gms.tasks.Tasks.await(messaging.deleteToken())
+    }
+
     return try {
         val request = Request.Builder()
             .url("https://fati-api.alertaraqc.com/api/logout")
@@ -6515,7 +7218,7 @@ fun performLogout(token: String): Boolean {
     } catch (_: Exception) { false }
 }
 
-// Get all information of items base on status (admin endpoint â€” returns all users' items)
+// Get all information of items base on status (admin endpoint — returns all users' items)
 private fun fetchItems(token: String, status: String): List<Item> {
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/admin/items?status=$status")
@@ -6533,27 +7236,7 @@ private fun fetchItems(token: String, status: String): List<Item> {
                 json.has("data") -> json.getJSONArray("data")
                 else             -> org.json.JSONArray(raw)
             }
-            (0 until arr.length()).map { i ->
-                val rawObj    = arr.getJSONObject(i)
-                val obj       = rawObj.optJSONObject("item") ?: rawObj
-                val photosArr = obj.optJSONArray("photos") ?: rawObj.optJSONArray("photos")
-                val photos    = if (photosArr != null) {
-                    (0 until photosArr.length()).map { j -> photosArr.getString(j) }
-                } else emptyList()
-                Item(
-                    itemId       = obj.optInt("item_id"),
-                    sellerId     = obj.optInt("seller_id"),
-                    sellerEmail  = obj.optString("seller_email").takeIf { it.isNotBlank() } ?: rawObj.optString("seller_email"),
-                    title        = obj.optString("title"),
-                    description  = obj.optString("description"),
-                    categoryId   = obj.optInt("category_id"),
-                    pricePoints  = obj.optInt("price_points").takeIf { it != 0 } ?: obj.optInt("points").takeIf { it != 0 } ?: obj.optInt("price_points"),
-                    markupPoints = obj.optInt("markup_points"),
-                    status       = obj.optString("status").takeIf { it.isNotBlank() } ?: rawObj.optString("status"),
-                    photos       = photos,
-                    createdAt    = obj.optString("created_at")
-                )
-            }
+            (0 until arr.length()).map { i -> parseItem(arr.getJSONObject(i)) }
         } catch (e: Exception) { throw Exception("Parse error: ${e.message}") }
     }
 }
@@ -6590,8 +7273,14 @@ private fun updateItemStatus(token: String, itemId: Int, status: String): Pair<B
     }
 }
 
-// Update item for admin with status and/or markup_points
-private fun updateAdminItem(token: String, itemId: Int, status: String? = null, markupPoints: Int? = null): Pair<Boolean, String> {
+/**
+ * Update an item's status and/or its public selling price.
+ *
+ * Publishing is gated server-side on verified turnover and a recorded
+ * acquisition price, so a refusal here surfaces the server's own explanation
+ * rather than being second-guessed locally.
+ */
+private fun updateAdminItem(token: String, itemId: Int, status: String? = null, publicPrice: String? = null): Pair<Boolean, String> {
     val body = MultipartBody.Builder()
         .setType(MultipartBody.FORM)
         .addFormDataPart("_method", "PUT")
@@ -6599,8 +7288,8 @@ private fun updateAdminItem(token: String, itemId: Int, status: String? = null, 
     if (status != null) {
         body.addFormDataPart("status", status)
     }
-    if (markupPoints != null) {
-        body.addFormDataPart("markup_points", markupPoints.toString())
+    if (publicPrice != null) {
+        body.addFormDataPart("public_price", publicPrice)
     }
 
     val request = Request.Builder()
@@ -6786,7 +7475,7 @@ private fun PointsTransactionContent(
                             Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                                 Text(email, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(
-                                    "${if (pointsChange > 0) "+" else ""}${pointsChange} pts â€¢ $reason",
+                                    "${if (pointsChange > 0) "+" else ""}${pointsChange} pts • $reason",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (pointsChange > 0) DarkGreen else MaterialTheme.colorScheme.error
                                 )
@@ -7462,7 +8151,7 @@ private fun ProfitReportContent(
     onShowBottomBarChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
-    var totalMarkupProfit by remember { mutableStateOf(0) }
+    var totalMarkupProfit by remember { mutableStateOf("0.00") }
     var profitByMonth by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
     var topProfitableItems by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -7509,7 +8198,7 @@ private fun ProfitReportContent(
                         val json = JSONObject(responseData)
                         val dataObj = json.optJSONObject("data") ?: JSONObject()
 
-                        totalMarkupProfit = dataObj.optInt("total_markup_profit", 0)
+                        totalMarkupProfit = dataObj.optString("total_profit", "0.00")
 
                         val profitByMonthArray = dataObj.optJSONArray("profit_by_month") ?: JSONArray()
                         val monthsData = mutableListOf<Map<String, Any>>()
@@ -7528,7 +8217,7 @@ private fun ProfitReportContent(
                             val item = topItemsArray.getJSONObject(i)
                             itemsData.add(mapOf(
                                 "title" to item.optString("title", ""),
-                                "markup_points" to item.optInt("markup_points", 0),
+                                "markup" to item.optString("markup", "0.00"),
                                 "seller_email" to (item.optJSONObject("seller")?.optString("email", "") ?: "")
                             ))
                         }
@@ -7587,7 +8276,7 @@ private fun ProfitReportContent(
                         }
                     }
                 }
-                totalMarkupProfit == 0 && profitByMonth.isEmpty() && topProfitableItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Money.parse(totalMarkupProfit)?.signum() == 0 && profitByMonth.isEmpty() && topProfitableItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -7614,7 +8303,7 @@ private fun ProfitReportContent(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text("Total Markup Profit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text("$totalMarkupProfit pts", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DarkGreen)
+                                Text(Money.format(totalMarkupProfit), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DarkGreen)
                             }
                         }
                     }
@@ -7651,7 +8340,7 @@ private fun ProfitReportContent(
                         items(topProfitableItems.size) { index ->
                             val item = topProfitableItems[index]
                             val title = (item["title"] as? String) ?: "Unknown Item"
-                            val markupPoints = item["markup_points"] as? Int ?: 0
+                            val markup = (item["markup"] as? String) ?: "0.00"
                             val sellerEmail = (item["seller_email"] as? String) ?: "Unknown Seller"
 
                             Card(
@@ -7663,7 +8352,7 @@ private fun ProfitReportContent(
                                     Text(title, fontWeight = FontWeight.Bold)
                                     Text("Seller: $sellerEmail", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(Modifier.height(4.dp))
-                                    Text("$markupPoints pts", style = MaterialTheme.typography.bodySmall, color = DarkGreen, fontWeight = FontWeight.Bold)
+                                    Text(Money.format(markup), style = MaterialTheme.typography.bodySmall, color = DarkGreen, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
