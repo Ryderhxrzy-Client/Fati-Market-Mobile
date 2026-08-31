@@ -57,6 +57,12 @@ fun AdminTransactionsContent(
     var refreshKey by remember { mutableStateOf(0) }
 
     var actionTarget by remember { mutableStateOf<Pair<MarketTransaction, String>?>(null) }
+
+    // Completing opens the counter screen; the order it settled is stale in
+    // this list by the time the admin comes back, so returning refreshes.
+    LaunchedEffect(AdminCounter.openCode) {
+        if (AdminCounter.openCode == null) refreshKey++
+    }
     var proofPreview by remember { mutableStateOf<String?>(null) }
 
     val filters = listOf(
@@ -83,7 +89,10 @@ fun AdminTransactionsContent(
 
     // ── Confirmation, with a reason where the rules require one ──────────
     actionTarget?.let { (transaction, action) ->
-        ActionConfirmDialog(
+        // The same confirmation the conversation and the scan screen use,
+        // so completing an order asks for the handover photo wherever it is
+        // done - there is one decision here, not three.
+        ChatOrderActionDialog(
             transaction = transaction,
             action = action,
             token = token,
@@ -422,132 +431,4 @@ private fun AdminTransactionCard(
     }
 }
 
-/**
- * Confirms a lifecycle action.
- *
- * Rejecting a proof or cancelling an order requires a written reason, because
- * both hand points back to the buyer and the record should say why.
- */
-@Composable
-private fun ActionConfirmDialog(
-    transaction: MarketTransaction,
-    action: String,
-    token: String,
-    onDismiss: () -> Unit,
-    onDone: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    var reason by remember { mutableStateOf("") }
-    var working by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
 
-    val needsReason = action == "reject_payment" || action == "cancel"
-
-    val (title, body, confirmLabel) = when (action) {
-        "verify_payment" -> Triple(
-            "Verify payment",
-            "Confirm you have received ${Money.format(transaction.amountDue)} from " +
-                "${transaction.buyerEmail}. The item stays held for them.",
-            "Verify",
-        )
-        "reject_payment" -> Triple(
-            "Reject payment proof",
-            "The order will be closed and the ${transaction.pointsUsed} point(s) the buyer " +
-                "spent will be returned to their wallet.",
-            "Reject",
-        )
-        "mark_ready_for_pickup" -> Triple(
-            "Mark ready for pickup",
-            "Let the buyer know the item is staged and waiting for them.",
-            "Mark ready",
-        )
-        "complete" -> Triple(
-            "Complete transaction",
-            "Confirm the buyer has paid and physically received the item. This credits " +
-                "${transaction.rewardPointsToCredit} reward point(s) to them - once only.",
-            "Complete",
-        )
-        else -> Triple(
-            "Cancel transaction",
-            "The item goes back on the catalog and any points the buyer spent are returned.",
-            "Cancel order",
-        )
-    }
-
-    AlertDialog(
-        onDismissRequest = { if (!working) onDismiss() },
-        title = { Text(title, style = MaterialTheme.typography.titleLarge) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                Text(body, style = MaterialTheme.typography.bodyMedium)
-
-                if (needsReason) {
-                    OutlinedTextField(
-                        value = reason,
-                        onValueChange = { reason = it; error = null },
-                        label = { Text("Reason") },
-                        placeholder = { Text("Shown to the buyer") },
-                        minLines = 2,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.small,
-                    )
-                }
-
-                error?.let {
-                    InfoBanner(text = it, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (needsReason && reason.isBlank()) {
-                        error = "Please give a reason."
-                        return@Button
-                    }
-
-                    scope.launch {
-                        working = true
-                        error = null
-
-                        val result = withContext(Dispatchers.IO) {
-                            when (action) {
-                                "verify_payment" ->
-                                    MarketplaceApi.verifyPayment(token, transaction.transactionId)
-                                "reject_payment" ->
-                                    MarketplaceApi.rejectPayment(token, transaction.transactionId, reason)
-                                "mark_ready_for_pickup" ->
-                                    MarketplaceApi.markReadyForPickup(token, transaction.transactionId)
-                                "complete" ->
-                                    MarketplaceApi.completeTransaction(token, transaction.transactionId)
-                                else ->
-                                    MarketplaceApi.cancelTransaction(token, transaction.transactionId, reason)
-                            }
-                        }
-                        working = false
-
-                        when (result) {
-                            is MarketplaceApi.Result.Ok -> onDone()
-                            is MarketplaceApi.Result.Failure -> error = result.message
-                        }
-                    }
-                },
-                enabled = !working,
-                shape = MaterialTheme.shapes.small,
-            ) {
-                if (working) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(confirmLabel)
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !working) { Text("Back") }
-        },
-    )
-}
