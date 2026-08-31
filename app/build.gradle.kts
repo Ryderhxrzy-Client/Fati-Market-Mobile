@@ -56,6 +56,11 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Walk-in pickup QR: core renders the buyer's code as a bitmap, and the
+    // embedded scanner gives Admin the camera screen that reads it.
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.pusher:pusher-java-client:2.4.4")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
