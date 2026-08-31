@@ -6702,6 +6702,30 @@ fun AdminProfileContent(
     var isUploading by remember { mutableStateOf(false) }
     var uploadError by remember { mutableStateOf<String?>(null) }
 
+    // The balance passed in is whatever login stored - a number frozen at
+    // sign-in that never moved again, so a buyer who earned points saw zero
+    // here while the header, which polls, showed the real figure. This reads
+    // the wallet the same way the header does, and writes it back so the
+    // stored value stops going stale.
+    var livePoints by remember { mutableStateOf(walletPoints) }
+
+    LaunchedEffect(Unit) {
+        val token = prefs.getString("auth_token", "") ?: ""
+
+        if (token.isBlank()) return@LaunchedEffect
+
+        while (true) {
+            val result = withContext(Dispatchers.IO) { MarketplaceApi.fetchWalletPoints(token) }
+
+            if (result is MarketplaceApi.Result.Ok) {
+                livePoints = result.value
+                prefs.edit().putInt("user_wallet_points", result.value).apply()
+            }
+
+            delay(10_000)
+        }
+    }
+
     // Auto-clear error after 3 s
     LaunchedEffect(uploadError) {
         if (uploadError != null) {
@@ -6875,14 +6899,14 @@ fun AdminProfileContent(
             ProfileSection(title = "Rewards") {
                 ProfileInfoRow(
                     Icons.Filled.Stars, "Points balance",
-                    "$walletPoints pts", valueColor = DarkGreen
+                    "$livePoints pts", valueColor = DarkGreen
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
                 // Points mean nothing to a buyer until they are shown in pesos.
                 ProfileInfoRow(
                     Icons.Filled.Savings, "Worth at checkout",
                     Money.format(
-                        LoyaltyRules.discountFor(walletPoints).toPlainString()
+                        LoyaltyRules.discountFor(livePoints).toPlainString()
                     ) + " off"
                 )
             }
