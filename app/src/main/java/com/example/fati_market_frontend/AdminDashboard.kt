@@ -408,9 +408,11 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
 
     // The walk-in scanner. The camera screen comes from zxing; a decoded code
     // opens the counter screen, which owns everything after that.
-    var scannedCode by remember { mutableStateOf<String?>(null) }
+    // Published by the scanner and by the Complete / Mark acquired buttons
+    // alike, so both land on the same counter screen.
+    val scannedCode = AdminCounter.openCode
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        result.contents?.let { scannedCode = it }
+        result.contents?.let { AdminCounter.open(it) }
     }
 
     fun launchScanner() {
@@ -467,7 +469,7 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
     }
 
     // Handle back button - redirect to dashboard when drawer or chat is open
-    BackHandler(enabled = scannedCode != null) { scannedCode = null }
+    BackHandler(enabled = scannedCode != null) { AdminCounter.close() }
 
     BackHandler(enabled = drawerPage != null || (selectedTab == AdminTab.CHAT && chatConversation != null)) {
         if (drawerPage != null) {
@@ -541,12 +543,12 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                     if (scannedCode!!.startsWith("FMITEM1.")) {
                         AdminAcquireScreen(
                             scannedCode = scannedCode!!,
-                            onClose = { scannedCode = null },
+                            onClose = { AdminCounter.close() },
                         )
                     } else {
                         AdminScanScreen(
                             scannedCode = scannedCode!!,
-                            onClose = { scannedCode = null },
+                            onClose = { AdminCounter.close() },
                         )
                     }
                 } else if (drawerPage != null) {
@@ -2699,6 +2701,17 @@ internal data class ChatMessage(
 
     /** The listing behind an "item_listed" offer message. */
     val listedItem: Item? = null,
+
+    /**
+     * What was true when this line was written.
+     *
+     * A card used to render the order's CURRENT state, so every card in a
+     * thread said the same thing - "checking payment" on the order card and
+     * on the receipt card alike. These keep each line in its own moment, the
+     * way a conversation should read.
+     */
+    val paymentStatusAt: String? = null,
+    val orderStatusAt: String? = null,
 ) {
     val isOrderCard: Boolean get() = kind != "text" && order != null
 
@@ -2832,7 +2845,11 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
                 sentAt                 = obj.optString("sent_at").ifBlank { obj.optString("created_at") },
                 kind                   = obj.optString("kind").ifBlank { "text" },
                 order                  = obj.optJSONObject("order")?.let { parseTransaction(it) },
-                listedItem             = obj.optJSONObject("item_card")?.let { parseItem(it) }
+                listedItem             = obj.optJSONObject("item_card")?.let { parseItem(it) },
+                paymentStatusAt        = obj.optString("payment_status_at")
+                                            .takeIf { it.isNotBlank() && it != "null" },
+                orderStatusAt          = obj.optString("order_status_at")
+                                            .takeIf { it.isNotBlank() && it != "null" }
             ))
         }
         return list
@@ -4013,14 +4030,15 @@ private fun ChatDetailContent(
                 // Conversations are per item and per buyer, so when this thread
                 // has a live order behind it the admin can settle it here
                 // instead of switching to the transactions screen.
-                if (isAdmin) {
-                    ChatOrderPanel(
-                        itemId = conversation.itemId,
-                        buyerId = conversation.otherUserId,
-                        token = token,
-                        onChanged = { retryTrigger++ }
-                    )
-                }
+                // Both sides get the order strip now: the admin settles it,
+                // the buyer pays from it and, once paid, carries the pickup
+                // code without going to My Orders.
+                ChatOrderPanel(
+                    itemId = conversation.itemId,
+                    buyerId = if (isAdmin) conversation.otherUserId else currentUserId,
+                    token = token,
+                    onChanged = { retryTrigger++ }
+                )
 
                 // ── Offer banner ─────────────────────────────────────────────
                 // The listing's own decisions - accept, decline, schedule,
@@ -4080,8 +4098,29 @@ private fun ChatDetailContent(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                // Selling price once published, asking price before.
-                                val priceToShow = item.publicPrice ?: item.askingPrice
+                                // Which price this thread is actually about.
+                                //
+                                // A conversation is per item and per person.
+                                // In the seller's own thread the number that
+                                // matters is what the store pays them - the
+                                // acquired amount - not the buyer price, and
+                                // never the asking price once a figure has
+                                // been agreed. A buyer's thread shows the
+                                // catalog price, and never the store's cost.
+                                val studentSideId = if (isAdmin) conversation.otherUserId else currentUserId
+                                val isSellerThread = studentSideId == item.sellerId
+
+                                // The label matters as much as the figure: a
+                                // bare peso amount in a seller's thread was
+                                // read as their own asking price.
+                                val (priceToShow, priceLabel) = when {
+                                    isSellerThread && item.acquisitionPrice != null ->
+                                        item.acquisitionPrice to "You get"
+                                    isSellerThread ->
+                                        item.askingPrice to "You asked"
+                                    else ->
+                                        (item.publicPrice ?: item.askingPrice) to null
+                                }
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -4089,6 +4128,13 @@ private fun ChatDetailContent(
                                     Icon(Icons.Filled.MonetizationOn, null,
                                         tint = Color.White.copy(alpha = 0.85f),
                                         modifier = Modifier.size(11.dp))
+                                    priceLabel?.let {
+                                        Text(
+                                            it,
+                                            fontSize = 11.sp,
+                                            color = Color.White.copy(alpha = 0.6f)
+                                        )
+                                    }
                                     Text(
                                         Money.format(priceToShow),
                                         fontSize = 11.sp,
