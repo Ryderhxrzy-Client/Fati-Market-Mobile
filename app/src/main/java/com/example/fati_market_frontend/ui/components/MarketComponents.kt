@@ -513,10 +513,13 @@ fun PrimaryButton(
     enabled: Boolean = true,
     loading: Boolean = false,
     containerColor: Color = MaterialTheme.colorScheme.primary,
+    /** Shorter, for pinned strips where a full-height button crowds out the content. */
+    compact: Boolean = false,
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(52.dp),
+        modifier = modifier.height(if (compact) 38.dp else 52.dp),
+        contentPadding = if (compact) PaddingValues(horizontal = Spacing.md) else ButtonDefaults.ContentPadding,
         enabled = enabled && !loading,
         shape = MaterialTheme.shapes.small,
         colors = ButtonDefaults.buttonColors(
@@ -536,7 +539,14 @@ fun PrimaryButton(
                 Icon(icon, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(Spacing.sm))
             }
-            Text(text, style = MaterialTheme.typography.labelLarge)
+            Text(
+                text,
+                style = if (compact) {
+                    MaterialTheme.typography.labelMedium
+                } else {
+                    MaterialTheme.typography.labelLarge
+                },
+            )
         }
     }
 }
@@ -551,10 +561,13 @@ fun SecondaryButton(
     enabled: Boolean = true,
     loading: Boolean = false,
     contentColor: Color = MaterialTheme.colorScheme.primary,
+    /** Shorter, matching [PrimaryButton]'s compact form. */
+    compact: Boolean = false,
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(52.dp),
+        modifier = modifier.height(if (compact) 38.dp else 52.dp),
+        contentPadding = if (compact) PaddingValues(horizontal = Spacing.md) else ButtonDefaults.ContentPadding,
         enabled = enabled && !loading,
         shape = MaterialTheme.shapes.small,
         border = BorderStroke(1.dp, contentColor.copy(alpha = 0.45f)),
@@ -571,7 +584,14 @@ fun SecondaryButton(
                 Icon(icon, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(Spacing.sm))
             }
-            Text(text, style = MaterialTheme.typography.labelLarge)
+            Text(
+                text,
+                style = if (compact) {
+                    MaterialTheme.typography.labelMedium
+                } else {
+                    MaterialTheme.typography.labelLarge
+                },
+            )
         }
     }
 }

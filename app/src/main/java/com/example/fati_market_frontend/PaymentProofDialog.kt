@@ -70,11 +70,11 @@ internal fun PaymentProofDialog(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .safeAreaTop(),
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // The status bar sits above the bar itself, the way
+                // every other screen here does it.
+                Spacer(Modifier.safeAreaTopHeight())
+
                 TopAppBar(
                     title = {
                         Text(

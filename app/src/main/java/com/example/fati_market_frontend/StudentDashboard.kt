@@ -1968,7 +1968,15 @@ internal fun ItemDetailDialog(
                             // Buying itself lives on the pinned bar below. The
                             // store owns a published item, so even its
                             // original seller may buy it back.
-                            if (detailItem.isReserved) {
+                            if (detailItem.isReserved && detailItem.reservedByMe) {
+                                InfoBanner(
+                                    title = "You reserved this item",
+                                    text  = "It is being held for you. Finish paying in " +
+                                            "My Orders, then show your pickup code at the store.",
+                                    tone = StatusTone.Success,
+                                    icon = Icons.Filled.Lock
+                                )
+                            } else if (detailItem.isReserved) {
                                 InfoBanner(
                                     text = "Someone is already checking this item out. " +
                                            "It becomes available again if their reservation expires.",

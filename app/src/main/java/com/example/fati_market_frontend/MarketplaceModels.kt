@@ -63,6 +63,12 @@ internal data class Item(
     /** Counter proof: the item being received, the seller being paid. */
     val turnoverPhoto: String? = null,
     val sellerPayoutPhoto: String? = null,
+
+    /**
+     * True when the viewer is the buyer holding this item's reservation - a
+     * reserved item reads as "someone else is checking out" to everyone else.
+     */
+    val reservedByMe: Boolean = false,
 ) {
     /** Admin has agreed a price - the moment the offer counts as accepted. */
     val offerAccepted: Boolean get() = acquisitionPrice != null
@@ -152,6 +158,7 @@ internal fun parseItem(raw: JSONObject): Item {
         qrCode = str("qr_code"),
         turnoverPhoto = str("turnover_photo"),
         sellerPayoutPhoto = str("seller_payout_photo"),
+        reservedByMe = obj.optBoolean("reserved_by_me", false),
     )
 }
 

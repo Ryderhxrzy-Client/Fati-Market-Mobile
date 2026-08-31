@@ -125,8 +125,14 @@ internal fun PickupQrDialog(order: MarketTransaction, onDismiss: () -> Unit) {
 
 /** The row-level entry point: a button that opens [PickupQrDialog]. */
 @Composable
-internal fun PickupQrButton(order: MarketTransaction, modifier: Modifier = Modifier) {
-    if (order.qrCode == null || order.isTerminal) return
+internal fun PickupQrButton(
+    order: MarketTransaction,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
+    // The code collects the item, and nothing is collected before it is paid
+    // for - offering it earlier only sends the buyer to the counter twice.
+    if (order.qrCode == null || order.isTerminal || order.paymentStatus != "verified") return
 
     var showing by remember { mutableStateOf(false) }
 
@@ -139,6 +145,7 @@ internal fun PickupQrButton(order: MarketTransaction, modifier: Modifier = Modif
         onClick = { showing = true },
         modifier = modifier,
         icon = Icons.Filled.QrCode2,
+        compact = compact,
     )
 }
 
@@ -209,7 +216,11 @@ internal fun ItemQrDialog(item: Item, onDismiss: () -> Unit) {
 
 /** The button that opens [ItemQrDialog], shown only while the code exists. */
 @Composable
-internal fun ItemQrButton(item: Item, modifier: Modifier = Modifier) {
+internal fun ItemQrButton(
+    item: Item,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+) {
     if (item.qrCode == null) return
 
     var showing by remember { mutableStateOf(false) }
@@ -223,5 +234,6 @@ internal fun ItemQrButton(item: Item, modifier: Modifier = Modifier) {
         onClick = { showing = true },
         modifier = modifier,
         icon = Icons.Filled.QrCode2,
+        compact = compact,
     )
 }

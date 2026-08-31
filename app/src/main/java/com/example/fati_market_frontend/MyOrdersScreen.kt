@@ -107,12 +107,15 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
             color = MaterialTheme.colorScheme.background,
         ) {
             Scaffold(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .safeAreaTop(),
+                modifier = Modifier.fillMaxSize(),
                 containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = WindowInsets(0),
                 topBar = {
+                    Column {
+                    // The status bar sits above the bar itself, the way
+                    // every other screen here does it.
+                    Spacer(Modifier.safeAreaTopHeight())
+
                     TopAppBar(
                         title = { Text("My Orders", style = MaterialTheme.typography.titleLarge) },
                         navigationIcon = {
@@ -127,6 +130,7 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
                         // without this the bar adds the status bar twice.
                         windowInsets = WindowInsets(0),
                     )
+                    }
                 },
             ) { padding ->
                 val visible = remember(orders, selectedTab) {
@@ -461,11 +465,11 @@ internal fun ReceiptDialog(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .safeAreaTop(),
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // The status bar sits above the bar itself, the way
+                // every other screen here does it.
+                Spacer(Modifier.safeAreaTopHeight())
+
                 TopAppBar(
                     title = { Text("Receipt", style = MaterialTheme.typography.titleLarge) },
                     navigationIcon = {
@@ -502,7 +506,7 @@ internal fun ReceiptDialog(
 
                         Column(
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
                                 .padding(Spacing.screen),
                             verticalArrangement = Arrangement.spacedBy(Spacing.md),
@@ -635,11 +639,11 @@ internal fun ReceiptDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
-                        }
 
-                        // -- Download ------------------------------------------
-                        // At the end of the page, not welded to the window.
-                        PrimaryButton(
+                            // -- Download --------------------------------------
+                            // Inside the page, so it scrolls with the receipt
+                            // instead of hanging over the gesture bar.
+                            PrimaryButton(
                             text = "Download receipt (PDF)",
                             icon = Icons.Filled.Download,
                             loading = saving,
@@ -676,10 +680,10 @@ internal fun ReceiptDialog(
                                     }
                                 }
                             },
-                        )
+                            )
 
-                        SafeAreaBottomSpacer()
-
+                            SafeAreaBottomSpacer()
+                        }
                     }
                 }
             }
