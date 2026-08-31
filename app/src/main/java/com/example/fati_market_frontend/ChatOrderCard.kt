@@ -181,14 +181,28 @@ internal fun ChatOrderCard(msg: ChatMessage, isMe: Boolean) {
                 SummaryRow("Amount due", Money.format(order.amountDue), emphasized = true)
                 SummaryRow("Payment", paymentMethodLabel(order.paymentMethod))
 
-                // ── Paid, or not ─────────────────────────────────────────
+                // ── Paid, or not, at the time of writing ─────────────────
+                // The thread is a history: this line keeps the state it
+                // recorded. Older messages, posted before the snapshot
+                // existed, fall back to what their kind implies.
+                val paymentThen = msg.paymentStatusAt ?: when (msg.kind) {
+                    "order_placed" -> if (order.isFullPointsCheckout) "verified" else "unpaid"
+                    "payment_submitted" -> "proof_submitted"
+                    else -> order.paymentStatus
+                }
+                val statusThen = msg.orderStatusAt ?: when (msg.kind) {
+                    "order_placed" -> "pending_payment"
+                    "payment_submitted" -> "payment_proof_submitted"
+                    else -> order.status
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    PaymentStatusPill(order.paymentStatus, order.isFullPointsCheckout)
-                    TransactionStatusPill(order.status)
+                    PaymentStatusPill(paymentThen, order.isFullPointsCheckout)
+                    TransactionStatusPill(statusThen)
                 }
 
                 // ── The GCash receipt, when one has been sent ────────────
@@ -841,8 +855,8 @@ internal fun ItemOfferPanel(
 
     Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Row(
-            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
         ) {
             when {
                 isAdmin && !item.offerAccepted -> {
@@ -850,14 +864,15 @@ internal fun ItemOfferPanel(
                         text = "Accept",
                         onClick = { offerAction = "accept" },
                         modifier = Modifier.weight(1f),
-                        icon = Icons.Filled.Check,
                         containerColor = accents.success,
+                        compact = true,
                     )
                     SecondaryButton(
                         text = "Reject",
                         onClick = { offerAction = "reject" },
                         modifier = Modifier.weight(1f),
                         contentColor = MaterialTheme.colorScheme.error,
+                        compact = true,
                     )
                 }
 
@@ -866,14 +881,14 @@ internal fun ItemOfferPanel(
                         text = if (item.meetupSchedule == null) "Set schedule" else "Change schedule",
                         onClick = { pickMeetupSchedule(context, scope, token, item.itemId) },
                         modifier = Modifier.weight(1f),
-                        icon = Icons.Filled.Event,
+                        compact = true,
                     )
                     PrimaryButton(
                         text = "Mark acquired",
                         onClick = { confirmAcquire = true },
                         modifier = Modifier.weight(1f),
-                        icon = Icons.Filled.Inventory,
                         containerColor = accents.success,
+                        compact = true,
                     )
                 }
 
