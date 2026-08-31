@@ -1,10 +1,12 @@
 package com.fati_market
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,8 +16,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -44,22 +48,48 @@ internal fun ChatOrderPanel(
     modifier: Modifier = Modifier,
     onChanged: () -> Unit = {},
 ) {
+    val context = LocalContext.current
     val accents = LocalMarketAccents.current
     val scope = rememberCoroutineScope()
+
+    val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
+    val isAdmin = remember { (prefs.getString("user_role", "") ?: "").equals("admin", true) }
 
     var order by remember(itemId, buyerId) { mutableStateOf<MarketTransaction?>(null) }
     var refreshKey by remember(itemId, buyerId) { mutableStateOf(0) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
     var showBuyer by remember { mutableStateOf(false) }
     var showProof by remember { mutableStateOf(false) }
+    var payingNow by remember { mutableStateOf(false) }
 
     LaunchedEffect(itemId, buyerId, refreshKey) {
         if (itemId <= 0 || buyerId <= 0) return@LaunchedEffect
 
+        // The admin reads the order through the admin endpoint; the buyer
+        // through their own list, since /admin is closed to them.
         val result = withContext(Dispatchers.IO) {
-            MarketplaceApi.fetchOrderForConversation(token, itemId, buyerId)
+            if (isAdmin) {
+                MarketplaceApi.fetchOrderForConversation(token, itemId, buyerId)
+            } else {
+                when (val mine = MarketplaceApi.fetchMyTransactions(token)) {
+                    is MarketplaceApi.Result.Ok -> MarketplaceApi.Result.Ok(
+                        mine.value.filter { it.itemId == itemId }
+                            .let { rows -> rows.firstOrNull { !it.isTerminal } ?: rows.firstOrNull() },
+                    )
+                    is MarketplaceApi.Result.Failure -> mine
+                }
+            }
         }
         if (result is MarketplaceApi.Result.Ok) order = result.value
+    }
+
+    // A decision made elsewhere should reach this strip without reopening
+    // the thread.
+    LaunchedEffect(itemId, buyerId) {
+        while (true) {
+            kotlinx.coroutines.delay(10_000)
+            refreshKey++
+        }
     }
 
     val current = order ?: return
@@ -175,6 +205,15 @@ internal fun ChatOrderPanel(
         }
     }
 
+    if (payingNow) {
+        PaymentProofDialog(
+            transaction = current,
+            token = token,
+            onDismiss = { payingNow = false },
+            onSubmitted = { payingNow = false; refreshKey++ },
+        )
+    }
+
     // ── Confirmation ────────────────────────────────────────────────────
     pendingAction?.let { action ->
         ChatOrderActionDialog(
@@ -200,111 +239,122 @@ internal fun ChatOrderPanel(
         },
     ) {
         Column(
-            modifier = Modifier.padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
         ) {
+            // One line: which order, what is owed, where it stands. The card
+            // in the thread carries the detail; this is the reminder.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        current.receiptNo.ifBlank { "Order #${current.transactionId}" },
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        Money.format(current.amountDue) + " · " + when (current.paymentMethod) {
-                            "gcash" -> "GCash"
-                            "points_full" -> "Points only"
-                            else -> "Cash at store"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TransactionStatusPill(current.status)
-            }
-
-            if (current.pointsUsed > 0) {
                 Text(
-                    "${current.pointsUsed} point(s) used · -" + Money.format(current.pointsDiscountAmount),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = accents.reward,
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                Text(
-                    "Buyer details",
+                    current.receiptNo.ifBlank { "Order #${current.transactionId}" } + " · " +
+                        Money.format(current.amountDue) + " · " + paymentMethodLabel(current.paymentMethod),
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.extraSmall)
-                        .clickable { showBuyer = true }
-                        .padding(vertical = Spacing.xs),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
 
-                if (current.paymentProof != null) {
+                PaymentStatusPill(current.paymentStatus, current.isFullPointsCheckout)
+            }
+
+            if (isAdmin) {
+                // Admin: the decisions the server still allows, plus the two
+                // things worth a glance - who is buying, and their receipt.
+                if (!current.isTerminal) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                        if (current.canDo("verify_payment")) {
+                            PrimaryButton(
+                                text = "Approve",
+                                onClick = { pendingAction = "verify_payment" },
+                                modifier = Modifier.weight(1f),
+                                containerColor = accents.success,
+                                compact = true,
+                            )
+                        }
+
+                        if (current.canDo("mark_ready_for_pickup")) {
+                            SecondaryButton(
+                                text = "Ready",
+                                onClick = { pendingAction = "mark_ready_for_pickup" },
+                                modifier = Modifier.weight(1f),
+                                compact = true,
+                            )
+                        }
+
+                        if (current.canDo("complete")) {
+                            PrimaryButton(
+                                text = "Complete",
+                                onClick = { pendingAction = "complete" },
+                                modifier = Modifier.weight(1f),
+                                containerColor = accents.success,
+                                compact = true,
+                            )
+                        }
+
+                        val declineAction = when {
+                            current.canDo("reject_payment") -> "reject_payment"
+                            current.canDo("cancel") -> "cancel"
+                            else -> null
+                        }
+
+                        declineAction?.let { action ->
+                            SecondaryButton(
+                                text = "Decline",
+                                onClick = { pendingAction = action },
+                                modifier = Modifier.weight(1f),
+                                contentColor = MaterialTheme.colorScheme.error,
+                                compact = true,
+                            )
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     Text(
-                        "View proof",
-                        style = MaterialTheme.typography.labelMedium,
+                        "Buyer",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clip(MaterialTheme.shapes.extraSmall)
-                            .clickable { showProof = true }
-                            .padding(vertical = Spacing.xs),
+                            .clickable { showBuyer = true },
                     )
-                }
-            }
 
-            // Offered actions come from the server so the chat and the orders
-            // screen can never disagree about what is allowed next.
-            if (!current.isTerminal) {
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    if (current.canDo("verify_payment")) {
-                        PrimaryButton(
-                            text = "Approve",
-                            onClick = { pendingAction = "verify_payment" },
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Filled.Check,
-                            containerColor = accents.success,
-                        )
-                    }
-
-                    if (current.canDo("complete")) {
-                        PrimaryButton(
-                            text = "Complete",
-                            onClick = { pendingAction = "complete" },
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Filled.DoneAll,
-                            containerColor = accents.success,
-                        )
-                    }
-
-                    val declineAction = when {
-                        current.canDo("reject_payment") -> "reject_payment"
-                        current.canDo("cancel") -> "cancel"
-                        else -> null
-                    }
-
-                    declineAction?.let { action ->
-                        SecondaryButton(
-                            text = "Decline",
-                            onClick = { pendingAction = action },
-                            modifier = Modifier.weight(1f),
-                            contentColor = MaterialTheme.colorScheme.error,
+                    if (current.paymentProof != null) {
+                        Text(
+                            "Receipt",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(MaterialTheme.shapes.extraSmall)
+                                .clickable { showProof = true },
                         )
                     }
                 }
+            } else if (!current.isTerminal) {
+                // Buyer: settle the bill, then carry the pickup code - both
+                // without leaving the conversation.
+                val owes = current.paymentMethod == "gcash" &&
+                    (current.paymentStatus == "unpaid" || current.paymentStatus == "rejected")
 
-                if (current.canDo("mark_ready_for_pickup")) {
-                    SecondaryButton(
-                        text = "Mark ready for pickup",
-                        onClick = { pendingAction = "mark_ready_for_pickup" },
+                when {
+                    owes -> PrimaryButton(
+                        text = if (current.paymentStatus == "rejected") {
+                            "Send payment again"
+                        } else {
+                            "Pay " + Money.format(current.amountDue)
+                        },
+                        onClick = { payingNow = true },
                         modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.Inventory,
+                        compact = true,
                     )
+
+                    current.paymentStatus == "verified" ->
+                        PickupQrButton(order = current, modifier = Modifier.fillMaxWidth(), compact = true)
                 }
             }
         }
@@ -320,12 +370,37 @@ internal fun ChatOrderActionDialog(
     onDismiss: () -> Unit,
     onDone: () -> Unit,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var reason by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val needsReason = action == "reject_payment" || action == "cancel"
+
+    // Completing is a handover, not a yes/no question: the buyer has to be
+    // photographed receiving the item. That is what the counter screen does
+    // after a scan, so Complete opens it with this order's own code instead
+    // of asking here.
+    if (action == "complete") {
+        LaunchedEffect(transaction.transactionId) {
+            val code = transaction.qrCode
+
+            if (code != null) {
+                AdminCounter.open(code)
+            } else {
+                android.widget.Toast.makeText(
+                    context,
+                    "Scan the buyer's pickup code to complete this order.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+            }
+
+            onDismiss()
+        }
+
+        return
+    }
 
     val (title, body, confirm) = when (action) {
         "verify_payment" -> Triple(
@@ -345,12 +420,6 @@ internal fun ChatOrderActionDialog(
             "Tell the buyer the item is staged and waiting at the store.",
             "Mark ready",
         )
-        "complete" -> Triple(
-            "Complete order",
-            "Confirm the buyer paid and took the item. This credits " +
-                "${transaction.rewardPointsToCredit} reward point(s), once only.",
-            "Complete",
-        )
         else -> Triple(
             "Cancel order",
             "The item returns to the catalog and any points spent are refunded.",
@@ -362,7 +431,10 @@ internal fun ChatOrderActionDialog(
         onDismissRequest = { if (!working) onDismiss() },
         title = { Text(title, style = MaterialTheme.typography.titleLarge) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md),
+            ) {
                 Text(body, style = MaterialTheme.typography.bodyMedium)
 
                 if (needsReason) {
@@ -402,8 +474,6 @@ internal fun ChatOrderActionDialog(
                                     MarketplaceApi.rejectPayment(token, transaction.transactionId, reason)
                                 "mark_ready_for_pickup" ->
                                     MarketplaceApi.markReadyForPickup(token, transaction.transactionId)
-                                "complete" ->
-                                    MarketplaceApi.completeTransaction(token, transaction.transactionId)
                                 else ->
                                     MarketplaceApi.cancelTransaction(token, transaction.transactionId, reason)
                             }
