@@ -50,7 +50,6 @@ import kotlinx.coroutines.withContext
 internal fun CheckoutScreen(
     item: Item,
     onBack: () -> Unit,
-    onCompleted: (MarketTransaction) -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
@@ -142,11 +141,7 @@ internal fun CheckoutScreen(
                 }
 
                 placedOrder != null -> {
-                    OrderPlacedSection(
-                        order = placedOrder!!,
-                        token = token,
-                        onDone = { onCompleted(placedOrder!!) },
-                    )
+                    OrderPlacedSection(order = placedOrder!!, token = token)
                 }
 
                 else -> {
@@ -458,7 +453,6 @@ private fun PaymentOption(
 private fun OrderPlacedSection(
     order: MarketTransaction,
     token: String,
-    onDone: () -> Unit,
 ) {
     // The QR, receipt picker and upload all live in PaymentProofDialog now, so
     // the same flow serves this screen and the order history.
@@ -494,7 +488,7 @@ private fun OrderPlacedSection(
                 }
             }
 
-            TransactionStatusPill(current.status)
+            TransactionStatusPill(current.status, paymentMethod = current.paymentMethod)
         }
 
         MarketCard {
@@ -588,7 +582,6 @@ private fun OrderPlacedSection(
             icon = Icons.Filled.Lock,
         )
 
-        PrimaryButton("Done", onDone, Modifier.fillMaxWidth())
         Spacer(Modifier.height(Spacing.xl))
     }
 }
