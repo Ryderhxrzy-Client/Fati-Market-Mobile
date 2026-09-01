@@ -72,9 +72,10 @@ internal fun ChatOrderCard(msg: ChatMessage, isMe: Boolean) {
     }
 
     if (showProof && order.paymentProof != null) {
-        PaymentProofViewer(
+        OrderPhotoViewer(
+            title = "Payment receipt",
             imageUrl = order.paymentProof,
-            reference = order.paymentReference,
+            caption = order.paymentReference?.let { "Reference: $it" },
             onDismiss = { showProof = false },
         )
     }
@@ -201,8 +202,13 @@ internal fun ChatOrderCard(msg: ChatMessage, isMe: Boolean) {
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    PaymentStatusPill(paymentThen, order.isFullPointsCheckout)
-                    TransactionStatusPill(statusThen)
+                    PaymentStatusPill(
+                        paymentThen,
+                        order.isFullPointsCheckout,
+                        paymentMethod = order.paymentMethod,
+                        orderStatus = statusThen,
+                    )
+                    TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
                 }
 
                 // ── The GCash receipt, when one has been sent ────────────
@@ -264,6 +270,15 @@ internal fun ChatOrderCard(msg: ChatMessage, isMe: Boolean) {
                         modifier = Modifier.fillMaxWidth(),
                         icon = Icons.Filled.QrCode2,
                     )
+                }
+
+                // Once the order is approved the buyer's next move is the
+                // counter, so the code sits on the card that told them so -
+                // on the one card carrying the decisions, not repeated down
+                // the whole thread.
+                if (!isAdmin && carriesActions && order.isCollectable()) {
+                    SoftDivider()
+                    PickupQrButton(order = order, modifier = Modifier.fillMaxWidth())
                 }
 
                 if (isAdmin && carriesActions) {
@@ -573,18 +588,51 @@ internal fun pickMeetupSchedule(
 }
 
 /**
- * The acquire, confirmed with proof - one dialog for the conversation card,
- * the pinned strip and the Private Offers screen, so "Mark Acquired" is the
- * same act everywhere.
+ * Mark Acquired, from the conversation card, the pinned strip or the Private
+ * Offers screen - and it lands on the counter screen, the same one a scanned
+ * turnover QR opens.
  *
- * Mirrors the QR turnover screen: the two proof photographs (the item being
- * received, the seller being paid) are captured right here, optional but
- * offered. When no price was ever agreed in chat, the agreed amount is asked
- * for in the same breath, since verifying a turnover without a price would be
- * receiving an item nobody priced.
+ * Receiving an item is a handover, not a yes/no question: the item and the
+ * seller's payout get photographed, and the public selling price is set on the
+ * spot so the markup is right the moment the item is received rather than
+ * after someone remembers to edit the listing. That screen already exists for
+ * the scan, so pressing the button opens it with the listing's own code
+ * instead of asking a smaller question here.
  */
 @Composable
 internal fun AcquireOfferDialog(
+    listing: Item,
+    token: String,
+    onDismiss: () -> Unit,
+    onFinished: (errorMessage: String?) -> Unit,
+) {
+    val turnoverCode = listing.qrCode
+
+    if (turnoverCode != null) {
+        LaunchedEffect(listing.itemId) {
+            AdminCounter.open(turnoverCode)
+            onDismiss()
+        }
+
+        return
+    }
+
+    // An offer accepted before turnover codes existed has no QR to open, so it
+    // keeps the in-place dialog rather than losing the action altogether.
+    AcquireOfferFallbackDialog(listing, token, onDismiss, onFinished)
+}
+
+/**
+ * The acquire asked for in place, for listings with no turnover code.
+ *
+ * Mirrors the counter screen as closely as a dialog can: the two proof
+ * photographs (the item being received, the seller being paid) are captured
+ * right here, optional but offered. When no price was ever agreed in chat, the
+ * agreed amount is asked for in the same breath, since verifying a turnover
+ * without a price would be receiving an item nobody priced.
+ */
+@Composable
+private fun AcquireOfferFallbackDialog(
     listing: Item,
     token: String,
     onDismiss: () -> Unit,
@@ -1059,7 +1107,16 @@ private fun OrderCardActions(order: MarketTransaction, onAction: (String) -> Uni
         else -> null
     }
 
-    if (!order.canDo("verify_payment") && !order.canDo("complete") &&
+    // Two shapes of approval: a GCash payment that has landed, and a cash
+    // order that is only being accepted - the money for that one arrives at
+    // the counter. The server offers exactly one of them.
+    val approve = when {
+        order.canDo("verify_payment") -> "verify_payment"
+        order.canDo("approve_order") -> "approve_order"
+        else -> null
+    }
+
+    if (approve == null && !order.canDo("complete") &&
         !order.canDo("mark_ready_for_pickup") && decline == null
     ) {
         return
@@ -1068,10 +1125,10 @@ private fun OrderCardActions(order: MarketTransaction, onAction: (String) -> Uni
     SoftDivider()
 
     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        if (order.canDo("verify_payment")) {
+        approve?.let { action ->
             PrimaryButton(
                 text = "Approve",
-                onClick = { onAction("verify_payment") },
+                onClick = { onAction(action) },
                 modifier = Modifier.weight(1f),
                 icon = Icons.Filled.Check,
                 containerColor = accents.success,
@@ -1115,6 +1172,184 @@ private fun OrderCardActions(order: MarketTransaction, onAction: (String) -> Uni
 }
 
 /** The item photo, or a placeholder when a listing has none. */
+/**
+ * The counter's receipt for a turnover, drawn in the seller's conversation.
+ *
+ * A seller used to hand their item over and hear nothing more in the thread
+ * that started it - the offer was accepted, then silence. This is the line that
+ * was missing: what the store received, what the seller was owed for it, and
+ * the two photographs taken at the counter. The seller is in both of them, so
+ * the proof is as much theirs as it is the store's record.
+ */
+@Composable
+internal fun ItemAcquiredCard(msg: ChatMessage, isMe: Boolean) {
+    val item = msg.listedItem ?: return
+    val accents = LocalMarketAccents.current
+
+    // Which proof is open full-screen: its heading, and its URL.
+    var viewing by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    viewing?.let { (title, url) ->
+        OrderPhotoViewer(
+            title = title,
+            imageUrl = url,
+            caption = item.title +
+                (Dates.short(item.acquiredAt)?.let { " · $it" } ?: ""),
+            onDismiss = { viewing = null },
+        )
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
+    ) {
+        Surface(
+            modifier = Modifier.widthIn(max = 300.dp),
+            shape = RoundedCornerShape(
+                topStart = 18.dp,
+                topEnd = 18.dp,
+                bottomStart = if (isMe) 18.dp else 4.dp,
+                bottomEnd = if (isMe) 4.dp else 18.dp,
+            ),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            tonalElevation = 1.dp,
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.Inventory,
+                        null,
+                        tint = accents.success,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("Received at the store", style = MaterialTheme.typography.titleSmall)
+                }
+
+                Column(
+                    modifier = Modifier.padding(Spacing.md),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ItemThumbnail(item.photos.firstOrNull())
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                item.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Dates.short(item.acquiredAt)?.let {
+                                Text(
+                                    "Turned over $it",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+
+                    SoftDivider()
+
+                    SummaryRow(
+                        label = if (item.sellerIsPaid) "You were paid" else "Your payout",
+                        value = Money.format(item.sellerPayoutAmount ?: item.acquisitionPrice),
+                        emphasized = true,
+                    )
+
+                    StatusPill(
+                        label = if (item.sellerIsPaid) "Paid in cash" else "Payout pending",
+                        tone = if (item.sellerIsPaid) StatusTone.Success else StatusTone.Warning,
+                    )
+
+                    // The proof itself. Either photograph may be missing on an
+                    // older turnover, so each stands on its own.
+                    if (item.turnoverPhoto != null || item.sellerPayoutPhoto != null) {
+                        SoftDivider()
+                        Overline("Handover proof")
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            ProofThumbnail(
+                                label = "Item received",
+                                photo = item.turnoverPhoto,
+                                modifier = Modifier.weight(1f),
+                                onClick = { url -> viewing = "Item received" to url },
+                            )
+                            ProofThumbnail(
+                                label = "Seller paid",
+                                photo = item.sellerPayoutPhoto,
+                                modifier = Modifier.weight(1f),
+                                onClick = { url -> viewing = "Seller paid" to url },
+                            )
+                        }
+                    }
+
+                    Text(
+                        timeAgo(msg.sentAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** One captioned proof photograph, or a placeholder when it was never taken. */
+@Composable
+private fun ProofThumbnail(
+    label: String,
+    photo: String?,
+    modifier: Modifier = Modifier,
+    onClick: (String) -> Unit,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.xxs)) {
+        if (photo != null) {
+            AsyncImage(
+                model = photo,
+                contentDescription = label,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable { onClick(photo) },
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Filled.NoPhotography,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                )
+            }
+        }
+
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 @Composable
 private fun ItemThumbnail(photo: String?) {
     Box(
@@ -1154,17 +1389,57 @@ internal fun PaymentStatusPill(
     paymentStatus: String,
     isFullPointsCheckout: Boolean = false,
     modifier: Modifier = Modifier,
+    paymentMethod: String? = null,
+    orderStatus: String? = null,
 ) {
-    val (label, tone) = when {
-        isFullPointsCheckout && paymentStatus == "verified" -> "Paid with points" to StatusTone.Success
-        paymentStatus == "verified" -> "Paid" to StatusTone.Success
-        paymentStatus == "proof_submitted" -> "Checking payment" to StatusTone.Warning
-        paymentStatus == "rejected" -> "Payment declined" to StatusTone.Danger
-        else -> "Not paid yet" to StatusTone.Warning
+    val tone = when {
+        paymentStatus == "verified" -> StatusTone.Success
+        paymentStatus == "rejected" -> StatusTone.Danger
+        isApprovedCashPickup(paymentStatus, paymentMethod, orderStatus) -> StatusTone.Info
+        else -> StatusTone.Warning
     }
 
-    StatusPill(label = label, tone = tone, modifier = modifier)
+    StatusPill(
+        label = paymentStateLabel(paymentStatus, paymentMethod, orderStatus, isFullPointsCheckout),
+        tone = tone,
+        modifier = modifier,
+    )
 }
+
+/**
+ * Everyday wording for where a payment stands.
+ *
+ * "Unpaid" is not one state but three, and calling them all "not paid yet"
+ * accused a cash buyer of owing money late. A GCash buyer with no proof up does
+ * still owe it. A cash buyer whose order Admin has not approved owes nothing
+ * yet - they are waiting on Ofelia. And once it is approved they simply pay at
+ * the counter, which is the arrangement, not a debt.
+ *
+ * Shared by the pill and the buyer's order details so the two can never say
+ * different things about one order.
+ */
+internal fun paymentStateLabel(
+    paymentStatus: String,
+    paymentMethod: String? = null,
+    orderStatus: String? = null,
+    isFullPointsCheckout: Boolean = false,
+): String = when {
+    isFullPointsCheckout && paymentStatus == "verified" -> "Paid with points"
+    paymentStatus == "verified" -> "Paid"
+    paymentStatus == "proof_submitted" -> "Checking payment"
+    paymentStatus == "rejected" -> "Payment declined"
+    paymentMethod != "cash" -> "Not paid yet"
+    isApprovedCashPickup(paymentStatus, paymentMethod, orderStatus) -> "Pay on pickup"
+    else -> "Waiting for approval"
+}
+
+/** A cash order Admin has approved: the bill is open, and settled on pickup. */
+internal fun isApprovedCashPickup(
+    paymentStatus: String,
+    paymentMethod: String?,
+    orderStatus: String?,
+): Boolean = paymentStatus == "unpaid" && paymentMethod == "cash" &&
+    (orderStatus == "reserved" || orderStatus == "ready_for_pickup")
 
 /** Everyday wording for a payment method. */
 internal fun paymentMethodLabel(method: String): String = when (method) {
@@ -1174,9 +1449,20 @@ internal fun paymentMethodLabel(method: String): String = when (method) {
     else -> method.replaceFirstChar { it.uppercase() }
 }
 
-/** The receipt, full-screen, because a thumbnail is not enough to check one. */
+/**
+ * One of an order's photographs, full-screen - a thumbnail is not enough to
+ * check a receipt against a reference, nor to recognise a face.
+ *
+ * Shared by the GCash receipt and the handover proof so both open the same way
+ * wherever they are tapped.
+ */
 @Composable
-private fun PaymentProofViewer(imageUrl: String, reference: String?, onDismiss: () -> Unit) {
+internal fun OrderPhotoViewer(
+    title: String,
+    imageUrl: String,
+    onDismiss: () -> Unit,
+    caption: String? = null,
+) {
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -1198,23 +1484,19 @@ private fun PaymentProofViewer(imageUrl: String, reference: String?, onDismiss: 
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Payment receipt", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                    Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White)
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Filled.Close, "Close", tint = Color.White)
                     }
                 }
 
-                reference?.let {
-                    Text(
-                        "Reference: $it",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                    )
+                caption?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = Color.White)
                 }
 
                 AsyncImage(
                     model = imageUrl,
-                    contentDescription = "Payment receipt",
+                    contentDescription = title,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
