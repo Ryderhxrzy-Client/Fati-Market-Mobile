@@ -57,6 +57,13 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // "Continue with Google". Credential Manager is the supported way to ask
+    // for a Google ID token now; the play-services artifact is what actually
+    // talks to the account on the device, and googleid parses the response.
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+
     // Walk-in pickup QR: core renders the buyer's code as a bitmap, and the
     // embedded scanner gives Admin the camera screen that reads it.
     implementation("com.google.zxing:core:3.5.3")
