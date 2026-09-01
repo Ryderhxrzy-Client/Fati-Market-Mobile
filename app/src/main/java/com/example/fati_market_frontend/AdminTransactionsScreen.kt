@@ -268,7 +268,7 @@ private fun AdminTransactionCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TransactionStatusPill(transaction.status)
+                TransactionStatusPill(transaction.status, paymentMethod = transaction.paymentMethod)
             }
 
             Column(horizontalAlignment = Alignment.End) {
@@ -376,6 +376,18 @@ private fun AdminTransactionCard(
                     PrimaryButton(
                         text = "Verify payment",
                         onClick = { onAction("verify_payment") },
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Filled.CheckCircle,
+                    )
+                }
+
+                // A pay-at-the-store order is approved, not verified: the cash
+                // arrives at the counter, and completing the order is what
+                // records it as paid.
+                if (transaction.canDo("approve_order")) {
+                    PrimaryButton(
+                        text = "Approve order",
+                        onClick = { onAction("approve_order") },
                         modifier = Modifier.fillMaxWidth(),
                         icon = Icons.Filled.CheckCircle,
                     )
