@@ -239,6 +239,9 @@ internal data class MarketTransaction(
 
     /** Photo taken at the counter proving the item was handed over. */
     val handoverPhoto: String? = null,
+
+    /** When the handover happened, for captioning that photo. */
+    val completedAt: String? = null,
 ) {
     val awaitingProofReview: Boolean get() = paymentStatus == "proof_submitted"
     val isTerminal: Boolean get() = status in listOf("completed", "cancelled", "rejected")
@@ -292,6 +295,7 @@ internal fun parseTransaction(obj: JSONObject): MarketTransaction {
         availableActions = actions,
         qrCode = str("qr_code"),
         handoverPhoto = str("handover_photo"),
+        completedAt = str("completed_at"),
     )
 }
 
@@ -363,6 +367,14 @@ internal fun transactionStatusLabel(status: String): String = when (status) {
     else -> status.replaceFirstChar { it.uppercase() }
 }
 
+/**
+ * The statuses an admin may set by hand, in lifecycle order.
+ *
+ * One list, so the edit pages and the counter screen offer the same choices -
+ * they used to keep private copies that could drift apart.
+ */
+internal val ITEM_STATUS_OPTIONS = listOf("pending", "acquired", "public", "reserved", "sold")
+
 internal fun itemStatusLabel(status: String): String = when (status.lowercase()) {
     "pending", "private" -> "Pending review"
     "acquired" -> "Acquired"
@@ -372,3 +384,48 @@ internal fun itemStatusLabel(status: String): String = when (status.lowercase())
     "rejected" -> "Rejected"
     else -> status.replaceFirstChar { it.uppercase() }
 }
+
+/**
+ * An item category, as both apps' pickers and the admin console see it.
+ *
+ * [itemCount] is why a category can refuse to be deleted: the server will not
+ * orphan listings, and the screen can say so before the admin tries.
+ */
+internal data class MarketCategory(
+    val categoryId: Int,
+    val name: String,
+    val description: String?,
+    val itemCount: Int = 0,
+)
+
+internal fun parseCategory(obj: JSONObject): MarketCategory = MarketCategory(
+    categoryId = obj.optInt("category_id"),
+    name = obj.optString("name"),
+    description = obj.optString("description").takeIf { it.isNotBlank() && it != "null" },
+    itemCount = obj.optInt("item_count", 0),
+)
+
+/**
+ * One line of the store's history.
+ *
+ * Assembled by the server from rows that already record these moments - an
+ * item's acquisition, an order's completion, a ledger entry - rather than from
+ * an audit table, so the feed reaches back to the store's first day.
+ */
+internal data class ActivityEntry(
+    val action: String,
+    val user: String,
+    val description: String,
+    val resourceType: String,
+    val resourceId: Int,
+    val timestamp: String,
+)
+
+internal fun parseActivity(obj: JSONObject): ActivityEntry = ActivityEntry(
+    action = obj.optString("action"),
+    user = obj.optString("user"),
+    description = obj.optString("description"),
+    resourceType = obj.optString("resource_type"),
+    resourceId = obj.optInt("resource_id"),
+    timestamp = obj.optString("timestamp"),
+)
