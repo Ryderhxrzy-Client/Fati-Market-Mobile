@@ -110,8 +110,18 @@ internal fun PickupQrDialog(order: MarketTransaction, onDismiss: () -> Unit) {
                 }
 
                 Text(
-                    "Show this at the store. Ofelia scans it to pull up your " +
-                        "order and hand your item over.",
+                    buildString {
+                        append("Show this at the store. Ofelia scans it to pull up your ")
+                        append("order and hand your item over.")
+
+                        // A cash order is approved with the bill still open, so
+                        // say plainly what is owed on arrival.
+                        if (order.paymentStatus == "unpaid") {
+                            append(" Bring ")
+                            append(Money.format(order.amountDue))
+                            append(" - you pay when you collect it.")
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -123,6 +133,22 @@ internal fun PickupQrDialog(order: MarketTransaction, onDismiss: () -> Unit) {
     }
 }
 
+/**
+ * Whether this order can send its buyer to the counter.
+ *
+ * Approval, not payment. A buyer paying cash at the store is approved with the
+ * bill still open - the money is handed over at the counter this very code
+ * takes them to - so gating on a settled payment left exactly those buyers
+ * without a way in.
+ *
+ * Every surface that offers the code asks this one question, because the last
+ * time the rule was written out twice, one copy was fixed and the other went on
+ * hiding the code in the conversation.
+ */
+internal fun MarketTransaction.isCollectable(): Boolean =
+    qrCode != null && !isTerminal &&
+        (paymentStatus == "verified" || status == "reserved" || status == "ready_for_pickup")
+
 /** The row-level entry point: a button that opens [PickupQrDialog]. */
 @Composable
 internal fun PickupQrButton(
@@ -130,9 +156,7 @@ internal fun PickupQrButton(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
-    // The code collects the item, and nothing is collected before it is paid
-    // for - offering it earlier only sends the buyer to the counter twice.
-    if (order.qrCode == null || order.isTerminal || order.paymentStatus != "verified") return
+    if (!order.isCollectable()) return
 
     var showing by remember { mutableStateOf(false) }
 
