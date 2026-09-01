@@ -203,12 +203,8 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
     // navigation while committing to a purchase.
     checkoutItem?.let { buyItem ->
         CheckoutScreen(
-            item        = buyItem,
-            onBack      = { checkoutItem = null },
-            onCompleted = {
-                checkoutItem = null
-                showMyOrders = true
-            }
+            item   = buyItem,
+            onBack = { checkoutItem = null },
         )
     }
 
@@ -309,7 +305,8 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                             favoritedIds         = favoritedIds,
                             onFavoritedIdsChange = { favoritedIds = it },
                             onFavoritesClick     = { showFavorites = true },
-                            onGoToChat           = { selectedTab = StudentTab.CHAT }
+                            onGoToChat           = { selectedTab = StudentTab.CHAT },
+                            onOpenOrders         = { showMyOrders = true }
                         )
                         StudentTab.CHAT     -> AdminChatContent(
                             onMenuClick          = { openDrawer() },
@@ -369,7 +366,8 @@ private fun StudentHomeContent(
     favoritedIds: Set<Int>,
     onFavoritedIdsChange: (Set<Int>) -> Unit,
     onFavoritesClick: () -> Unit,
-    onGoToChat: () -> Unit = {}
+    onGoToChat: () -> Unit = {},
+    onOpenOrders: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs   = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
@@ -455,7 +453,8 @@ private fun StudentHomeContent(
             onSearchChange   = { searchQuery = it },
             onClearSearch    = { searchQuery = "" },
             favoritesCount   = favoritedIds.size,
-            onFavoritesClick = onFavoritesClick
+            onFavoritesClick = onFavoritesClick,
+            onOpenOrders     = onOpenOrders
         )
 
         // ── Category filter chips (always visible) ────────────────────────────
@@ -670,7 +669,8 @@ private fun MarketplaceHeader(
     onSearchChange: (String) -> Unit,
     onClearSearch: () -> Unit,
     favoritesCount: Int = 0,
-    onFavoritesClick: () -> Unit = {}
+    onFavoritesClick: () -> Unit = {},
+    onOpenOrders: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs   = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
@@ -794,8 +794,18 @@ private fun MarketplaceHeader(
                     }
                 }
             }
-            IconButton(onClick = { }) {
-                Icon(Icons.Filled.NotificationsNone, null, tint = Color.White)
+            var showNotifications by remember { mutableStateOf(false) }
+
+            if (showNotifications) {
+                NotificationsDialog(
+                    onDismiss = { showNotifications = false },
+                    // A line saying an order moved should take the buyer to it.
+                    onOpenOrder = { showNotifications = false; onOpenOrders() },
+                )
+            }
+
+            IconButton(onClick = { showNotifications = true }) {
+                Icon(Icons.Filled.NotificationsNone, "Notifications", tint = Color.White)
             }
         }
         OutlinedTextField(
