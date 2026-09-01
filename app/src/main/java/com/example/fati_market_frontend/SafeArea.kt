@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -22,11 +24,11 @@ import androidx.compose.ui.unit.max
  * react-native-safe-area-context.
  *
  * The problem: most of this app's screens are full-screen [Dialog]s, and a
- * dialog is its own window. On Android 15 (targetSdk 35) that window is drawn
- * edge-to-edge like everything else, but the *insets it reports are zero* -
- * so `navigationBarsPadding()` inside a dialog pads by nothing and the
- * bottom button sits under the gesture bar, no matter how many inset
- * modifiers are stacked on it. That is the bug that kept coming back.
+ * dialog is its own window. On Android 15 (targetSdk 35) that window draws
+ * behind the gesture bar, but the *bottom inset it reports is zero* - so
+ * `navigationBarsPadding()` inside a dialog pads by nothing and the bottom
+ * button sits under the gesture bar, no matter how many inset modifiers are
+ * stacked on it. That is the bug that kept coming back.
  *
  * The fix mirrors react-native-safe-area-context: measure the insets ONCE at
  * the activity root - the one window whose insets are always right - and
@@ -34,12 +36,12 @@ import androidx.compose.ui.unit.max
  * inherit locals from their call site, so [safeAreaBottom] works identically
  * inside a dialog, a bottom sheet, or the plain activity.
  *
- * Use [safeAreaBottom] / [safeAreaTop] on any surface that touches a screen
- * edge from inside a Dialog. Content in the activity window may keep the
- * regular inset modifiers - both read the same numbers there.
+ * Only the BOTTOM is carried this way. A dialog is not edge-to-edge at the
+ * top - the system already places it below the status bar - so the top inset
+ * is deliberately absent from [SafeAreaInsets] and [safeAreaTop] reads the
+ * window's own status bar instead. See the note on [safeAreaTop].
  */
 data class SafeAreaInsets(
-    val top: Dp = 0.dp,
     val bottom: Dp = 0.dp,
     val ime: Dp = 0.dp,
 )
@@ -55,7 +57,6 @@ fun ProvideSafeArea(content: @Composable () -> Unit) {
     // change, this recomposes and every consumer follows.
     val insets = with(density) {
         SafeAreaInsets(
-            top = WindowInsets.statusBars.getTop(this).toDp(),
             bottom = WindowInsets.navigationBars.getBottom(this).toDp(),
             ime = WindowInsets.ime.getBottom(this).toDp(),
         )
@@ -111,12 +112,23 @@ fun SafeAreaBottomSpacer(min: Dp = 16.dp) {
     Spacer(Modifier.height(max(max(safe.bottom, safe.ime), min)))
 }
 
-/** Top padding clearing the status bar, dialog-proof like [safeAreaBottom]. */
+/**
+ * Top clearance for the status bar - which, unlike the bottom, must NOT be
+ * carried down from the activity.
+ *
+ * A dialog window is only edge-to-edge at the *bottom*: it draws behind the
+ * gesture bar (the reason [safeAreaBottom] exists) but the system already
+ * positions it below the status bar. Padding it by the activity's measured
+ * top inset therefore adds a second status bar of blank space - the oversized
+ * gap that showed up on the student pages. Reading the window's own status
+ * bar inset gives zero inside a dialog and the real height on an activity
+ * screen, which is exactly what the admin dashboard's headers do.
+ */
 fun Modifier.safeAreaTop(): Modifier = composed {
-    padding(top = LocalSafeArea.current.top)
+    windowInsetsPadding(WindowInsets.statusBars)
 }
 
 /** A spacer the height of the status bar, for headers that draw behind it. */
 fun Modifier.safeAreaTopHeight(): Modifier = composed {
-    height(LocalSafeArea.current.top)
+    windowInsetsTopHeight(WindowInsets.statusBars)
 }
