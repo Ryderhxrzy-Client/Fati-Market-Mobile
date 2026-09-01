@@ -418,11 +418,26 @@ fun ItemStatusPill(status: String, modifier: Modifier = Modifier, offerAccepted:
     StatusPill(label = label, tone = tone, modifier = modifier)
 }
 
-/** Maps an order status to its badge tone and wording. */
+/**
+ * Maps an order status to its badge tone and wording.
+ *
+ * `pending_payment` means two different things depending on how the buyer is
+ * paying, so pass [paymentMethod] where it is known. A GCash buyer still owes
+ * the money - they are the ones awaiting payment. A cash buyer owes nothing
+ * yet: they pay at the counter, and what they are waiting on is Admin
+ * accepting the order.
+ */
 @Composable
-fun TransactionStatusPill(status: String, modifier: Modifier = Modifier) {
+fun TransactionStatusPill(
+    status: String,
+    modifier: Modifier = Modifier,
+    paymentMethod: String? = null,
+) {
     val (label, tone) = when (status) {
-        "pending_payment" -> "Awaiting payment" to StatusTone.Warning
+        "pending_payment" -> when (paymentMethod) {
+            "cash" -> "Awaiting admin approval" to StatusTone.Warning
+            else -> "Awaiting payment" to StatusTone.Warning
+        }
         "payment_proof_submitted" -> "Proof submitted" to StatusTone.Info
         "payment_verified" -> "Payment verified" to StatusTone.Info
         "reserved" -> "Reserved" to StatusTone.Info
