@@ -92,10 +92,12 @@ fun SignUpScreen(navController: NavController) {
 
     // Verification
     val verificationOptions = listOf("Student ID", "Registration Card")
-    var verificationExpanded by remember { mutableStateOf(false) }
-    var selectedVerification by remember { mutableStateOf("") }
-    var documentUri by remember { mutableStateOf<Uri?>(null) }
-    var documentName by remember { mutableStateOf("") }
+    // The account is not usable until the emailed code comes back, so the
+    // screen stays put and asks for it rather than sending them to a login
+    // they would only be turned away from.
+    var awaitingCode by remember { mutableStateOf(false) }
+    var code by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf<String?>(null) }
 
     // Image picker for profile photo
     val profileLauncher = rememberLauncherForActivityResult(
@@ -109,14 +111,6 @@ fun SignUpScreen(navController: NavController) {
                 withContext(Dispatchers.Main) { profileBitmap = bmp }
             }
         }
-    }
-
-    // File picker for verification document
-    val docLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        documentUri = uri
-        uri?.let { documentName = getFileName(context, it) }
     }
 
     val headerGradient = Brush.verticalGradient(
@@ -482,168 +476,79 @@ fun SignUpScreen(navController: NavController) {
                     )
                 }
 
-                // ── Verification Type Dropdown ───────────────────────────────────
-                ExposedDropdownMenuBox(
-                    expanded = verificationExpanded,
-                    onExpandedChange = { verificationExpanded = !verificationExpanded },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = if (selectedVerification.isNotEmpty()) 16.dp else 24.dp)
-                ) {
+                // ── The emailed code ──────────────────────────────────────────
+                // Shown in place once the account exists. It is the last step
+                // and the only one: no document, no admin, no waiting.
+                if (awaitingCode) {
                     OutlinedTextField(
-                        value = selectedVerification,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Verification Type") },
-                        placeholder = { Text("Select a verification type") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = verificationExpanded)
+                        value = code,
+                        onValueChange = { code = it.filter { c -> c.isDigit() }.take(6); errorMessage = null },
+                        label = { Text("6-digit code") },
+                        placeholder = { Text("Sent to $email") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Button(
+                        enabled = !isLoading && code.length == 6,
+                        onClick = {
+                            scope.launch {
+                                errorMessage = null
+                                isLoading = true
+
+                                val result = withContext(Dispatchers.IO) {
+                                    verifyEmailCode(email.trim(), code)
+                                }
+
+                                isLoading = false
+
+                                if (result.success && result.body != null) {
+                                    // Verified means signed in - there is
+                                    // nothing left to wait for.
+                                    persistSession(context, result.body)
+                                    successMessage = result.message
+                                } else {
+                                    errorMessage = result.message
+                                }
+                            }
                         },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
-                    )
-
-                    ExposedDropdownMenu(
-                        expanded = verificationExpanded,
-                        onDismissRequest = { verificationExpanded = false }
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
                     ) {
-                        verificationOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Badge,
-                                            contentDescription = null,
-                                            tint = DarkGreen,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(text = option, fontSize = 15.sp)
-                                    }
-                                },
-                                onClick = {
-                                    selectedVerification = option
-                                    verificationExpanded = false
-                                    documentUri = null
-                                    documentName = ""
+                        Text("Verify my email", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    TextButton(
+                        enabled = !isLoading,
+                        onClick = {
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    resendVerificationCode(email.trim())
                                 }
-                            )
-                        }
+                                notice = result.message
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Send me another code", color = DarkGreen) }
+
+                    notice?.let {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        )
                     }
                 }
 
-                // ── File Upload Section (shows when a type is selected) ───────────
-                if (selectedVerification.isNotEmpty()) {
-                    Text(
-                        text = "Upload $selectedVerification",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp)
-                    )
-
-                    val docUri = documentUri
-                    if (docUri == null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 24.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(
-                                    width = 1.5.dp,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .background(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
-                                )
-                                .clickable { docLauncher.launch("image/*") }
-                                .padding(vertical = 32.dp, horizontal = 24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.CloudUpload,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .padding(bottom = 8.dp)
-                                )
-                                Text(
-                                    text = "Tap to upload",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = "JPG, PNG accepted · Max 5 MB",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 24.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(
-                                    1.dp,
-                                    DarkGreen.copy(alpha = 0.4f),
-                                    RoundedCornerShape(12.dp)
-                                )
-                                .background(DarkGreen.copy(alpha = 0.06f))
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.CheckCircle,
-                                contentDescription = null,
-                                tint = DarkGreen,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = documentName,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "Uploaded successfully",
-                                    fontSize = 11.sp,
-                                    color = DarkGreen
-                                )
-                            }
-                            TextButton(
-                                onClick = {
-                                    documentUri = null
-                                    documentName = ""
-                                }
-                            ) {
-                                Text(
-                                    text = "Remove",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
-                }
+                // Nothing to upload any more. Registration used to mean
+                // photographing a student ID or registration card and then
+                // waiting for an admin to look at it; the school email address
+                // proves the same thing - only a student has one, and only its
+                // holder can read the code sent to it.
 
                 // ── Success Dialog ────────────────────────────────────────────────
                 successMessage?.let { msg ->
@@ -699,7 +604,6 @@ fun SignUpScreen(navController: NavController) {
                             if (!email.endsWith("@student.fatima.edu.ph")) {
                                 errorMessage = "Email must end with @student.fatima.edu.ph"; return@launch
                             }
-                            if (profileUri == null) { errorMessage = "Please upload a profile photo"; return@launch }
                             if (password.isEmpty()) { errorMessage = "Password is required"; return@launch }
                             if (password.length < 8) { errorMessage = "Password must be at least 8 characters"; return@launch }
                             if (!password.any { it.isDigit() }) { errorMessage = "Password must contain at least one number"; return@launch }
@@ -707,16 +611,6 @@ fun SignUpScreen(navController: NavController) {
                             if (!password.any { it.isLowerCase() }) { errorMessage = "Password must contain at least one lowercase letter"; return@launch }
                             if (!password.any { !it.isLetterOrDigit() }) { errorMessage = "Password must contain at least one symbol (!@#\$%^&* etc.)"; return@launch }
                             if (password != confirmPassword) { errorMessage = "Passwords do not match"; return@launch }
-                            if (selectedVerification.isEmpty()) { errorMessage = "Please select a verification type"; return@launch }
-                            if (documentUri == null) { errorMessage = "Please upload your $selectedVerification"; return@launch }
-
-                            // Map display label → API value
-                            val verificationUseValue = when (selectedVerification) {
-                                "Student ID" -> "student_id"
-                                "Registration Card" -> "registration_card"
-                                else -> selectedVerification.lowercase().replace(" ", "_")
-                            }
-
                             errorMessage = null
                             isLoading = true
 
@@ -729,13 +623,15 @@ fun SignUpScreen(navController: NavController) {
                                         email = email,
                                         password = password,
                                         passwordConfirmation = confirmPassword,
-                                        profilePictureUri = profileUri!!,
-                                        studentIdPhotoUri = documentUri!!,
-                                        verificationUse = verificationUseValue
+                                        profilePictureUri = profileUri
                                     )
                                 }
                                 if (success) {
-                                    successMessage = message
+                                    // The account exists but cannot be used
+                                    // yet - the code is the last step, and it
+                                    // is asked for right here rather than in
+                                    // an email the student has to act on.
+                                    awaitingCode = true
                                 } else {
                                     errorMessage = message
                                 }
@@ -768,6 +664,83 @@ fun SignUpScreen(navController: NavController) {
                         )
                     }
                 }
+
+                // ── Or finish with Google ─────────────────────────────────────
+                // Google is offered at the END of the form, not the start: the
+                // verification type and the document above are what actually
+                // get an account approved, and a Google button at the top would
+                // read as a way to skip them. It cannot be - the server refuses
+                // a registration without a document either way.
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HorizontalDivider(modifier = Modifier.weight(1f))
+                    Text(
+                        "  or  ",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    HorizontalDivider(modifier = Modifier.weight(1f))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                GoogleButton(
+                    text = "Continue with Google",
+                    enabled = !isLoading && googleSignInConfigured,
+                    onClick = {
+                        scope.launch {
+                            errorMessage = null
+                            isLoading = true
+
+                            try {
+                                val idToken = requestGoogleIdToken(context)
+
+                                if (idToken == null) {
+                                    isLoading = false
+                                    return@launch
+                                }
+
+                                val result = withContext(Dispatchers.IO) {
+                                    googleRegister(
+                                        context = context,
+                                        idToken = idToken,
+                                        // Google already has a picture of them,
+                                        // so this one is a bonus, not a hurdle.
+                                        profilePictureUri = profileUri,
+                                    )
+                                }
+
+                                if (result.success && result.body != null) {
+                                    // Google verified the address, so there is
+                                    // no code and no queue - they are in.
+                                    persistSession(context, result.body)
+                                    successMessage = result.message
+                                } else {
+                                    errorMessage = result.message
+                                }
+                            } catch (e: Exception) {
+                                errorMessage = "Google sign-up failed: ${e.message}"
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    }
+                )
+
+                Text(
+                    text = if (googleSignInConfigured) {
+                        "Your name and email come from Google - no password and no code needed."
+                    } else {
+                        "Google sign-up is not set up in this build yet."
+                    },
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
             }
         }
 
