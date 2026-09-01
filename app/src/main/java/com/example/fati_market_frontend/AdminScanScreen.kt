@@ -37,10 +37,10 @@ import java.io.File
  * A buyer walks in and shows their pickup QR; scanning it lands here with the
  * exact order on screen. The handover then reads top to bottom:
  *
- *   1. The money. An unpaid cash bill is approved here (Ofelia has just been
- *      handed the cash); an unverified GCash proof likewise. Completion stays
- *      locked until the payment is verified - the server enforces it, this
- *      screen just makes the order of events visible.
+ *   1. The money. GCash must already have landed - an unverified proof is
+ *      approved here before anything is handed over. Cash is different: this
+ *      screen IS where it changes hands, so completing the order is what
+ *      records it as paid, and there is nothing to approve separately.
  *   2. The proof. A photo of the buyer receiving the item, taken right here.
  *   3. Complete. Credits the buyer's reward points, exactly once.
  *
@@ -190,12 +190,18 @@ internal fun AdminScanScreen(
                         } else {
                             // ── 1. The money ─────────────────────────────
                             if (current.paymentStatus != "verified") {
+                                val payingCash = current.paymentMethod == "cash"
+
                                 InfoBanner(
-                                    title = "Payment first",
+                                    title = if (payingCash) "Take the cash" else "Payment first",
                                     text = when {
-                                        current.paymentMethod == "cash" ->
-                                            "Take the cash, then approve the payment here. " +
-                                                "The order cannot be completed before that."
+                                        // This screen is the counter: the cash
+                                        // is handed over here, and completing
+                                        // the order is what records it as paid.
+                                        payingCash ->
+                                            "Collect ${Money.format(current.amountDue)} from the " +
+                                                "buyer. Completing the order below records it as " +
+                                                "paid - there is nothing to approve separately."
                                         current.paymentStatus == "proof_submitted" ->
                                             "A GCash receipt is waiting for review. Approve it " +
                                                 "before handing the item over."
@@ -203,7 +209,7 @@ internal fun AdminScanScreen(
                                             "This order is unpaid. It cannot be completed until " +
                                                 "the payment is verified."
                                     },
-                                    tone = StatusTone.Warning,
+                                    tone = if (payingCash) StatusTone.Info else StatusTone.Warning,
                                     icon = Icons.Filled.Payments,
                                 )
 
@@ -285,22 +291,26 @@ internal fun AdminScanScreen(
                             .padding(Spacing.lg),
                         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     ) {
-                        val paid = current.paymentStatus == "verified"
+                        // Cash is settled by this very act - the buyer is at the
+                        // counter handing it over - so it does not have to be
+                        // verified beforehand. GCash must already have landed.
+                        val paid = current.paymentStatus == "verified" ||
+                            (current.paymentMethod == "cash" && current.paymentStatus == "unpaid")
                         val hasPhoto = handoverPhoto != null
 
-                        if (current.canDo("mark_ready_for_pickup")) {
-                            SecondaryButton(
-                                text = "Ready for pickup",
-                                onClick = { pendingAction = "mark_ready_for_pickup" },
-                                modifier = Modifier.fillMaxWidth(),
-                                icon = Icons.Filled.Inventory,
-                            )
-                        }
+                        // No "Ready for pickup" here. That status tells a buyer
+                        // their order is waiting for them - and on this screen
+                        // the buyer is already standing at the counter with the
+                        // code scanned. The only way out is completing the
+                        // handover; the order list keeps the action for orders
+                        // the buyer has not come for yet.
 
                         PrimaryButton(
                             text = when {
                                 !paid -> "Verify the payment first"
                                 !hasPhoto -> "Take the handover photo first"
+                                current.paymentMethod == "cash" && current.paymentStatus == "unpaid" ->
+                                    "Take payment & complete"
                                 else -> "Complete transaction"
                             },
                             enabled = paid && hasPhoto && !working,
@@ -403,8 +413,13 @@ private fun ScanOrderSummary(order: MarketTransaction) {
         SummaryRow("Payment", paymentMethodLabel(order.paymentMethod))
 
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            PaymentStatusPill(order.paymentStatus, order.isFullPointsCheckout)
-            TransactionStatusPill(order.status)
+            PaymentStatusPill(
+                order.paymentStatus,
+                order.isFullPointsCheckout,
+                paymentMethod = order.paymentMethod,
+                orderStatus = order.status,
+            )
+            TransactionStatusPill(order.status, paymentMethod = order.paymentMethod)
         }
     }
 }
