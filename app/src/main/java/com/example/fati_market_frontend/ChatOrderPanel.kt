@@ -259,7 +259,12 @@ internal fun ChatOrderPanel(
                     modifier = Modifier.weight(1f),
                 )
 
-                PaymentStatusPill(current.paymentStatus, current.isFullPointsCheckout)
+                PaymentStatusPill(
+                    current.paymentStatus,
+                    current.isFullPointsCheckout,
+                    paymentMethod = current.paymentMethod,
+                    orderStatus = current.status,
+                )
             }
 
             if (isAdmin) {
@@ -267,10 +272,23 @@ internal fun ChatOrderPanel(
                 // things worth a glance - who is buying, and their receipt.
                 if (!current.isTerminal) {
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                        // Two different approvals: a GCash payment that has
+                        // landed, or a cash order that is only being accepted.
+                        // The server offers exactly one of them.
                         if (current.canDo("verify_payment")) {
                             PrimaryButton(
                                 text = "Approve",
                                 onClick = { pendingAction = "verify_payment" },
+                                modifier = Modifier.weight(1f),
+                                containerColor = accents.success,
+                                compact = true,
+                            )
+                        }
+
+                        if (current.canDo("approve_order")) {
+                            PrimaryButton(
+                                text = "Approve",
+                                onClick = { pendingAction = "approve_order" },
                                 modifier = Modifier.weight(1f),
                                 containerColor = accents.success,
                                 compact = true,
@@ -353,8 +371,16 @@ internal fun ChatOrderPanel(
                         compact = true,
                     )
 
-                    current.paymentStatus == "verified" ->
-                        PickupQrButton(order = current, modifier = Modifier.fillMaxWidth(), compact = true)
+                    // Everything else falls through to the code. Gating this on
+                    // a verified payment hid it from exactly the buyers who need
+                    // it most - the ones paying cash, who are approved with the
+                    // bill still open. The button decides for itself whether the
+                    // order is approved enough to collect on.
+                    else -> PickupQrButton(
+                        order = current,
+                        modifier = Modifier.fillMaxWidth(),
+                        compact = true,
+                    )
                 }
             }
         }
@@ -405,8 +431,18 @@ internal fun ChatOrderActionDialog(
     val (title, body, confirm) = when (action) {
         "verify_payment" -> Triple(
             "Approve payment",
-            "Confirm you received ${Money.format(transaction.amountDue)} for " +
-                "\"${transaction.itemTitle}\". The buyer is told in this chat.",
+            "Confirm the ${Money.format(transaction.amountDue)} GCash payment for " +
+                "\"${transaction.itemTitle}\" has landed. The buyer is told in this chat.",
+            "Approve",
+        )
+        // Approving a cash order settles nothing: the buyer has not handed
+        // anything over yet, and saying "paid" here would put it on a receipt.
+        "approve_order" -> Triple(
+            "Approve this order",
+            "Accept ${Money.format(transaction.amountDue)} cash at the store for " +
+                "\"${transaction.itemTitle}\". The item is held and the buyer gets their " +
+                "pickup code - they pay when they collect it, and completing the order is " +
+                "what marks it paid.",
             "Approve",
         )
         "reject_payment" -> Triple(
@@ -470,6 +506,8 @@ internal fun ChatOrderActionDialog(
                             when (action) {
                                 "verify_payment" ->
                                     MarketplaceApi.verifyPayment(token, transaction.transactionId)
+                                "approve_order" ->
+                                    MarketplaceApi.approveOrder(token, transaction.transactionId)
                                 "reject_payment" ->
                                     MarketplaceApi.rejectPayment(token, transaction.transactionId, reason)
                                 "mark_ready_for_pickup" ->
