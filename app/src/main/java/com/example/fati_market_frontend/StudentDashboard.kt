@@ -61,6 +61,7 @@ import com.fati_market.ui.components.InfoBanner
 import com.fati_market.ui.components.ItemCardSkeleton
 import com.fati_market.ui.components.ItemStatusPill
 import com.fati_market.ui.components.MarketCard
+import com.fati_market.ui.components.MarketPageTopBar
 import com.fati_market.ui.components.MarketPanel
 import com.fati_market.ui.components.Overline
 import com.fati_market.ui.components.PagerDots
@@ -1794,51 +1795,29 @@ internal fun ItemDetailDialog(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 // ── Top bar ────────────────────────────────────────────────────
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(DarkGreen)
-                ) {
-                    Spacer(Modifier.safeAreaTopHeight())
-                    Row(
-                        modifier          = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Filled.ArrowBack, null, tint = Color.White)
-                        }
-                        Text(
-                            "Item Details",
-                            color      = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize   = 18.sp,
-                            modifier   = Modifier.weight(1f)
-                        )
-                        if (!isLoading) {
-                            IconButton(
-                                onClick = {
-                                    if (!isToggling) {
-                                        isToggling = true
-                                        scope.launch {
-                                            val nowFav = !isFav
-                                            val ok = withContext(Dispatchers.IO) {
-                                                if (nowFav) addFavorite(token, detailItem.itemId)
-                                                else removeFavorite(token, detailItem.itemId)
-                                            }
-                                            if (ok) { isFav = nowFav; onFavoriteToggle(detailItem.itemId, nowFav) }
-                                            isToggling = false
+                MarketPageTopBar(title = "Item Details", onBack = onDismiss) {
+                    if (!isLoading) {
+                        IconButton(
+                            onClick = {
+                                if (!isToggling) {
+                                    isToggling = true
+                                    scope.launch {
+                                        val nowFav = !isFav
+                                        val ok = withContext(Dispatchers.IO) {
+                                            if (nowFav) addFavorite(token, detailItem.itemId)
+                                            else removeFavorite(token, detailItem.itemId)
                                         }
+                                        if (ok) { isFav = nowFav; onFavoriteToggle(detailItem.itemId, nowFav) }
+                                        isToggling = false
                                     }
                                 }
-                            ) {
-                                Icon(
-                                    if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                    null,
-                                    tint = if (isFav) Color(0xFFFF4444) else Color.White
-                                )
                             }
+                        ) {
+                            Icon(
+                                if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                null,
+                                tint = if (isFav) Color(0xFFFF4444) else Color.White
+                            )
                         }
                     }
                 }
@@ -2180,37 +2159,7 @@ private fun FavoritesScreen(
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // ── Modern Gradient Header ──────────────────────────────────────
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight))
-                        )
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Spacer(Modifier.safeAreaTopHeight())
-                        // Navigation Bar (Clean Centered Title)
-                        // Navigation Bar (Left-aligned Title)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .padding(horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
-                            }
-                            Text(
-                                "My Favorites",
-                                color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize   = 19.sp,
-                                modifier   = Modifier.padding(start = 4.dp)
-                            )
-                        }
-                    }
-                }
+                MarketPageTopBar(title = "My Favorites", onBack = onDismiss)
 
                 // ── Category Filter ───────────────────────────────────────────
                 if (!isLoading && favoriteItems.isNotEmpty() && categories.isNotEmpty()) {
