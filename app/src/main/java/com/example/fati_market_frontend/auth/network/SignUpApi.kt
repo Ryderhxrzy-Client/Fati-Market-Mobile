@@ -19,6 +19,15 @@ val signUpHttpClient: OkHttpClient = OkHttpClient.Builder()
 
 // ── API Call ───────────────────────────────────────────────────────────────────
 
+/**
+ * Open an account. The address is proven afterwards, by the emailed code.
+ *
+ * The student ID and registration card are gone: a photograph of a card could
+ * be borrowed, and it cost an admin a decision on every sign-up, while only a
+ * student holds an `@student.fatima.edu.ph` address and only its holder can
+ * read what is sent to it. The profile picture is all that is left, and it is
+ * optional.
+ */
 fun registerUser(
     context: Context,
     firstName: String,
@@ -26,39 +35,29 @@ fun registerUser(
     email: String,
     password: String,
     passwordConfirmation: String,
-    profilePictureUri: Uri,
-    studentIdPhotoUri: Uri,
-    verificationUse: String
+    profilePictureUri: Uri? = null
 ): Pair<Boolean, String> {
-    val profileFileName = getFileName(context, profilePictureUri).ifEmpty { "profile.jpg" }
-    val profileMimeType = context.contentResolver.getType(profilePictureUri) ?: "image/jpeg"
-    val profileBytes = context.contentResolver.openInputStream(profilePictureUri)?.readBytes()
-        ?: return Pair(false, "Could not read the profile picture")
-
-    val fileName = getFileName(context, studentIdPhotoUri).ifEmpty { "photo.jpg" }
-    val mimeType = context.contentResolver.getType(studentIdPhotoUri) ?: "image/jpeg"
-    val fileBytes = context.contentResolver.openInputStream(studentIdPhotoUri)?.readBytes()
-        ?: return Pair(false, "Could not read the selected file")
-
-    val requestBody = MultipartBody.Builder()
+    val builder = MultipartBody.Builder()
         .setType(MultipartBody.FORM)
         .addFormDataPart("first_name", firstName.trim())
         .addFormDataPart("last_name", lastName.trim())
         .addFormDataPart("email", email.trim())
         .addFormDataPart("password", password)
         .addFormDataPart("password_confirmation", passwordConfirmation)
-        .addFormDataPart("verification_use", verificationUse)
-        .addFormDataPart(
-            "profile_picture",
-            profileFileName,
-            profileBytes.toRequestBody(profileMimeType.toMediaType())
-        )
-        .addFormDataPart(
-            "student_id_photo",
-            fileName,
-            fileBytes.toRequestBody(mimeType.toMediaType())
-        )
-        .build()
+
+    profilePictureUri?.let { uri ->
+        context.contentResolver.openInputStream(uri)?.readBytes()?.let { bytes ->
+            builder.addFormDataPart(
+                "profile_picture",
+                getFileName(context, uri).ifEmpty { "profile.jpg" },
+                bytes.toRequestBody(
+                    (context.contentResolver.getType(uri) ?: "image/jpeg").toMediaType()
+                )
+            )
+        }
+    }
+
+    val requestBody = builder.build()
 
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/register")
