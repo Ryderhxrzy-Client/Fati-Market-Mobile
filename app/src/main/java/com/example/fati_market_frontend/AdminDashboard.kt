@@ -915,6 +915,17 @@ private fun DrawerPageContent(
         DrawerPage.MostSoldCategory -> CategoryReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.ActiveUsers -> UserReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
 
+        // Both of these used to fall through to "Coming soon" - there was no
+        // API behind either of them until now.
+        DrawerPage.Categories -> AdminCategoriesContent(
+            onMenuClick = onMenuClick,
+            onShowBottomBarChange = onShowBottomBarChange,
+        )
+        DrawerPage.ActivityLogs -> AdminActivityContent(
+            onMenuClick = onMenuClick,
+            onShowBottomBarChange = onShowBottomBarChange,
+        )
+
 
         else -> Column(modifier = Modifier.fillMaxSize()) {
             AdminPageHeader(title = page.label, onMenuClick = onMenuClick)
@@ -7239,7 +7250,16 @@ fun AdminPageHeader(
                     }
                 }
             }
-            IconButton(onClick = { }) {
+            // The bell was dead until now: a push banner is gone the moment
+            // it is dismissed, so anything that arrived while the app was
+            // closed had nowhere to be read.
+            var showNotifications by remember { mutableStateOf(false) }
+
+            if (showNotifications) {
+                NotificationsDialog(onDismiss = { showNotifications = false })
+            }
+
+            IconButton(onClick = { showNotifications = true }) {
                 Icon(Icons.Filled.NotificationsNone, "Notifications", tint = Color.White)
             }
         }
