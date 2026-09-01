@@ -392,6 +392,81 @@ fun LoginScreen(navController: NavController) {
                         Text("Login", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
+
+                // ── Continue with Google ──────────────────────────────────────────
+                // Only for students: the store's admin account is not a Google
+                // account, and offering it there would only ever fail.
+                if (selectedRole == "student") {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HorizontalDivider(modifier = Modifier.weight(1f))
+                        Text(
+                            "  or  ",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        HorizontalDivider(modifier = Modifier.weight(1f))
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    GoogleButton(
+                        text = "Continue with Google",
+                        enabled = !isLoading && googleSignInConfigured,
+                        onClick = {
+                            scope.launch {
+                                errorMessage = null
+                                isLoading = true
+
+                                try {
+                                    val idToken = requestGoogleIdToken(context)
+
+                                    if (idToken == null) {
+                                        // They backed out of the sheet, which is
+                                        // not an error worth shouting about.
+                                        isLoading = false
+                                        return@launch
+                                    }
+
+                                    val result = withContext(Dispatchers.IO) { googleLogin(idToken) }
+
+                                    when {
+                                        result.success && result.body != null -> {
+                                            persistSession(context, result.body)
+                                            successMessage = result.message
+                                        }
+
+                                        // No account yet - the document still has
+                                        // to be uploaded, so send them to sign up.
+                                        result.needsRegistration -> {
+                                            errorMessage = result.message
+                                            navController.navigate("signup")
+                                        }
+
+                                        else -> errorMessage = result.message
+                                    }
+                                } catch (e: Exception) {
+                                    errorMessage = "Google sign-in failed: ${e.message}"
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        }
+                    )
+
+                    if (!googleSignInConfigured) {
+                        Text(
+                            "Google sign-in is not set up in this build yet.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        )
+                    }
+                }
             }
         }
 
