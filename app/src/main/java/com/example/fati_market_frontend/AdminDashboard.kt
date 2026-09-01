@@ -160,7 +160,11 @@ private sealed class DrawerPage(val label: String) {
     object PointsGiven       : DrawerPage("Points Given")
     object PointsReceived    : DrawerPage("Points Received")
     object CashTransactions  : DrawerPage("Cash Transactions")
-    object TradeTransactions : DrawerPage("Trade Transactions")
+    /**
+     * Trade stopped being a payment method: what the endpoint behind this
+     * returns is orders the buyer's points covered in full.
+     */
+    object PointsOnlyOrders  : DrawerPage("Points-Only Orders")
     object TransactionHistory: DrawerPage("Transaction History")
     /** Buyer orders, with payment verification and completion. */
     object ManageOrders      : DrawerPage("Manage Orders")
@@ -645,7 +649,7 @@ private fun AdminDrawerContent(
             is DrawerPage.SoldItems -> inventoryExpanded = true
 
             is DrawerPage.PointsGiven, is DrawerPage.PointsReceived,
-            is DrawerPage.CashTransactions, is DrawerPage.TradeTransactions,
+            is DrawerPage.CashTransactions, is DrawerPage.PointsOnlyOrders,
             is DrawerPage.TransactionHistory, is DrawerPage.ProfitSummary,
             is DrawerPage.ManageOrders -> transactionsExpanded = true
             is DrawerPage.TotalItemAcquired, is DrawerPage.TotalItemSold,
@@ -729,7 +733,7 @@ private fun AdminDrawerContent(
                 DrawerSubItem("Points Given",        currentPage == DrawerPage.PointsGiven)        { onPageSelect(DrawerPage.PointsGiven) }
                 DrawerSubItem("Points Received",     currentPage == DrawerPage.PointsReceived)     { onPageSelect(DrawerPage.PointsReceived) }
                 DrawerSubItem("Cash Transactions",   currentPage == DrawerPage.CashTransactions)   { onPageSelect(DrawerPage.CashTransactions) }
-                DrawerSubItem("Trade Transactions",  currentPage == DrawerPage.TradeTransactions)  { onPageSelect(DrawerPage.TradeTransactions) }
+                DrawerSubItem("Points-Only Orders",  currentPage == DrawerPage.PointsOnlyOrders)  { onPageSelect(DrawerPage.PointsOnlyOrders) }
                 DrawerSubItem("Transaction History", currentPage == DrawerPage.TransactionHistory) { onPageSelect(DrawerPage.TransactionHistory) }
                 DrawerSubItem("Profit Summary",      currentPage == DrawerPage.ProfitSummary)      { onPageSelect(DrawerPage.ProfitSummary) }
             }
@@ -898,7 +902,7 @@ private fun DrawerPageContent(
         DrawerPage.PointsGiven -> PointsTransactionContent(title = "Points Given", endpoint = "/api/points/given", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.PointsReceived -> PointsTransactionContent(title = "Points Received", endpoint = "/api/points/received", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.CashTransactions -> TransactionsContent(title = "Cash Transactions", endpoint = "/api/admin/transactions/cash", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
-        DrawerPage.TradeTransactions -> TransactionsContent(title = "Trade Transactions", endpoint = "/api/admin/transactions/trade", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        DrawerPage.PointsOnlyOrders -> TransactionsContent(title = "Points-Only Orders", endpoint = "/api/admin/transactions/trade", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.TransactionHistory -> TransactionsContent(title = "Transaction History", endpoint = "/api/admin/transactions", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.ManageOrders -> AdminTransactionsContent(
             onMenuClick = onMenuClick,
@@ -982,7 +986,11 @@ private fun AdminPrivateOffersContent(
         }
     }
 
-    LaunchedEffect(Unit) { loadItems() }
+    // First load, and again whenever the counter screen closes - an offer
+    // acquired there leaves this list for the acquired one.
+    LaunchedEffect(AdminCounter.openCode) {
+        if (AdminCounter.openCode == null) loadItems()
+    }
 
     // Pass editing state up to hide bottom bar in AdminDashboard
     val showBar = remember(editingItem) { editingItem == null }
@@ -1135,7 +1143,13 @@ private fun AdminItemListContent(
         }
     }
 
-    LaunchedEffect(Unit) { loadItems() }
+    // The first load, and every return from the counter screen. A turnover
+    // done there moves an item between these lists and settles its markup, so
+    // reloading on the way back beats showing what was true before the
+    // handover until someone opens the item to edit it.
+    LaunchedEffect(AdminCounter.openCode) {
+        if (AdminCounter.openCode == null) loadItems()
+    }
 
     LaunchedEffect(showBar) {
         onShowBottomBarChange(showBar)
@@ -2699,7 +2713,7 @@ internal data class ChatMessage(
      */
     val order: MarketTransaction? = null,
 
-    /** The listing behind an "item_listed" offer message. */
+    /** The listing behind an "item_listed" or "item_acquired" message. */
     val listedItem: Item? = null,
 
     /**
@@ -2716,6 +2730,9 @@ internal data class ChatMessage(
     val isOrderCard: Boolean get() = kind != "text" && order != null
 
     val isItemCard: Boolean get() = kind == "item_listed" && listedItem != null
+
+    /** The turnover receipt: the item arrived and the seller was settled. */
+    val isAcquiredCard: Boolean get() = kind == "item_acquired" && listedItem != null
 }
 
 // ── Chat API ────────────────────────────────────────────────────────────────────
@@ -3597,7 +3614,7 @@ private fun ChatDetailContent(
     var showConfirmDialog      by remember { mutableStateOf<String?>(null) } // "sold" or "reserved"
     var isProcessing           by remember { mutableStateOf(false) }
     var confirmMessage         by remember { mutableStateOf("") }
-    var selectedPaymentMethod  by remember { mutableStateOf("points") }
+    var selectedPaymentMethod  by remember { mutableStateOf("cash") }
     // val pusherStatus   by pusherGlobalStatus
     // val pusherDebugLog by pusherGlobalLog
     val listState              = rememberLazyListState()
@@ -3917,7 +3934,6 @@ private fun ChatDetailContent(
         CheckoutScreen(
             item = buyItem,
             onBack = { chatBuyItem = null },
-            onCompleted = { chatBuyItem = null },
         )
     }
     BackHandler(enabled = showEditItem && !showEmojiPicker && !showItemPreview) { showEditItem = false }
@@ -4031,8 +4047,8 @@ private fun ChatDetailContent(
                 // has a live order behind it the admin can settle it here
                 // instead of switching to the transactions screen.
                 // Both sides get the order strip now: the admin settles it,
-                // the buyer pays from it and, once paid, carries the pickup
-                // code without going to My Orders.
+                // the buyer pays from it and, once the order is approved,
+                // carries the pickup code without going to My Orders.
                 ChatOrderPanel(
                     itemId = conversation.itemId,
                     buyerId = if (isAdmin) conversation.otherUserId else currentUserId,
@@ -4454,7 +4470,17 @@ private fun ChatDetailContent(
 
                     if (showConfirmDialog == "sold") {
                         var expanded by remember { mutableStateOf(false) }
-                        val paymentOptions = listOf("points", "cash", "trade")
+                        // Cash and GCash are the only ways to pay. "Points" and
+                        // "trade" were offered here long after the server stopped
+                        // accepting them - it folds anything but GCash into cash -
+                        // so picking either quietly recorded a full-price cash
+                        // sale. Points are a discount the buyer applies at their
+                        // own checkout, not a method Admin can choose for them.
+                        val paymentOptions = listOf("cash", "gcash")
+                        val paymentLabels = mapOf(
+                            "cash" to "Cash at store",
+                            "gcash" to "GCash",
+                        )
 
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text("Payment Method:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
@@ -4464,7 +4490,7 @@ private fun ChatDetailContent(
                                     onClick = { expanded = !expanded },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(selectedPaymentMethod.replaceFirstChar { it.uppercase() })
+                                    Text(paymentLabels[selectedPaymentMethod] ?: selectedPaymentMethod)
                                 }
                                 DropdownMenu(
                                     expanded = expanded,
@@ -4473,7 +4499,7 @@ private fun ChatDetailContent(
                                 ) {
                                     paymentOptions.forEach { option ->
                                         DropdownMenuItem(
-                                            text = { Text(option.replaceFirstChar { it.uppercase() }) },
+                                            text = { Text(paymentLabels[option] ?: option) },
                                             onClick = {
                                                 selectedPaymentMethod = option
                                                 expanded = false
@@ -4781,14 +4807,13 @@ private fun EditItemPage(
     // Status dropdown
     var expanded by remember { mutableStateOf(false) }
     var editStatus by remember { mutableStateOf(item.status) }
-    // "acquired" and "sold" are reached through turnover verification and
-    // checkout completion, so they are not offered as manual choices here.
-    val statusOptions = listOf("pending", "acquired", "public", "reserved", "sold")
+    // Shared with the counter screen, so both offer the same choices.
+    val statusOptions = ITEM_STATUS_OPTIONS
 
     // The public selling price, in pesos. Reward points are derived from it by
     // the server; the figure shown here is only a preview.
     var editPublicPrice by remember {
-        mutableStateOf(Money.formatPlain(item.publicPrice).replace(",", "").takeIf { it != "-" } ?: "")
+        mutableStateOf(Money.formatPlain(item.publicPrice).replace(",", "").takeIf { it != "—" } ?: "")
     }
     val rewardPreview = LoyaltyRules.rewardPointsFor(Money.normalizeInput(editPublicPrice))
     val canEditPrice = editStatus.lowercase() in listOf("acquired", "public")
@@ -5279,14 +5304,13 @@ private fun EditItemPageForList(
     // Status dropdown
     var expanded by remember { mutableStateOf(false) }
     var editStatus by remember { mutableStateOf(item.status) }
-    // "acquired" and "sold" are reached through turnover verification and
-    // checkout completion, so they are not offered as manual choices here.
-    val statusOptions = listOf("pending", "acquired", "public", "reserved", "sold")
+    // Shared with the counter screen, so both offer the same choices.
+    val statusOptions = ITEM_STATUS_OPTIONS
 
     // The public selling price, in pesos. Reward points are derived from it by
     // the server; the figure shown here is only a preview.
     var editPublicPrice by remember {
-        mutableStateOf(Money.formatPlain(item.publicPrice).replace(",", "").takeIf { it != "-" } ?: "")
+        mutableStateOf(Money.formatPlain(item.publicPrice).replace(",", "").takeIf { it != "—" } ?: "")
     }
     val rewardPreview = LoyaltyRules.rewardPointsFor(Money.normalizeInput(editPublicPrice))
     val canEditPrice = editStatus.lowercase() in listOf("acquired", "public")
@@ -5792,6 +5816,13 @@ private fun ChatBubble(msg: ChatMessage, isMe: Boolean) {
     // review decisions on Admin's side.
     if (msg.isItemCard) {
         ItemOfferCard(msg = msg, isMe = isMe)
+        return
+    }
+
+    // The other end of that offer: the item is in the store, the seller has
+    // been settled, and the counter's two photographs are the proof.
+    if (msg.isAcquiredCard) {
+        ItemAcquiredCard(msg = msg, isMe = isMe)
         return
     }
 
@@ -7350,7 +7381,7 @@ private fun updateItemStatus(token: String, itemId: Int, status: String): Pair<B
  * acquisition price, so a refusal here surfaces the server's own explanation
  * rather than being second-guessed locally.
  */
-private fun updateAdminItem(token: String, itemId: Int, status: String? = null, publicPrice: String? = null): Pair<Boolean, String> {
+internal fun updateAdminItem(token: String, itemId: Int, status: String? = null, publicPrice: String? = null): Pair<Boolean, String> {
     val body = MultipartBody.Builder()
         .setType(MultipartBody.FORM)
         .addFormDataPart("_method", "PUT")
@@ -7627,7 +7658,19 @@ private fun TransactionsContent(
                                 "transaction_id" to obj.optInt("transaction_id", 0),
                                 "item_title" to itemObj.optString("title", ""),
                                 "buyer_email" to buyerObj.optString("email", ""),
-                                "seller_email" to sellerObj.optString("email", ""),
+                                // The store sells what it owns, so the seller is
+                                // the store - "Ofelia Store", as the API names
+                                // it. The student the item came from is
+                                // provenance and is carried separately; showing
+                                // them here made a sale read as the buyer
+                                // selling to themselves.
+                                // optString hands back the literal "null" for a
+                                // JSON null, so both are filtered the way the
+                                // model parser does it.
+                                "seller_name" to sellerObj.optString("name", "")
+                                    .takeIf { it != "null" }.orEmpty(),
+                                "consigned_by" to obj.optString("consigned_by", "")
+                                    .takeIf { it != "null" }.orEmpty(),
                                 "payment_method" to obj.optString("payment_method", ""),
                                 "status" to obj.optString("status", ""),
                                 "points_used" to obj.optInt("points_used", 0)
@@ -7707,15 +7750,25 @@ private fun TransactionsContent(
                         val transaction = transactions[index]
                         val itemTitle = transaction["item_title"].toString()
                         val buyerEmail = transaction["buyer_email"].toString()
-                        val sellerEmail = transaction["seller_email"].toString()
+                        val sellerName = transaction["seller_name"].toString()
+                            .ifBlank { "Ofelia Store" }
+                        val consignedBy = transaction["consigned_by"].toString()
                         val paymentMethod = transaction["payment_method"].toString()
                         val status = transaction["status"].toString()
                         val pointsUsed = (transaction["points_used"] as? Int ?: 0)
 
+                        // Three methods exist now: cash, GCash, and an order the
+                        // points covered outright. Amber is points, as everywhere.
+                        val methodLabel = when (paymentMethod.lowercase()) {
+                            "gcash" -> "GCash"
+                            "points_full" -> "Paid fully with points"
+                            "cash" -> "Cash at store"
+                            else -> paymentMethod
+                        }
+
                         val methodColor = when (paymentMethod.lowercase()) {
-                            "cash" -> MaterialTheme.colorScheme.outline
-                            "trade" -> Color(0xFFFF9800)
-                            "points" -> DarkGreen
+                            "gcash" -> DarkGreen
+                            "points_full" -> LocalMarketAccents.current.reward
                             else -> MaterialTheme.colorScheme.outline
                         }
 
@@ -7735,7 +7788,15 @@ private fun TransactionsContent(
                                 Text(itemTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Spacer(Modifier.height(8.dp))
                                 Text("Buyer: $buyerEmail", style = MaterialTheme.typography.bodySmall)
-                                Text("Seller: $sellerEmail", style = MaterialTheme.typography.bodySmall)
+                                Text("Seller: $sellerName", style = MaterialTheme.typography.bodySmall)
+
+                                if (consignedBy.isNotBlank()) {
+                                    Text(
+                                        "Consigned by: $consignedBy",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 Spacer(Modifier.height(8.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -7748,7 +7809,7 @@ private fun TransactionsContent(
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Text(
-                                            paymentMethod,
+                                            methodLabel,
                                             style = MaterialTheme.typography.labelSmall,
                                             color = methodColor,
                                             modifier = Modifier.padding(6.dp)
