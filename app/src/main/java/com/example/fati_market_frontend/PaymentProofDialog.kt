@@ -71,28 +71,11 @@ internal fun PaymentProofDialog(
             color = MaterialTheme.colorScheme.background,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // The status bar sits above the bar itself, the way
-                // every other screen here does it.
-                Spacer(Modifier.safeAreaTopHeight())
-
-                TopAppBar(
-                    title = {
-                        Text(
-                            if (isGcash) "Pay with GCash" else "Payment",
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                    // The container is already inset by safeAreaTop;
-                    // without this the bar adds the status bar twice.
-                    windowInsets = WindowInsets(0),
+                MarketPageTopBar(
+                    title = if (isGcash) "Pay with GCash" else "Payment",
+                    onBack = onDismiss,
+                    navigationIcon = Icons.Filled.Close,
+                    navigationContentDescription = "Close",
                 )
 
                 Column(
