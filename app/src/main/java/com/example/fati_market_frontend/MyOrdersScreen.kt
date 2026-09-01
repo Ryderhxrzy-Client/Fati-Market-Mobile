@@ -281,7 +281,7 @@ private fun OrderHistoryCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TransactionStatusPill(order.status)
+                TransactionStatusPill(order.status, paymentMethod = order.paymentMethod)
             }
 
             Column(horizontalAlignment = Alignment.End) {
@@ -324,17 +324,21 @@ private fun OrderHistoryCard(
             )
             SummaryRow(
                 label = "Payment status",
-                value = when (order.paymentStatus) {
-                    "unpaid" -> "Not yet paid"
-                    "proof_submitted" -> "Waiting for admin"
-                    "verified" -> "Paid"
-                    "rejected" -> "Declined"
-                    else -> order.paymentStatus.replace('_', ' ')
-                },
-                valueColor = when (order.paymentStatus) {
-                    "verified" -> accents.success
-                    "rejected" -> MaterialTheme.colorScheme.error
-                    "unpaid" -> accents.warning
+                // One wording for the whole app: the same helper the order
+                // card's pill uses, so this row and that pill can never
+                // disagree about one order.
+                value = paymentStateLabel(
+                    paymentStatus = order.paymentStatus,
+                    paymentMethod = order.paymentMethod,
+                    orderStatus = order.status,
+                    isFullPointsCheckout = order.isFullPointsCheckout,
+                ),
+                valueColor = when {
+                    order.paymentStatus == "verified" -> accents.success
+                    order.paymentStatus == "rejected" -> MaterialTheme.colorScheme.error
+                    isApprovedCashPickup(order.paymentStatus, order.paymentMethod, order.status) ->
+                        accents.info
+                    order.paymentStatus == "unpaid" -> accents.warning
                     else -> null
                 },
             )
@@ -366,7 +370,21 @@ private fun OrderHistoryCard(
 
         val stillOwes = order.paymentStatus == "unpaid" && !order.isTerminal
 
-        if (stillOwes) {
+        // A cash order that Admin has approved needs no action in the app: the
+        // buyer walks in with their pickup code and pays there. Saying anything
+        // else here sent them looking for a payment screen that cannot exist.
+        val approvedCashPickup = order.paymentMethod == "cash" &&
+            (order.status == "reserved" || order.status == "ready_for_pickup")
+
+        if (stillOwes && approvedCashPickup) {
+            InfoBanner(
+                title = "Approved - pay at the store",
+                text = "Show your pickup code when you collect the item and hand over " +
+                    Money.format(order.amountDue) + " in cash. It is marked paid then.",
+                tone = StatusTone.Info,
+                icon = Icons.Filled.Storefront,
+            )
+        } else if (stillOwes) {
             PrimaryButton(
                 text = if (order.paymentMethod == "gcash") {
                     "Pay " + Money.format(order.amountDue)
@@ -396,6 +414,52 @@ private fun OrderHistoryCard(
                 onClick = onViewReceipt,
                 modifier = Modifier.fillMaxWidth(),
                 icon = Icons.Filled.ReceiptLong,
+            )
+        }
+
+        // Proof the item actually changed hands: the photograph Ofelia takes at
+        // the counter. The buyer's copy of it, so they can see who collected
+        // their order - and have something to point at if it was not them.
+        order.handoverPhoto?.let { photo ->
+            var viewing by remember(photo) { mutableStateOf(false) }
+
+            val caption = "Photographed at the counter when the item was handed over" +
+                (Dates.short(order.completedAt)?.let { " · $it" } ?: "")
+
+            if (viewing) {
+                OrderPhotoViewer(
+                    title = "Handover proof",
+                    imageUrl = photo,
+                    caption = caption,
+                    onDismiss = { viewing = false },
+                )
+            }
+
+            SoftDivider()
+
+            Overline("Handover proof")
+
+            Text(
+                caption,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            AsyncImage(
+                model = photo,
+                contentDescription = "Handover proof",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable { viewing = true },
+            )
+
+            Text(
+                "Tap to enlarge",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
 
