@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -30,6 +32,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -46,6 +49,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.fati_market.safeAreaTopHeight
+import com.fati_market.ui.theme.DarkGreen
+import com.fati_market.ui.theme.DarkGreenLight
 import com.fati_market.ui.theme.LocalMarketAccents
 import com.fati_market.ui.theme.OverlineStyle
 import com.fati_market.ui.theme.PriceStyle
@@ -137,6 +144,49 @@ fun Overline(
         color = color,
         modifier = modifier,
     )
+}
+
+/**
+ * The full-screen page header, built the way the admin dashboard builds it.
+ *
+ * The status bar clearance is a Spacer of its own above a fixed 56.dp row -
+ * not a Material [TopAppBar], whose 64.dp height plus its own window insets
+ * left the student pages with a noticeably taller gap up top than every
+ * other page in the app. Same construction, same height, everywhere.
+ */
+@Composable
+fun MarketPageTopBar(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    navigationIcon: ImageVector = Icons.Filled.ArrowBack,
+    navigationContentDescription: String = "Back",
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight))),
+    ) {
+        Spacer(Modifier.safeAreaTopHeight())
+
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(navigationIcon, contentDescription = navigationContentDescription, tint = Color.White)
+            }
+            Text(
+                title,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.weight(1f),
+            )
+            actions()
+        }
+    }
 }
 
 /** A section title with an optional trailing action. */
