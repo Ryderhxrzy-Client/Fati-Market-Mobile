@@ -311,8 +311,21 @@ internal object MarketplaceApi {
         }
     }
 
+    /** Money that has arrived: a GCash transfer whose proof checks out. */
     fun verifyPayment(token: String, transactionId: Int): Result<MarketTransaction> =
         post(token, "/admin/transactions/$transactionId/verify-payment", JSONObject()) {
+            parseTransaction(it.getJSONObject("data"))
+        }
+
+    /**
+     * Approve a pay-at-the-store order without marking it paid.
+     *
+     * Cash is handed over at the counter, so this accepts the method the buyer
+     * chose, holds the item and releases their pickup code. The money is
+     * settled by [completeTransaction], where it is actually taken.
+     */
+    fun approveOrder(token: String, transactionId: Int): Result<MarketTransaction> =
+        post(token, "/admin/transactions/$transactionId/approve-order", JSONObject()) {
             parseTransaction(it.getJSONObject("data"))
         }
 
@@ -378,6 +391,61 @@ internal object MarketplaceApi {
         }) { parseTransaction(it.getJSONObject("data")) }
 
     // ── Plumbing ─────────────────────────────────────────────────────────
+
+    // ── Categories and activity ─────────────────────────────────────────
+
+    /** Every category, with how many items each one holds. */
+    fun fetchCategories(token: String): Result<List<MarketCategory>> =
+        get(token, "/categories") { json ->
+            val arr = json.getJSONArray("data")
+            (0 until arr.length()).map { parseCategory(arr.getJSONObject(it)) }
+        }
+
+    fun createCategory(token: String, name: String, description: String?): Result<MarketCategory> =
+        post(token, "/admin/categories", JSONObject().apply {
+            put("name", name)
+            description?.takeIf { it.isNotBlank() }?.let { put("description", it) }
+        }) { parseCategory(it.getJSONObject("data")) }
+
+    fun updateCategory(
+        token: String,
+        categoryId: Int,
+        name: String,
+        description: String?,
+    ): Result<MarketCategory> {
+        val body = JSONObject().apply {
+            put("name", name)
+            description?.takeIf { it.isNotBlank() }?.let { put("description", it) }
+        }
+
+        val request = Request.Builder()
+            .url("$BASE_URL/admin/categories/$categoryId")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .put(body.toString().toRequestBody(JSON))
+            .build()
+
+        return execute(request) { parseCategory(it.getJSONObject("data")) }
+    }
+
+    /** Refused by the server while items still point at the category. */
+    fun deleteCategory(token: String, categoryId: Int): Result<Unit> {
+        val request = Request.Builder()
+            .url("$BASE_URL/admin/categories/$categoryId")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .delete()
+            .build()
+
+        return execute(request) { }
+    }
+
+    /** What has been happening in the store, newest first. */
+    fun fetchActivity(token: String, limit: Int = 100): Result<List<ActivityEntry>> =
+        get(token, "/admin/activity?limit=$limit") { json ->
+            val arr = json.getJSONArray("data")
+            (0 until arr.length()).map { parseActivity(arr.getJSONObject(it)) }
+        }
 
     private fun <T> get(token: String, path: String, parse: (JSONObject) -> T): Result<T> {
         val request = Request.Builder()
