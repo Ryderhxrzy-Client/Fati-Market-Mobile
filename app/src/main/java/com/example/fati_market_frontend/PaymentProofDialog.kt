@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -185,10 +187,18 @@ internal fun PaymentProofDialog(
 
                             OutlinedTextField(
                                 value = referenceNumber,
-                                onValueChange = { referenceNumber = it; error = null },
+                                // A GCash reference is digits only. Filtering on
+                                // the way in beats rejecting it on submit, and it
+                                // also drops the spaces GCash shows the number
+                                // with when the buyer copy-pastes it.
+                                onValueChange = { typed ->
+                                    referenceNumber = typed.filter { it.isDigit() }.take(20)
+                                    error = null
+                                },
                                 label = { Text("GCash reference number") },
-                                placeholder = { Text("e.g. 1234 567 890123") },
+                                placeholder = { Text("e.g. 1234567890123") },
                                 singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = MaterialTheme.shapes.small,
                             )
