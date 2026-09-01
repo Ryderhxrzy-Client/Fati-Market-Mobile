@@ -110,28 +110,7 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxSize(),
                 containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = WindowInsets(0),
-                topBar = {
-                    Column {
-                    // The status bar sits above the bar itself, the way
-                    // every other screen here does it.
-                    Spacer(Modifier.safeAreaTopHeight())
-
-                    TopAppBar(
-                        title = { Text("My Orders", style = MaterialTheme.typography.titleLarge) },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                        ),
-                        // The container is already inset by safeAreaTop;
-                        // without this the bar adds the status bar twice.
-                        windowInsets = WindowInsets(0),
-                    )
-                    }
-                },
+                topBar = { MarketPageTopBar("My Orders", onDismiss) },
             ) { padding ->
                 val visible = remember(orders, selectedTab) {
                     orders.filter { selectedTab.matches(it) }
@@ -466,23 +445,11 @@ internal fun ReceiptDialog(
             color = MaterialTheme.colorScheme.background,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // The status bar sits above the bar itself, the way
-                // every other screen here does it.
-                Spacer(Modifier.safeAreaTopHeight())
-
-                TopAppBar(
-                    title = { Text("Receipt", style = MaterialTheme.typography.titleLarge) },
-                    navigationIcon = {
-                        IconButton(onClick = onDismiss) {
-                            Icon(Icons.Filled.Close, contentDescription = "Close")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-                    // The container is already inset by safeAreaTop;
-                    // without this the bar adds the status bar twice.
-                    windowInsets = WindowInsets(0),
+                MarketPageTopBar(
+                    title = "Receipt",
+                    onBack = onDismiss,
+                    navigationIcon = Icons.Filled.Close,
+                    navigationContentDescription = "Close",
                 )
 
                 when {
