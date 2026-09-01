@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import kotlinx.coroutines.launch
 import com.fati_market.ui.theme.DarkGreen
 import com.fati_market.ui.theme.DarkGreenLight
 import com.fati_market.ui.theme.Gold
@@ -31,6 +32,19 @@ import com.fati_market.ui.theme.Gold
 @Composable
 fun ForgotPasswordScreen(navController: NavController) {
     var email by remember { mutableStateOf("") }
+
+    // The reset happens in two halves on this one screen: ask for a code, then
+    // spend it. Sending them out to a browser and back for a link is a worse
+    // trip than typing six digits.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    var codeSent by remember { mutableStateOf(false) }
+    var code by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     val headerGradient = Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight))
 
@@ -142,9 +156,92 @@ fun ForgotPasswordScreen(navController: NavController) {
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // Send Reset Link Button
+                // ── The code, and the new password it buys ────────────────────
+                if (codeSent) {
+                    OutlinedTextField(
+                        value = code,
+                        onValueChange = { code = it.filter { c -> c.isDigit() }.take(6); error = null },
+                        label = { Text("6-digit code") },
+                        placeholder = { Text("From your email") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it; error = null },
+                        label = { Text("New password") },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+
+                notice?.let {
+                    Text(
+                        text = it,
+                        color = DarkGreen,
+                        fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+                }
+
+                error?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 13.sp,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                    )
+                }
+
                 Button(
-                    onClick = { /* TODO: forgot password logic */ },
+                    enabled = !working,
+                    onClick = {
+                        scope.launch {
+                            error = null
+                            notice = null
+
+                            if (email.isBlank()) {
+                                error = "Enter your email first."
+                                return@launch
+                            }
+
+                            working = true
+
+                            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                if (codeSent) {
+                                    resetPasswordWithCode(email.trim(), code, newPassword)
+                                } else {
+                                    requestPasswordResetCode(email.trim())
+                                }
+                            }
+
+                            working = false
+
+                            when {
+                                // The request step always succeeds - it must not
+                                // reveal whether the address has an account.
+                                result.success && !codeSent -> {
+                                    codeSent = true
+                                    notice = result.message
+                                }
+
+                                result.success -> {
+                                    notice = result.message
+                                    navController.navigate("login") {
+                                        popUpTo("forgot_password") { inclusive = true }
+                                    }
+                                }
+
+                                else -> error = result.message
+                            }
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
@@ -152,11 +249,22 @@ fun ForgotPasswordScreen(navController: NavController) {
                     colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
                 ) {
                     Text(
-                        text = "Send Reset Link",
+                        text = when {
+                            working -> "Please wait..."
+                            codeSent -> "Change my password"
+                            else -> "Email me a code"
+                        },
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
+                }
+
+                if (codeSent) {
+                    TextButton(
+                        onClick = { codeSent = false; code = ""; notice = null; error = null },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Use a different email", color = DarkGreen) }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
