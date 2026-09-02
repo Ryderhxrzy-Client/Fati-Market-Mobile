@@ -143,6 +143,30 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
     var checkoutItem    by remember { mutableStateOf<Item?>(null) }
     var showMyOrders    by remember { mutableStateOf(false) }
     val currentUserId   = remember { prefs.getInt("user_id", 0) }
+
+    // The school account is lent: once it is disabled, an account keyed only to
+    // it is unreachable. This asks once for a personal address that outlives
+    // graduation, and stops asking as soon as one is linked or declined.
+    var linkedPersonalEmail by remember { mutableStateOf(prefs.getString("personal_email", "").orEmpty()) }
+    var promptedForEmail by remember {
+        mutableStateOf(prefs.getBoolean("personal_email_prompt_hidden", false))
+    }
+    var askingPersonalEmail by remember { mutableStateOf(false) }
+
+    LaunchedEffect(linkedPersonalEmail, promptedForEmail) {
+        if (linkedPersonalEmail.isBlank() && !promptedForEmail) askingPersonalEmail = true
+    }
+
+    if (askingPersonalEmail) {
+        PersonalEmailDialog(
+            onDismiss = {
+                askingPersonalEmail = false
+                promptedForEmail = true
+                prefs.edit().putBoolean("personal_email_prompt_hidden", true).apply()
+            },
+            onLinked = { linkedPersonalEmail = it; askingPersonalEmail = false },
+        )
+    }
     val drawerState  = rememberDrawerState(DrawerValue.Closed)
     val scope        = rememberCoroutineScope()
     val openDrawer   = { scope.launch { drawerState.open() } }

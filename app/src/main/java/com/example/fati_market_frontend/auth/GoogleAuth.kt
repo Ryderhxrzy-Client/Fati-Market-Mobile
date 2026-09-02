@@ -278,6 +278,11 @@ fun persistSession(context: Context, responseBody: String) {
         "user_profile_picture",
         if (data.isNull("profile_picture")) "" else data.optString("profile_picture", ""),
     )
+    // Null while nothing is linked, which is what the dashboard prompt reads.
+    editor.putString(
+        "personal_email",
+        if (data.isNull("personal_email")) "" else data.optString("personal_email", ""),
+    )
     editor.putString("user_role", data.optString("role", "student"))
     editor.putInt("user_wallet_points", data.optInt("wallet_points", 0))
 
@@ -322,4 +327,45 @@ fun GoogleButton(
             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
         )
     }
+}
+
+// ── The address a student keeps after graduating ─────────────────────────────
+
+/**
+ * Start linking or changing the personal email.
+ *
+ * Sends a code to the address being proposed - never to the one on file - so a
+ * borrowed phone cannot quietly move the recovery address somewhere else.
+ */
+fun requestPersonalEmail(token: String, personalEmail: String): GoogleAuthResult {
+    val body = JSONObject().put("personal_email", personalEmail)
+        .toString()
+        .toRequestBody("application/json".toMediaType())
+
+    return call(
+        Request.Builder()
+            .url("$API/account/personal-email")
+            .header("Accept", "application/json")
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+    )
+}
+
+/** Finish the link with the code that arrived at the new address. */
+fun confirmPersonalEmail(token: String, personalEmail: String, code: String): GoogleAuthResult {
+    val body = JSONObject()
+        .put("personal_email", personalEmail)
+        .put("code", code)
+        .toString()
+        .toRequestBody("application/json".toMediaType())
+
+    return call(
+        Request.Builder()
+            .url("$API/account/personal-email/confirm")
+            .header("Accept", "application/json")
+            .header("Authorization", "Bearer $token")
+            .post(body)
+            .build()
+    )
 }

@@ -6935,6 +6935,34 @@ fun AdminProfileContent(
                     Icons.Filled.AdminPanelSettings, "Role",
                     role.replaceFirstChar { it.uppercaseChar() }
                 )
+
+                // The address that outlives the school account. Only students
+                // need it - an admin account is not lent out by a school.
+                if (!role.equals("admin", true)) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+
+                    var linked by remember {
+                        mutableStateOf(prefs.getString("personal_email", "").orEmpty())
+                    }
+                    var editing by remember { mutableStateOf(false) }
+
+                    if (editing) {
+                        PersonalEmailDialog(
+                            onDismiss = { editing = false },
+                            onLinked = { linked = it; editing = false },
+                            existing = linked.takeIf { it.isNotBlank() },
+                        )
+                    }
+
+                    ProfileActionRow(
+                        icon = Icons.Filled.AlternateEmail,
+                        title = "Personal email",
+                        subtitle = linked.ifBlank {
+                            "Not set - you will lose this account when your school email stops working"
+                        },
+                        onClick = { editing = true }
+                    )
+                }
             }
 
             // ── Rewards ───────────────────────────────────────────────────
