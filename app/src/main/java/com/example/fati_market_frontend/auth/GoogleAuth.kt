@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import com.fati_market.auth.utils.getFileName
@@ -305,26 +303,47 @@ fun GoogleButton(
     modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
     enabled: Boolean = true,
 ) {
+    val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+
     androidx.compose.material3.OutlinedButton(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        shape = androidx.compose.material3.MaterialTheme.shapes.small,
+        border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outline),
+        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+            containerColor = scheme.surface,
+            contentColor = scheme.onSurface,
+        ),
     ) {
-        androidx.compose.material3.Icon(
-            androidx.compose.material.icons.Icons.Filled.AccountCircle,
-            contentDescription = null,
+        // The four-colour "G" as a ring of arcs, so the button reads as
+        // Google's without shipping a bitmap.
+        androidx.compose.foundation.Canvas(
             modifier = androidx.compose.ui.Modifier.size(20.dp),
-        )
+        ) {
+            val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = size.width * 0.22f)
+            val inset = size.width * 0.11f
+            val arcSize = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2)
+            val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
+            drawArc(androidx.compose.ui.graphics.Color(0xFF4285F4), -45f, 90f, false, topLeft, arcSize, style = stroke)
+            drawArc(androidx.compose.ui.graphics.Color(0xFF34A853), 45f, 90f, false, topLeft, arcSize, style = stroke)
+            drawArc(androidx.compose.ui.graphics.Color(0xFFFBBC05), 135f, 90f, false, topLeft, arcSize, style = stroke)
+            drawArc(androidx.compose.ui.graphics.Color(0xFFEA4335), 225f, 90f, false, topLeft, arcSize, style = stroke)
+            drawLine(
+                androidx.compose.ui.graphics.Color(0xFF4285F4),
+                androidx.compose.ui.geometry.Offset(size.width * 0.5f, size.height * 0.5f),
+                androidx.compose.ui.geometry.Offset(size.width - inset, size.height * 0.5f),
+                strokeWidth = stroke.width,
+            )
+        }
         androidx.compose.foundation.layout.Spacer(
-            androidx.compose.ui.Modifier.width(10.dp)
+            androidx.compose.ui.Modifier.width(12.dp)
         )
         androidx.compose.material3.Text(
             text,
-            fontSize = 15.sp,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
         )
     }
 }

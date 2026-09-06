@@ -9,6 +9,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -109,7 +110,7 @@ private val DarkColors = darkColorScheme(
 /**
  * Corner radii.
  *
- * Generous but not pill-shaped: cards at 18dp read as modern without the
+ * Generous but not pill-shaped: cards at 16dp read as modern without the
  * content feeling like it is falling off the rounded edges.
  */
 val MarketShapes = Shapes(
@@ -137,10 +138,18 @@ data class MarketAccents(
     val info: Color,
     val onInfoContainer: Color,
     val infoContainer: Color,
-    /** Points and rewards are always amber, in both themes. */
+    /** Points and rewards are always gold, in both themes. */
     val reward: Color,
     val rewardContainer: Color,
     val onRewardContainer: Color,
+    /** The deep end of the brand gradient - hero headers, the splash. */
+    val brandDeep: Color,
+    /** The lighter end of the brand gradient. */
+    val brandLight: Color,
+    /** Content drawn on top of the brand gradient. */
+    val onBrand: Color,
+    /** Muted content on the brand gradient - subtitles, hints. */
+    val onBrandMuted: Color,
 )
 
 private val LightAccents = MarketAccents(
@@ -156,6 +165,10 @@ private val LightAccents = MarketAccents(
     reward = Amber600,
     rewardContainer = Amber50,
     onRewardContainer = Amber700,
+    brandDeep = Green800,
+    brandLight = Green600,
+    onBrand = Neutral0,
+    onBrandMuted = Neutral0.copy(alpha = 0.72f),
 )
 
 private val DarkAccents = MarketAccents(
@@ -171,9 +184,30 @@ private val DarkAccents = MarketAccents(
     reward = Amber300,
     rewardContainer = Color(0xFF4A3403),
     onRewardContainer = Amber100,
+    // Deeper still in dark mode, so the header reads as part of the dark UI
+    // rather than a bright band across the top of it.
+    brandDeep = Green900,
+    brandLight = Green700,
+    onBrand = Neutral0,
+    onBrandMuted = Neutral0.copy(alpha = 0.7f),
 )
 
 val LocalMarketAccents = staticCompositionLocalOf { LightAccents }
+
+/**
+ * The brand gradient used by every hero surface - page headers, the splash,
+ * the auth screens. One definition, so a header on the admin side and one on
+ * the student side are the same green.
+ */
+@Composable
+fun brandGradient(): Brush {
+    val accents = LocalMarketAccents.current
+    return Brush.linearGradient(
+        colors = listOf(accents.brandDeep, accents.brandLight),
+        start = androidx.compose.ui.geometry.Offset(0f, 0f),
+        end = androidx.compose.ui.geometry.Offset(900f, 700f),
+    )
+}
 
 /** Spacing scale, in multiples of 4dp. */
 object Spacing {
@@ -188,6 +222,15 @@ object Spacing {
 
     /** The standard horizontal inset for screen content. */
     val screen: Dp = 16.dp
+}
+
+/** Elevation steps. Kept low: modern surfaces are separated by tone, not shadow. */
+object Elevation {
+    val flat: Dp = 0.dp
+    val card: Dp = 1.dp
+    val raised: Dp = 3.dp
+    val floating: Dp = 6.dp
+    val bar: Dp = 10.dp
 }
 
 @Composable

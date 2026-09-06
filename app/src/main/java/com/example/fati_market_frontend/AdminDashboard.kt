@@ -30,6 +30,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -62,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -76,7 +81,26 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import coil.compose.SubcomposeAsyncImage
 import com.fati_market.ui.theme.DarkGreen
+import com.fati_market.ui.components.Avatar
+import com.fati_market.ui.components.BottomTab
+import com.fati_market.ui.components.ChoiceChip
+import com.fati_market.ui.components.DrawerRow
 import com.fati_market.ui.components.EmptyState
+import com.fati_market.ui.components.ErrorState
+import com.fati_market.ui.components.HeaderAction
+import com.fati_market.ui.components.InfoRowItem
+import com.fati_market.ui.components.ListRowSkeleton
+import com.fati_market.ui.components.LoadingState
+import com.fati_market.ui.components.MarketBottomBar
+import com.fati_market.ui.components.MarketHeader
+import com.fati_market.ui.components.MarketPageTopBar
+import com.fati_market.ui.components.QuickAction
+import com.fati_market.ui.components.RowDivider
+import com.fati_market.ui.components.SearchField
+import com.fati_market.ui.components.MarketTextField
+import com.fati_market.ui.components.SettingsGroup
+import com.fati_market.ui.components.SettingsRow
+import com.fati_market.ui.components.StatTile
 import com.fati_market.ui.components.IconInfoRow
 import com.fati_market.ui.components.InfoBanner
 import com.fati_market.ui.components.ItemCardSkeleton
@@ -91,6 +115,7 @@ import com.fati_market.ui.components.PriceSize
 import com.fati_market.ui.components.PriceTag
 import com.fati_market.ui.components.PrimaryButton
 import com.fati_market.ui.components.RewardChip
+import com.fati_market.ui.components.RoundIconButton
 import com.fati_market.ui.components.SecondaryButton
 import com.fati_market.ui.components.SectionHeader
 import com.fati_market.ui.components.ShimmerBox
@@ -99,7 +124,10 @@ import com.fati_market.ui.components.StatusPill
 import com.fati_market.ui.components.StatusTone
 import com.fati_market.ui.components.SummaryRow
 import com.fati_market.ui.components.TransactionStatusPill
+import com.fati_market.ui.theme.Elevation
+import com.fati_market.ui.theme.FavoriteRed
 import com.fati_market.ui.theme.LocalMarketAccents
+import com.fati_market.ui.theme.brandGradient
 import com.fati_market.ui.theme.PriceStyle
 import com.fati_market.ui.theme.PriceStyleLarge
 import com.fati_market.ui.theme.PriceStyleSmall
@@ -385,12 +413,6 @@ private fun ShimmerEffect(modifier: Modifier = Modifier) {
     )
 }
 
-private fun statusColor(status: String) = when (status.lowercase()) {
-    "approved" -> Color(0xFF4CAF50)
-    "declined" -> Color(0xFFF44336)
-    "blocked"  -> Color(0xFF9C27B0)
-    else       -> Color(0xFFFF9800)
-}
 
 // ── Admin Dashboard ────────────────────────────────────────────────────────────
 
@@ -439,36 +461,15 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
     val scope             = rememberCoroutineScope()
     val openDrawer: () -> Unit = { scope.launch { drawerState.open() } }
 
-    // Fetch wallet points from API with polling every 5 seconds
+    // The store's wallet balance. Refreshed on a slow cadence: it used to be
+    // polled every five seconds by this screen *and* by every page header,
+    // which kept the radio busy for a number that rarely moves.
     LaunchedEffect(token) {
-        if (token.isNotBlank()) {
-            while (true) {
-                scope.launch {
-                    try {
-                        val points = withContext(Dispatchers.IO) {
-                            val request = Request.Builder()
-                                .url("https://fati-api.alertaraqc.com/api/wallet")
-                                .header("Authorization", "Bearer $token")
-                                .header("Accept", "application/json")
-                                .get()
-                                .build()
-                            adminHttpClient.newCall(request).execute().use { response ->
-                                if (response.isSuccessful) {
-                                    val body = response.body?.string() ?: ""
-                                    val json = JSONObject(body)
-                                    val dataObj = json.optJSONObject("data")
-                                    dataObj?.optInt("wallet_points", 0) ?: 0
-                                } else {
-                                    0
-                                }
-                            }
-                        }
-                        userWalletPoints = points
-                    } catch (e: Exception) {
-                    }
-                }
-                delay(5000) // Poll every 5 seconds
-            }
+        if (token.isBlank()) return@LaunchedEffect
+        while (true) {
+            val result = withContext(Dispatchers.IO) { MarketplaceApi.fetchWalletPoints(token) }
+            if (result is MarketplaceApi.Result.Ok) userWalletPoints = result.value
+            delay(30_000)
         }
     }
 
@@ -484,13 +485,19 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
         }
     }
 
+    fun selectAdminTab(tab: AdminTab) {
+        selectedTab      = tab
+        drawerPage       = null
+        chatConversation = null
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 drawerTonalElevation = 0.dp,
-                drawerShape = RoundedCornerShape(0.dp),
+                drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
                 windowInsets = WindowInsets(0),
                 modifier = Modifier.width(300.dp)
             ) {
@@ -499,8 +506,9 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                     userFirstName = userFirstName,
                     userLastName  = userLastName,
                     userEmail     = userEmail,
-                    userRole      = userRole,
                     userProfilePic = userProfilePic,
+                    isDarkMode    = isDarkMode,
+                    onThemeToggle = onThemeToggle,
                     onPageSelect  = { page ->
                         if (page == DrawerPage.Dashboard) {
                             drawerPage = null
@@ -509,6 +517,10 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                             drawerPage = page
                         }
                         scope.launch { drawerState.close() }
+                    },
+                    onScan = {
+                        scope.launch { drawerState.close() }
+                        launchScanner()
                     },
                     onLogout = onLogout
                 )
@@ -519,16 +531,38 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
         Scaffold(
             bottomBar = {
                 if (!chatIsOpen && drawerPage == null && scannedCode == null && showBottomBar.value) {
-                    AdminBottomBar(
-                        selected       = selectedTab,
-                        userProfilePic = userProfilePic,
-                        userInitial    = userFirstName.firstOrNull()?.uppercaseChar()?.toString() ?: "A",
-                        onScan         = { launchScanner() },
-                        onSelect       = { tab ->
-                            selectedTab      = tab
-                            drawerPage       = null
-                            chatConversation = null
-                        }
+                    // Students moved onto the bar: approving accounts is a
+                    // daily task for the store, and it used to take two taps
+                    // through the profile to reach. Settings folded into the
+                    // profile to make room.
+                    MarketBottomBar(
+                        tabs = listOf(
+                            BottomTab("Home", Icons.Outlined.Dashboard, Icons.Filled.Dashboard),
+                            BottomTab("Chat", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
+                            BottomTab("Students", Icons.Outlined.Group, Icons.Filled.Group),
+                            BottomTab("Profile", Icons.Outlined.Person, Icons.Filled.Person),
+                        ),
+                        selectedIndex = when (selectedTab) {
+                            AdminTab.HOME -> 0
+                            AdminTab.CHAT -> 1
+                            AdminTab.USERS -> 2
+                            AdminTab.PROFILE, AdminTab.SETTINGS -> 3
+                        },
+                        onSelect = { index ->
+                            selectAdminTab(
+                                when (index) {
+                                    0 -> AdminTab.HOME
+                                    1 -> AdminTab.CHAT
+                                    2 -> AdminTab.USERS
+                                    else -> AdminTab.PROFILE
+                                }
+                            )
+                        },
+                        centerLabel = "Scan",
+                        centerIcon = Icons.Filled.QrCodeScanner,
+                        onCenter = { launchScanner() },
+                        profilePicture = userProfilePic,
+                        profileInitial = userFirstName.firstOrNull()?.uppercaseChar()?.toString() ?: "A",
                     )
                 }
             },
@@ -570,7 +604,14 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                     }
                 } else {
                     when (selectedTab) {
-                        AdminTab.HOME     -> AdminHomeContent(onMenuClick = openDrawer)
+                        AdminTab.HOME     -> AdminHomeContent(
+                            onMenuClick   = openDrawer,
+                            firstName     = userFirstName,
+                            onOpenPage    = { drawerPage = it },
+                            onOpenStudents = { selectAdminTab(AdminTab.USERS) },
+                            onOpenChat    = { selectAdminTab(AdminTab.CHAT) },
+                            onScan        = { launchScanner() },
+                        )
                         AdminTab.CHAT     -> AdminChatContent(
                             onMenuClick          = openDrawer,
                             selectedConversation = chatConversation,
@@ -590,7 +631,10 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                                 userProfilePic = path
                             },
                             onManageOrders     = { drawerPage = DrawerPage.ManageOrders },
-                            onManageStudents   = { selectedTab = AdminTab.USERS }
+                            onManageStudents   = { selectAdminTab(AdminTab.USERS) },
+                            isDarkMode         = isDarkMode,
+                            onThemeToggle      = onThemeToggle,
+                            onLogout           = onLogout,
                         )
                     }
                 }
@@ -607,13 +651,16 @@ private fun AdminDrawerContent(
     userFirstName: String,
     userLastName: String,
     userEmail: String,
-    userRole: String,
     userProfilePic: String,
+    isDarkMode: Boolean,
+    onThemeToggle: () -> Unit,
     onPageSelect: (DrawerPage) -> Unit,
+    onScan: () -> Unit,
     onLogout: () -> Unit
 ) {
-    val fullName = "$userFirstName $userLastName".trim().ifBlank { "Administrator" }
-    val initial  = userFirstName.firstOrNull()?.uppercaseChar()?.toString() ?: "A"
+    val accents  = LocalMarketAccents.current
+    val fullName = "$userFirstName $userLastName".trim().ifBlank { "Ofelia's Store" }
+    val initial  = userFirstName.firstOrNull()?.uppercaseChar()?.toString() ?: "O"
 
     var showLogoutDialog     by remember { mutableStateOf(false) }
     var inventoryExpanded    by remember { mutableStateOf(false) }
@@ -625,16 +672,19 @@ private fun AdminDrawerContent(
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             icon = {
-                Icon(Icons.Filled.Logout, null,
+                Icon(Icons.AutoMirrored.Filled.Logout, null,
                     tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(32.dp))
             },
-            title = { Text("Logout", fontWeight = FontWeight.Bold) },
-            text  = { Text("Are you sure you want to logout?") },
+            title = { Text("Log out?") },
+            text  = { Text("You will need to sign in again to manage the store.") },
             confirmButton = {
-                Button(
+                PrimaryButton(
+                    text = "Log out",
+                    compact = true,
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
                     onClick = { showLogoutDialog = false; onLogout() },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("Logout", color = Color.White, fontWeight = FontWeight.SemiBold) }
+                )
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") }
@@ -663,183 +713,215 @@ private fun AdminDrawerContent(
     Column(modifier = Modifier.fillMaxHeight()) {
         // Fixed header (doesn't scroll)
         Column(
-            modifier = Modifier.fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
+            modifier = Modifier.fillMaxWidth().background(brandGradient())
         ) {
             Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.xl, vertical = Spacing.xl),
             ) {
-                // Avatar
-                Box(
-                    modifier = Modifier.size(48.dp).clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.2f))
-                        .border(2.dp, Color.White.copy(alpha = 0.4f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (userProfilePic.isNotBlank()) {
-                        SubcomposeAsyncImage(
-                            model = userProfilePic,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize().clip(CircleShape),
-                            contentScale = ContentScale.Crop,
-                            loading = { ShimmerEffect(Modifier.fillMaxSize()) },
-                            error = {
-                                Text(initial, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                            }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(
+                        url = userProfilePic,
+                        initial = initial,
+                        size = 56.dp,
+                        ringColor = Color.White.copy(alpha = 0.5f),
+                        containerColor = Color.White.copy(alpha = 0.2f),
+                        contentColor = Color.White,
+                    )
+                    Spacer(modifier = Modifier.width(Spacing.md))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            fullName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = accents.onBrand,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    } else {
-                        Text(initial, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        Text(
+                            userEmail.ifBlank { "Administrator" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = accents.onBrandMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(fullName, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    Text(userEmail.ifBlank { userRole.replaceFirstChar { it.uppercaseChar() } },
-                        color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp)
-                    Text(userRole.replaceFirstChar { it.uppercaseChar() },
-                        color = Color.White.copy(alpha = 0.55f), fontSize = 11.sp)
+                Spacer(Modifier.height(Spacing.md))
+                Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.16f)) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    ) {
+                        Icon(Icons.Filled.Storefront, null, tint = accents.onBrand, modifier = Modifier.size(14.dp))
+                        Text(
+                            "Store administrator",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accents.onBrand,
+                        )
+                    }
                 }
             }
         }
 
         // Scrollable content
-        Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState())) {
-            Spacer(modifier = Modifier.height(8.dp))
-        DrawerItem(Icons.Filled.Dashboard, "Dashboard",
-            selected = currentPage == null || currentPage == DrawerPage.Dashboard
-        ) { onPageSelect(DrawerPage.Dashboard) }
+        Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+            Spacer(modifier = Modifier.height(Spacing.sm))
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            color = MaterialTheme.colorScheme.outlineVariant)
+            DrawerRow(
+                icon = Icons.Outlined.Dashboard, label = "Dashboard",
+                selected = currentPage == null || currentPage == DrawerPage.Dashboard,
+                onClick = { onPageSelect(DrawerPage.Dashboard) },
+            )
+            DrawerRow(
+                icon = Icons.Outlined.QrCodeScanner, label = "Scan a pickup code",
+                selected = false,
+                onClick = onScan,
+            )
 
-        DrawerSectionHeader(Icons.Filled.Inventory, "Inventory Management", inventoryExpanded) { inventoryExpanded = !inventoryExpanded }
-        AnimatedVisibility(visible = inventoryExpanded) {
-            Column {
-                DrawerSubItem("Private Offers",  currentPage == DrawerPage.PrivateOffers)  { onPageSelect(DrawerPage.PrivateOffers) }
-                DrawerSubItem("Acquired Items",  currentPage == DrawerPage.AcquiredItems)  { onPageSelect(DrawerPage.AcquiredItems) }
-                DrawerSubItem("Public Listings", currentPage == DrawerPage.PublicListings) { onPageSelect(DrawerPage.PublicListings) }
-                DrawerSubItem("Reserved Items",  currentPage == DrawerPage.ReservedItems)  { onPageSelect(DrawerPage.ReservedItems) }
-                DrawerSubItem("Sold Items",      currentPage == DrawerPage.SoldItems)      { onPageSelect(DrawerPage.SoldItems) }
+            HorizontalDivider(modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                color = MaterialTheme.colorScheme.outlineVariant)
+
+            DrawerSectionHeader(Icons.Outlined.Inventory2, "Inventory", inventoryExpanded) { inventoryExpanded = !inventoryExpanded }
+            AnimatedVisibility(visible = inventoryExpanded) {
+                Column {
+                    DrawerSubItem("Private offers",  currentPage == DrawerPage.PrivateOffers)  { onPageSelect(DrawerPage.PrivateOffers) }
+                    DrawerSubItem("Acquired items",  currentPage == DrawerPage.AcquiredItems)  { onPageSelect(DrawerPage.AcquiredItems) }
+                    DrawerSubItem("Public listings", currentPage == DrawerPage.PublicListings) { onPageSelect(DrawerPage.PublicListings) }
+                    DrawerSubItem("Reserved items",  currentPage == DrawerPage.ReservedItems)  { onPageSelect(DrawerPage.ReservedItems) }
+                    DrawerSubItem("Sold items",      currentPage == DrawerPage.SoldItems)      { onPageSelect(DrawerPage.SoldItems) }
+                }
             }
-        }
 
-
-        DrawerSectionHeader(Icons.Filled.Receipt, "Transactions", transactionsExpanded) { transactionsExpanded = !transactionsExpanded }
-        AnimatedVisibility(visible = transactionsExpanded) {
-            Column {
-                DrawerSubItem("Manage Orders",       currentPage == DrawerPage.ManageOrders)       { onPageSelect(DrawerPage.ManageOrders) }
-                DrawerSubItem("Points Given",        currentPage == DrawerPage.PointsGiven)        { onPageSelect(DrawerPage.PointsGiven) }
-                DrawerSubItem("Points Received",     currentPage == DrawerPage.PointsReceived)     { onPageSelect(DrawerPage.PointsReceived) }
-                DrawerSubItem("Cash Transactions",   currentPage == DrawerPage.CashTransactions)   { onPageSelect(DrawerPage.CashTransactions) }
-                DrawerSubItem("Points-Only Orders",  currentPage == DrawerPage.PointsOnlyOrders)  { onPageSelect(DrawerPage.PointsOnlyOrders) }
-                DrawerSubItem("Transaction History", currentPage == DrawerPage.TransactionHistory) { onPageSelect(DrawerPage.TransactionHistory) }
-                DrawerSubItem("Profit Summary",      currentPage == DrawerPage.ProfitSummary)      { onPageSelect(DrawerPage.ProfitSummary) }
+            DrawerSectionHeader(Icons.Outlined.ReceiptLong, "Transactions", transactionsExpanded) { transactionsExpanded = !transactionsExpanded }
+            AnimatedVisibility(visible = transactionsExpanded) {
+                Column {
+                    DrawerSubItem("Manage orders",       currentPage == DrawerPage.ManageOrders)       { onPageSelect(DrawerPage.ManageOrders) }
+                    DrawerSubItem("Points given",        currentPage == DrawerPage.PointsGiven)        { onPageSelect(DrawerPage.PointsGiven) }
+                    DrawerSubItem("Points received",     currentPage == DrawerPage.PointsReceived)     { onPageSelect(DrawerPage.PointsReceived) }
+                    DrawerSubItem("Cash transactions",   currentPage == DrawerPage.CashTransactions)   { onPageSelect(DrawerPage.CashTransactions) }
+                    DrawerSubItem("Points-only orders",  currentPage == DrawerPage.PointsOnlyOrders)  { onPageSelect(DrawerPage.PointsOnlyOrders) }
+                    DrawerSubItem("Transaction history", currentPage == DrawerPage.TransactionHistory) { onPageSelect(DrawerPage.TransactionHistory) }
+                    DrawerSubItem("Profit summary",      currentPage == DrawerPage.ProfitSummary)      { onPageSelect(DrawerPage.ProfitSummary) }
+                }
             }
-        }
 
-
-
-
-        DrawerSectionHeader(Icons.Filled.BarChart, "Reports / Analytics", reportsExpanded) { reportsExpanded = !reportsExpanded }
-        AnimatedVisibility(visible = reportsExpanded) {
-            Column {
-                DrawerSubItem("Total Item Acquired",        currentPage == DrawerPage.TotalItemAcquired) { onPageSelect(DrawerPage.TotalItemAcquired) }
-                DrawerSubItem("Total Item Sold",            currentPage == DrawerPage.TotalItemSold)     { onPageSelect(DrawerPage.TotalItemSold) }
-                DrawerSubItem("Total Profit (from markup)", currentPage == DrawerPage.TotalProfit)       { onPageSelect(DrawerPage.TotalProfit) }
-                DrawerSubItem("Most Sold Category",         currentPage == DrawerPage.MostSoldCategory)  { onPageSelect(DrawerPage.MostSoldCategory) }
-                DrawerSubItem("Active Users",               currentPage == DrawerPage.ActiveUsers)       { onPageSelect(DrawerPage.ActiveUsers) }
+            DrawerSectionHeader(Icons.Outlined.BarChart, "Reports", reportsExpanded) { reportsExpanded = !reportsExpanded }
+            AnimatedVisibility(visible = reportsExpanded) {
+                Column {
+                    DrawerSubItem("Items acquired",       currentPage == DrawerPage.TotalItemAcquired) { onPageSelect(DrawerPage.TotalItemAcquired) }
+                    DrawerSubItem("Items sold",           currentPage == DrawerPage.TotalItemSold)     { onPageSelect(DrawerPage.TotalItemSold) }
+                    DrawerSubItem("Profit from markup",   currentPage == DrawerPage.TotalProfit)       { onPageSelect(DrawerPage.TotalProfit) }
+                    DrawerSubItem("Most sold category",   currentPage == DrawerPage.MostSoldCategory)  { onPageSelect(DrawerPage.MostSoldCategory) }
+                    DrawerSubItem("Active users",         currentPage == DrawerPage.ActiveUsers)       { onPageSelect(DrawerPage.ActiveUsers) }
+                }
             }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                color = MaterialTheme.colorScheme.outlineVariant)
+            DrawerRow(icon = Icons.Outlined.Category, label = "Categories", selected = currentPage == DrawerPage.Categories, onClick = { onPageSelect(DrawerPage.Categories) })
+            DrawerRow(icon = Icons.Outlined.History, label = "Activity logs", selected = currentPage == DrawerPage.ActivityLogs, onClick = { onPageSelect(DrawerPage.ActivityLogs) })
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                color = MaterialTheme.colorScheme.outlineVariant)
+
+            // ── Appearance ─────────────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.md, vertical = Spacing.xxs)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(onClick = onThemeToggle)
+                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            ) {
+                Icon(
+                    if (isDarkMode) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
+                    null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(
+                    "Dark mode",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = isDarkMode, onCheckedChange = { onThemeToggle() })
+            }
+            Spacer(modifier = Modifier.height(Spacing.sm))
         }
 
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            color = MaterialTheme.colorScheme.outlineVariant)
-        DrawerItem(Icons.Filled.Category, "Categories", currentPage == DrawerPage.Categories) { onPageSelect(DrawerPage.Categories) }
-        DrawerItem(Icons.Filled.EventNote, "Activity Logs", currentPage == DrawerPage.ActivityLogs) { onPageSelect(DrawerPage.ActivityLogs) }
-
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            color = MaterialTheme.colorScheme.outlineVariant)
-
-        // Logout
-        Row(
-            modifier = Modifier.fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 2.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .clickable { showLogoutDialog = true }
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.Logout, null,
-                tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(14.dp))
-            Text("Logout", fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.error)
+        // Logout, pinned at the foot of the drawer
+        Column(modifier = Modifier.navigationBarsPadding()) {
+            Spacer(Modifier.height(Spacing.xs))
+            DrawerRow(
+                icon = Icons.AutoMirrored.Outlined.Logout,
+                label = "Log out",
+                selected = false,
+                onClick = { showLogoutDialog = true },
+                tint = MaterialTheme.colorScheme.error,
+            )
+            Spacer(modifier = Modifier.height(Spacing.md))
         }
-        Spacer(modifier = Modifier.height(24.dp))
-        }  // Close scrollable Column
-    }  // Close main Column
-}
-
-@Composable
-private fun DrawerItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) DarkGreen.copy(alpha = 0.12f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null,
-            tint = if (selected) DarkGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(14.dp))
-        Text(label, fontSize = 14.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) DarkGreen else MaterialTheme.colorScheme.onSurface)
     }
 }
 
 @Composable
 private fun DrawerSectionHeader(icon: ImageVector, label: String, expanded: Boolean, onClick: () -> Unit) {
+    val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "chevron")
+
     Row(
         modifier = Modifier.fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .padding(horizontal = Spacing.md, vertical = Spacing.xxs)
+            .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = Spacing.md, vertical = Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(14.dp))
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-        Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-            null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Icons.Filled.ExpandMore,
+            null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = rotation },
+        )
     }
 }
 
 @Composable
 private fun DrawerSubItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+
     Row(
         modifier = Modifier.fillMaxWidth()
-            .padding(start = 44.dp, end = 12.dp, top = 1.dp, bottom = 1.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) DarkGreen.copy(alpha = 0.12f) else Color.Transparent)
+            .padding(start = 44.dp, end = Spacing.md, top = 1.dp, bottom = 1.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = Spacing.md, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.size(6.dp).clip(CircleShape)
-            .background(if (selected) DarkGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)))
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(label, fontSize = 13.sp,
+            .background(if (selected) primary else MaterialTheme.colorScheme.outline))
+        Spacer(modifier = Modifier.width(Spacing.md))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) DarkGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
+            color = if (selected) primary else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -1052,37 +1134,29 @@ private fun AdminPrivateOffersContent(
                 )
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    AdminPageHeader(title = "Private Offers", onMenuClick = onMenuClick)
+                    AdminPageHeader(
+                        title = "Private offers",
+                        subtitle = when {
+                            isLoading -> "Items students want to sell you"
+                            itemList.size == 1 -> "1 offer waiting for a decision"
+                            else -> "${itemList.size} offers waiting for a decision"
+                        },
+                        onMenuClick = onMenuClick,
+                    )
 
                     when {
-                        isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = DarkGreen)
-                        }
-                        errorMessage != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.padding(horizontal = 24.dp)
-                            ) {
-                                Icon(Icons.Filled.ErrorOutline, null,
-                                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                                Text(errorMessage ?: "", color = MaterialTheme.colorScheme.error)
-                                Button(onClick = { loadItems() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                                    Text("Retry", color = Color.White)
-                                }
-                            }
-                        }
+                        isLoading -> LoadingState(message = "Loading offers…")
+                        errorMessage != null -> ErrorState(
+                            title = "Could not load offers",
+                            message = errorMessage ?: "",
+                            onRetry = { loadItems() },
+                        )
                         itemList.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(Icons.Filled.Inventory2, null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                                Text("No private offers at the moment.",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            EmptyState(
+                                icon = Icons.Outlined.LocalOffer,
+                                title = "No offers right now",
+                                message = "When a student offers an item to the store, it shows up here for you to review.",
+                            )
                         }
                         else -> LazyColumn(
                             modifier            = Modifier.fillMaxSize(),
@@ -1223,36 +1297,25 @@ private fun AdminItemListContent(
             // ── List ────────────────────────────────────────────────────────────
             else -> {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    AdminPageHeader(title = title, onMenuClick = onMenuClick)
+                    AdminPageHeader(
+                        title = title,
+                        subtitle = if (isLoading) null else "${itemList.size} item${if (itemList.size == 1) "" else "s"}",
+                        onMenuClick = onMenuClick,
+                    )
 
                     when {
-                        isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = DarkGreen)
-                        }
-                        errorMessage != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.padding(horizontal = 24.dp)
-                            ) {
-                                Icon(Icons.Filled.ErrorOutline, null,
-                                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                                Text(errorMessage ?: "", color = MaterialTheme.colorScheme.error)
-                                Button(onClick = { loadItems() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                                    Text("Retry", color = Color.White)
-                                }
-                            }
-                        }
+                        isLoading -> LoadingState(message = "Loading items…")
+                        errorMessage != null -> ErrorState(
+                            title = "Could not load items",
+                            message = errorMessage ?: "",
+                            onRetry = { loadItems() },
+                        )
                         itemList.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(Icons.Filled.Inventory2, null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                                Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            EmptyState(
+                                icon = Icons.Outlined.Inventory2,
+                                title = "Nothing here yet",
+                                message = emptyText,
+                            )
                         }
                         else -> LazyColumn(
                             modifier            = Modifier.fillMaxSize(),
@@ -1293,151 +1356,88 @@ private fun AdminItemListContent(
 // ── View-only card (Public / Reserved / Sold — no Edit or Chat buttons) ────────
 @Composable
 private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditClick: (Item) -> Unit = {}) {
-    Card(
-        modifier  = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape     = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+    MarketCard(onClick = onClick, contentPadding = PaddingValues(0.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(Spacing.md)) {
             // ── Photo ─────────────────────────────────────────────────────────
-            val photoUrl = item.photos.firstOrNull() ?: ""
-            if (photoUrl.isNotBlank()) {
-                AsyncImage(
-                    model              = photoUrl,
-                    contentDescription = null,
-                    contentScale       = ContentScale.Crop,
-                    modifier           = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Photo, null,
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.surfaceContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                val photoUrl = item.photos.firstOrNull() ?: ""
+                if (photoUrl.isNotBlank()) {
+                    AsyncImage(
+                        model              = photoUrl,
+                        contentDescription = null,
+                        contentScale       = ContentScale.Crop,
+                        modifier           = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Icon(Icons.Outlined.Image, null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(48.dp))
+                        modifier = Modifier.size(32.dp))
                 }
             }
 
+            Spacer(Modifier.width(Spacing.md))
+
             Column(
-                modifier            = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier            = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs)
             ) {
-                // ── Title + status chip ────────────────────────────────────────
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically
+                    verticalAlignment     = Alignment.Top
                 ) {
                     Text(
                         item.title,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 17.sp,
-                        maxLines   = 1,
+                        style      = MaterialTheme.typography.titleMedium,
+                        maxLines   = 2,
                         overflow   = TextOverflow.Ellipsis,
-                        modifier   = Modifier.weight(1f).padding(end = 8.dp)
+                        modifier   = Modifier.weight(1f).padding(end = Spacing.sm)
                     )
-                    val statusColor = when (item.status.lowercase()) {
-                        "sold"     -> MaterialTheme.colorScheme.error
-                        "reserved" -> Color(0xFFE65100)
-                        "public"   -> DarkGreen
-                        "acquired" -> Color(0xFF1565C0)
-                        else       -> MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                    val statusBg = statusColor.copy(alpha = 0.12f)
-                    Surface(shape = RoundedCornerShape(50), color = statusBg) {
-                        Text(
-                            item.status.replaceFirstChar { it.uppercaseChar() },
-                            modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            fontSize   = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color      = statusColor
-                        )
-                    }
+                    ItemStatusPill(item.status)
                 }
 
-                // ── Seller + price ─────────────────────────────────────────────
+                // Published items show the selling price; earlier
+                // stages show what the student asked for.
+                PriceTag(
+                    if (item.publicPrice != null) item.displayPrice else item.displayAskingPrice,
+                    size = PriceSize.Small,
+                )
+
                 Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    Row(
-                        modifier              = Modifier.weight(1f),
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(Icons.Filled.Person, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp))
-                        Text(item.sellerEmail, fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Filled.MonetizationOn, null,
-                            tint = DarkGreen, modifier = Modifier.size(14.dp))
-                        // Published items show the selling price; earlier
-                        // stages show what the student asked for.
-                        Text(
-                            if (item.publicPrice != null) item.displayPrice else item.displayAskingPrice,
-                            fontWeight = FontWeight.Bold,
-                            color = DarkGreen, fontSize = 13.sp)
-                    }
+                    Icon(Icons.Outlined.Person, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp))
+                    Text(item.sellerEmail, style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-
-                Text(item.description, fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3, overflow = TextOverflow.Ellipsis)
 
                 // ── Markup info row ───────────────────────────────────────────
                 if (item.markup != null) {
-                    HorizontalDivider()
                     Row(verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         Icon(Icons.Filled.TrendingUp, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = LocalMarketAccents.current.success,
                             modifier = Modifier.size(14.dp))
                         // Profit = public price - acquisition price.
-                        Text("Markup: ${Money.format(item.markup)}", fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Markup ${Money.format(item.markup)}", style = MaterialTheme.typography.labelSmall,
+                            color = LocalMarketAccents.current.success)
                     }
                 }
+            }
 
-                // ── Action buttons ──────────────────────────────────────────
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier              = Modifier.weight(1f)
-                    ) {
-                        Text("View details", fontSize = 12.sp, color = DarkGreen,
-                            fontWeight = FontWeight.SemiBold)
-                        Icon(Icons.Filled.ChevronRight, null,
-                            tint = DarkGreen, modifier = Modifier.size(16.dp))
-                    }
-                    IconButton(
-                        onClick = { onEditClick(item) },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(Icons.Filled.Edit, null,
-                            tint = DarkGreen, modifier = Modifier.size(18.dp))
-                    }
-                }
+            IconButton(onClick = { onEditClick(item) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Outlined.Edit, "Edit item",
+                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -1458,51 +1458,23 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
         // ── Top bar ───────────────────────────────────────────────────────────
         val statusColor = when (item.status.lowercase()) {
             "sold"     -> MaterialTheme.colorScheme.error
-            "reserved" -> Color(0xFFE65100)
-            "public"   -> DarkGreen
-            "acquired" -> Color(0xFF1565C0)
+            "reserved" -> LocalMarketAccents.current.warning
+            "public"   -> MaterialTheme.colorScheme.primary
+            "acquired" -> LocalMarketAccents.current.info
             else       -> MaterialTheme.colorScheme.onSurfaceVariant
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
-        ) {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            Row(
-                modifier          = Modifier
-                    .fillMaxWidth()
-                    .padding(top = with(LocalDensity.current) {
-                        WindowInsets.statusBars.getTop(this).toDp()
-                    })
-                    .height(56.dp),
-                verticalAlignment = Alignment.CenterVertically
+        MarketPageTopBar(title = item.title, onBack = onBack) {
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.2f),
+                modifier = Modifier.padding(end = Spacing.md)
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
-                }
                 Text(
-                    text       = item.title,
-                    color      = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 18.sp,
-                    maxLines   = 1,
-                    overflow   = TextOverflow.Ellipsis,
-                    modifier   = Modifier.weight(1f).padding(end = 12.dp)
+                    item.status.replaceFirstChar { it.uppercaseChar() },
+                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White
                 )
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = Color.White.copy(alpha = 0.18f),
-                    modifier = Modifier.padding(end = 12.dp)
-                ) {
-                    Text(
-                        item.status.replaceFirstChar { it.uppercaseChar() },
-                        modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        fontSize   = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color      = Color.White
-                    )
-                }
             }
         }
 
@@ -1653,12 +1625,12 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Icon(Icons.Filled.MonetizationOn, null,
-                                tint = DarkGreen, modifier = Modifier.size(20.dp))
+                                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Text(
                                 if (item.publicPrice != null) item.displayPrice else item.displayAskingPrice,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize   = 20.sp,
-                                color      = DarkGreen
+                                color      = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -1672,11 +1644,11 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(DarkGreen.copy(alpha = 0.12f)),
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(Icons.Filled.Person, null,
-                                tint = DarkGreen, modifier = Modifier.size(20.dp))
+                                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         }
                         Column {
                             Text("Seller", fontSize = 11.sp,
@@ -1705,17 +1677,17 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                                 modifier = Modifier
                                     .size(36.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF1565C0).copy(alpha = 0.1f)),
+                                    .background(LocalMarketAccents.current.info.copy(alpha = 0.1f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Filled.TrendingUp, null,
-                                    tint = Color(0xFF1565C0), modifier = Modifier.size(20.dp))
+                                    tint = LocalMarketAccents.current.info, modifier = Modifier.size(20.dp))
                             }
                             Column {
                                 Text("Markup", fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(Money.format(item.markup), fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold, color = Color(0xFF1565C0))
+                                    fontWeight = FontWeight.SemiBold, color = LocalMarketAccents.current.info)
                             }
                         }
                     }
@@ -1846,7 +1818,7 @@ private fun AdminPrivateOfferCard(
                         }
                     },
                     enabled = !isWorking,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
+                    colors = ButtonDefaults.buttonColors(containerColor = LocalMarketAccents.current.info)
                 ) {
                     if (isWorking) {
                         CircularProgressIndicator(Modifier.size(18.dp), Color.White, 2.dp)
@@ -1886,10 +1858,10 @@ private fun AdminPrivateOfferCard(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(Icons.Filled.CheckCircle, null,
-                                tint = DarkGreen, modifier = Modifier.size(40.dp))
+                                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
                             Text(
                                 "Message sent successfully!",
-                                color      = DarkGreen,
+                                color      = MaterialTheme.colorScheme.primary,
                                 fontSize   = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign  = TextAlign.Center
@@ -1969,451 +1941,188 @@ private fun AdminPrivateOfferCard(
         )
     }
 
-    Card(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // ── Photo ─────────────────────────────────────────────────────────
+    MarketCard(contentPadding = PaddingValues(0.dp)) {
+        // ── Photo with the status floating over it ────────────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(170.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainer),
+            contentAlignment = Alignment.Center,
+        ) {
             val photoUrl = item.photos.firstOrNull() ?: ""
             if (photoUrl.isNotBlank()) {
                 AsyncImage(
                     model              = photoUrl,
                     contentDescription = null,
                     contentScale       = ContentScale.Crop,
-                    modifier           = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                    modifier           = Modifier.fillMaxSize()
                 )
             } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.Photo, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(48.dp))
-                }
+                Icon(Icons.Outlined.Image, null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(44.dp))
             }
+            ItemStatusPill(
+                item.status,
+                offerAccepted = item.offerAccepted,
+                modifier = Modifier.align(Alignment.TopStart).padding(Spacing.md),
+            )
+        }
 
-            Column(
-                modifier            = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier            = Modifier.fillMaxWidth().padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            // ── Title, seller, asking price ───────────────────────────────
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment     = Alignment.Top
             ) {
-                // ── Title + current status chip ────────────────────────────────
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
+                Column(modifier = Modifier.weight(1f).padding(end = Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                     Text(
                         item.title,
-                        fontWeight = FontWeight.Bold,
-                        fontSize   = 17.sp,
-                        maxLines   = 1,
+                        style      = MaterialTheme.typography.titleLarge,
+                        maxLines   = 2,
                         overflow   = TextOverflow.Ellipsis,
-                        modifier   = Modifier.weight(1f).padding(end = 8.dp)
                     )
-                    val statusColor = when (item.status.lowercase()) {
-                        "approved" -> DarkGreen
-                        "rejected" -> MaterialTheme.colorScheme.error
-                        else       -> Color(0xFFE65100)
-                    }
-                    val statusBg = when (item.status.lowercase()) {
-                        "approved" -> DarkGreen.copy(alpha = 0.12f)
-                        "rejected" -> MaterialTheme.colorScheme.errorContainer
-                        else       -> Color(0xFFFF8F00).copy(alpha = 0.12f)
-                    }
-                    Surface(shape = RoundedCornerShape(50), color = statusBg) {
-                        Text(
-                            item.status.replaceFirstChar { it.uppercaseChar() },
-                            modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            fontSize   = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color      = statusColor
-                        )
-                    }
-                }
-
-                // ── Seller + price ─────────────────────────────────────────────
-                Row(
-                    modifier              = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
                     Row(
-                        modifier              = Modifier.weight(1f),
                         verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                     ) {
-                        Icon(Icons.Filled.Person, null,
+                        Icon(Icons.Outlined.Person, null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(14.dp))
-                        Text(item.sellerEmail, fontSize = 12.sp,
+                        Text(item.sellerEmail, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false))
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("Asking", fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(item.displayAskingPrice, fontWeight = FontWeight.Bold,
-                            color = DarkGreen, fontSize = 14.sp)
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Asking", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    PriceTag(item.displayAskingPrice, size = PriceSize.Small)
+                }
+            }
 
-                Text(item.description, fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(item.description, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3, overflow = TextOverflow.Ellipsis)
 
-                // -- Negotiation and turnover state --------------------
-                if (item.acquisitionPrice != null || item.isTurnoverVerified) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF1565C0).copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                            .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        item.acquisitionPrice?.let {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Agreed acquisition", fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.format(it), fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold, color = Color(0xFF1565C0))
-                            }
-                        }
-                        if (item.isTurnoverVerified) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(Icons.Filled.CheckCircle, null,
-                                    tint = DarkGreen, modifier = Modifier.size(14.dp))
-                                Text("Received and verified", fontSize = 12.sp, color = DarkGreen)
-                            }
-                        }
+            // -- Negotiation and turnover state --------------------
+            if (item.acquisitionPrice != null || item.isTurnoverVerified) {
+                MarketPanel {
+                    item.acquisitionPrice?.let {
+                        SummaryRow(label = "Agreed price", value = Money.format(it), valueColor = LocalMarketAccents.current.info)
+                    }
+                    if (item.isTurnoverVerified) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                         ) {
-                            Text("Seller payout", fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                if (item.sellerIsPaid) "Paid" else "Unpaid",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (item.sellerIsPaid) DarkGreen else Color(0xFFE65100)
-                            )
+                            Icon(Icons.Filled.CheckCircle, null,
+                                tint = LocalMarketAccents.current.success, modifier = Modifier.size(16.dp))
+                            Text("Item received and verified", style = MaterialTheme.typography.bodySmall,
+                                color = LocalMarketAccents.current.success)
                         }
                     }
-                }
-
-
-                HorizontalDivider()
-
-                // ── Action buttons ─────────────────────────────────────────────
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { onEditClick(item) },
-                            modifier = Modifier.weight(1f),
-                            shape    = RoundedCornerShape(10.dp),
-                            colors   = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                        ) {
-                            Icon(Icons.Filled.Edit, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Edit Item", fontWeight = FontWeight.SemiBold)
-                        }
-                        OutlinedButton(
-                            onClick  = { showChatDialog = true },
-                            modifier = Modifier.weight(1f),
-                            shape    = RoundedCornerShape(10.dp),
-                            border   = BorderStroke(1.dp, DarkGreen),
-                            colors   = ButtonDefaults.outlinedButtonColors(contentColor = DarkGreen)
-                        ) {
-                            Icon(Icons.Filled.Chat, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Chat Seller", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-
-                    // -- Turnover, then cash payout ----------------------
-                    // The seller is paid in cash after Ofelia verifies the
-                    // physical item. No points change hands here.
-                    if (!item.isTurnoverVerified && !item.isSold) {
-                        Button(
-                            onClick = { showTurnoverDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
-                        ) {
-                            Icon(Icons.Filled.Inventory, null, modifier = Modifier.size(16.dp), tint = Color.White)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Mark Acquired", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    if (item.isTurnoverVerified && !item.sellerIsPaid) {
-                        Button(
-                            onClick = { showPayoutDialog = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                        ) {
-                            Icon(Icons.Filled.Payments, null, modifier = Modifier.size(16.dp), tint = Color.White)
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Pay Seller ${Money.format(item.sellerPayoutAmount ?: item.acquisitionPrice)}",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    if (item.isTurnoverVerified && !item.isPublic && !item.isSold) {
-                        OutlinedButton(
-                            onClick = { onEditClick(item) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
-                            border = BorderStroke(1.dp, Color(0xFF1565C0)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF1565C0))
-                        ) {
-                            Icon(Icons.Filled.Storefront, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Set Selling Price & Publish", fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    SummaryRow(
+                        label = "Seller payout",
+                        value = if (item.sellerIsPaid) "Paid" else "Unpaid",
+                        valueColor = if (item.sellerIsPaid) LocalMarketAccents.current.success else LocalMarketAccents.current.warning,
+                    )
                 }
             }
-        }
-    }
-}
 
-// ── Bottom Nav ─────────────────────────────────────────────────────────────────
+            SoftDivider()
 
-@Composable
-private fun AdminBottomBar(
-    selected: AdminTab,
-    userProfilePic: String,
-    userInitial: String,
-    onScan: () -> Unit,
-    onSelect: (AdminTab) -> Unit
-) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            tonalElevation = 0.dp,
-            shadowElevation = 12.dp,
-            color = MaterialTheme.colorScheme.surface
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            // ── Action buttons ─────────────────────────────────────────────
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                // -- Turnover, then cash payout ----------------------
+                // The seller is paid in cash after Ofelia verifies the
+                // physical item. No points change hands here.
+                if (!item.isTurnoverVerified && !item.isSold) {
+                    PrimaryButton(
+                        text = "Mark as acquired",
+                        icon = Icons.Outlined.Inventory2,
+                        onClick = { showTurnoverDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                if (item.isTurnoverVerified && !item.sellerIsPaid) {
+                    PrimaryButton(
+                        text = "Pay seller ${Money.format(item.sellerPayoutAmount ?: item.acquisitionPrice)}",
+                        icon = Icons.Outlined.Payments,
+                        onClick = { showPayoutDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = LocalMarketAccents.current.success,
+                        contentColor = Color.White,
+                    )
+                }
+
+                if (item.isTurnoverVerified && !item.isPublic && !item.isSold) {
+                    PrimaryButton(
+                        text = "Set selling price and publish",
+                        icon = Icons.Outlined.Storefront,
+                        onClick = { onEditClick(item) },
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = LocalMarketAccents.current.info,
+                        contentColor = Color.White,
+                    )
+                }
+
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(72.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier              = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    ModernNavItem(
-                        outlinedIcon = Icons.Outlined.Home,
-                        filledIcon = Icons.Filled.Home,
-                        label = "Home",
-                        selected = selected == AdminTab.HOME,
-                        modifier = Modifier.weight(1f)
-                    ) { onSelect(AdminTab.HOME) }
-                    ModernNavItem(
-                        outlinedIcon = Icons.Outlined.Chat,
-                        filledIcon = Icons.Filled.Chat,
-                        label = "Chat",
-                        selected = selected == AdminTab.CHAT,
-                        modifier = Modifier.weight(1f)
-                    ) { onSelect(AdminTab.CHAT) }
-                    // Spacer for center FAB
-                    Spacer(modifier = Modifier.weight(1f))
-                    ModernNavItem(
-                        outlinedIcon = Icons.Outlined.Settings,
-                        filledIcon = Icons.Filled.Settings,
-                        label = "Settings",
-                        selected = selected == AdminTab.SETTINGS,
-                        modifier = Modifier.weight(1f)
-                    ) { onSelect(AdminTab.SETTINGS) }
-                    ProfileNavItem(
-                        userProfilePic = userProfilePic,
-                        userInitial = userInitial,
-                        selected = selected == AdminTab.PROFILE,
-                        modifier = Modifier.weight(1f)
-                    ) { onSelect(AdminTab.PROFILE) }
-                }
-                Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
-            }
-        }
-        // Center FAB — the counter action. A buyer at the store shows their
-        // pickup QR and this is the button that reads it. Student management,
-        // which used to live here, moved to the Profile tab.
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = (-16).dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            FloatingActionButton(
-                onClick = onScan,
-                modifier = Modifier
-                    .size(54.dp)
-                    .border(3.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                shape = CircleShape,
-                containerColor = DarkGreen,
-                contentColor = Color.White,
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = 6.dp, pressedElevation = 10.dp
-                )
-            ) {
-                Icon(Icons.Filled.QrCodeScanner, "Scan pickup code", modifier = Modifier.size(24.dp))
-            }
-            Text(
-                text = "Scan",
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.padding(top = 3.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModernNavItem(
-    outlinedIcon: ImageVector,
-    filledIcon: ImageVector,
-    label: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val tint = if (selected) DarkGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-    Column(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .background(
-                    color = if (selected) DarkGreen.copy(alpha = 0.12f) else Color.Transparent,
-                    shape = RoundedCornerShape(50)
-                )
-                .padding(horizontal = 16.dp, vertical = 5.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = if (selected) filledIcon else outlinedIcon,
-                contentDescription = label,
-                tint = tint,
-                modifier = Modifier.size(26.dp)
-            )
-        }
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = tint,
-            modifier = Modifier.padding(top = 2.dp)
-        )
-    }
-}
-
-@Composable
-private fun ProfileNavItem(
-    userProfilePic: String,
-    userInitial: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val tint = if (selected) DarkGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-    Column(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .background(
-                    color = if (selected) DarkGreen.copy(alpha = 0.12f) else Color.Transparent,
-                    shape = RoundedCornerShape(50)
-                )
-                .padding(horizontal = 14.dp, vertical = 5.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .clip(CircleShape)
-                    .border(
-                        width = if (selected) 1.5.dp else 0.dp,
-                        color = DarkGreen,
-                        shape = CircleShape
+                    SecondaryButton(
+                        text = "Chat seller",
+                        icon = Icons.Outlined.ChatBubbleOutline,
+                        onClick = { showChatDialog = true },
+                        modifier = Modifier.weight(1f),
+                        compact = true,
                     )
-                    .background(
-                        if (selected) DarkGreen
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (userProfilePic.isNotBlank()) {
-                    SubcomposeAsyncImage(
-                        model = userProfilePic,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize().clip(CircleShape),
-                        contentScale = ContentScale.Crop,
-                        error = {
-                            Text(userInitial, fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                    )
-                } else {
-                    Text(
-                        text = userInitial,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (selected) Color.White
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    SecondaryButton(
+                        text = "Edit item",
+                        icon = Icons.Outlined.Edit,
+                        onClick = { onEditClick(item) },
+                        modifier = Modifier.weight(1f),
+                        compact = true,
                     )
                 }
             }
         }
-        Text(
-            text = "Profile",
-            fontSize = 10.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = tint,
-            modifier = Modifier.padding(top = 2.dp)
-        )
     }
 }
 
 // ── Home ───────────────────────────────────────────────────────────────────────
 
+/** One line of the dashboard's activity feed. */
+private data class DashboardLine(val title: String, val subtitle: String)
+
+/**
+ * The store's front page.
+ *
+ * Leads with what needs Ofelia's hands today - students waiting for approval,
+ * offers waiting for a price, items on hold - each a tap from the page that
+ * deals with it. The wall of statistics that used to be the whole page now
+ * sits underneath, where it belongs.
+ */
 @Composable
-private fun AdminHomeContent(onMenuClick: () -> Unit) {
+private fun AdminHomeContent(
+    onMenuClick: () -> Unit,
+    firstName: String = "",
+    onOpenPage: (DrawerPage) -> Unit = {},
+    onOpenStudents: () -> Unit = {},
+    onOpenChat: () -> Unit = {},
+    onScan: () -> Unit = {},
+) {
     val context = LocalContext.current
     val prefs   = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
     val token   = remember { prefs.getString("auth_token", "") ?: "" }
-    val scope   = rememberCoroutineScope()
+    val accents = LocalMarketAccents.current
 
     // Users statistics
     var totalStudents by remember { mutableStateOf(0) }
@@ -2430,227 +2139,338 @@ private fun AdminHomeContent(onMenuClick: () -> Unit) {
     var soldItems by remember { mutableStateOf(0) }
 
     // Recent activities
-    var recentRegistrations by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
-    var recentItemsList by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
-    var pendingVerifications by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
+    var recentRegistrations by remember { mutableStateOf<List<DashboardLine>>(emptyList()) }
+    var recentItemsList by remember { mutableStateOf<List<DashboardLine>>(emptyList()) }
+    var pendingVerifications by remember { mutableStateOf<List<DashboardLine>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
 
     // Fetch dashboard data from API
-    LaunchedEffect(token) {
-        if (token.isNotBlank()) {
-            scope.launch {
-                try {
-                    val data = withContext(Dispatchers.IO) {
-                        val request = Request.Builder()
-                            .url("https://fati-api.alertaraqc.com/api/admin/dashboard")
-                            .header("Authorization", "Bearer $token")
-                            .header("Accept", "application/json")
-                            .get()
-                            .build()
-                        adminHttpClient.newCall(request).execute().use { response ->
-                            if (response.isSuccessful) {
-                                response.body?.string() ?: ""
-                            } else {
-                                ""
-                            }
-                        }
-                    }
-
-                    if (data.isNotEmpty()) {
-                        val json = JSONObject(data)
-                        val dataObj = json.optJSONObject("data")
-
-                        if (dataObj != null) {
-                            val usersObj = dataObj.optJSONObject("users")
-                            totalStudents = usersObj?.optInt("total_students", 0) ?: 0
-                            activeStudents = usersObj?.optInt("active_students", 0) ?: 0
-                            pendingStudents = usersObj?.optInt("pending_students", 0) ?: 0
-                            verifiedStudents = usersObj?.optInt("verified_students", 0) ?: 0
-
-                            val itemsObj = dataObj.optJSONObject("items")
-                            totalProducts = itemsObj?.optInt("total_items", 0) ?: 0
-                            privateItems = itemsObj?.optInt("private_items", 0) ?: 0
-                            publicItems = itemsObj?.optInt("public_items", 0) ?: 0
-                            acquiredItems = itemsObj?.optInt("acquired_items", 0) ?: 0
-                            reservedItems = itemsObj?.optInt("reserved_items", 0) ?: 0
-                            soldItems = itemsObj?.optInt("sold_items", 0) ?: 0
-
-                            val activitiesObj = dataObj.optJSONObject("recent_activities")
-                            if (activitiesObj != null) {
-                                val registrationsArr = activitiesObj.optJSONArray("recent_registrations")
-                                recentRegistrations = (0 until (registrationsArr?.length() ?: 0)).map { i ->
-                                    val obj = registrationsArr!!.getJSONObject(i)
-                                    mapOf(
-                                        "user_id" to obj.optString("user_id", ""),
-                                        "email" to obj.optString("email", ""),
-                                        "name" to obj.optString("name", ""),
-                                        "created_at" to obj.optString("created_at", "")
-                                    )
-                                }
-
-                                val itemsArr = activitiesObj.optJSONArray("recent_items")
-                                recentItemsList = (0 until (itemsArr?.length() ?: 0)).map { i ->
-                                    val obj = itemsArr!!.getJSONObject(i)
-                                    mapOf(
-                                        "item_id" to obj.optInt("item_id"),
-                                        "title" to obj.optString("title", ""),
-                                        "seller" to obj.optString("seller", ""),
-                                        "status" to obj.optString("status", ""),
-                                        "asking_price" to obj.optString("seller_asking_price", "0.00"),
-                                        "created_at" to obj.optString("created_at", "")
-                                    )
-                                }
-
-                                val verificationsArr = activitiesObj.optJSONArray("pending_verifications")
-                                pendingVerifications = (0 until (verificationsArr?.length() ?: 0)).map { i ->
-                                    val obj = verificationsArr!!.getJSONObject(i)
-                                    mapOf(
-                                        "verification_id" to obj.optString("verification_id", ""),
-                                        "student_name" to obj.optString("student_name", ""),
-                                        "email" to obj.optString("email", ""),
-                                        "verification_use" to obj.optString("verification_use", "")
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                } finally {
-                    isLoading = false
+    LaunchedEffect(token, refreshKey) {
+        if (token.isBlank()) return@LaunchedEffect
+        isLoading = true
+        loadError = null
+        try {
+            val data = withContext(Dispatchers.IO) {
+                val request = Request.Builder()
+                    .url("https://fati-api.alertaraqc.com/api/admin/dashboard")
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/json")
+                    .get()
+                    .build()
+                adminHttpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) response.body?.string() ?: "" else ""
                 }
             }
+
+            if (data.isNotEmpty()) {
+                val json = JSONObject(data)
+                val dataObj = json.optJSONObject("data")
+
+                if (dataObj != null) {
+                    val usersObj = dataObj.optJSONObject("users")
+                    totalStudents = usersObj?.optInt("total_students", 0) ?: 0
+                    activeStudents = usersObj?.optInt("active_students", 0) ?: 0
+                    pendingStudents = usersObj?.optInt("pending_students", 0) ?: 0
+                    verifiedStudents = usersObj?.optInt("verified_students", 0) ?: 0
+
+                    val itemsObj = dataObj.optJSONObject("items")
+                    totalProducts = itemsObj?.optInt("total_items", 0) ?: 0
+                    privateItems = itemsObj?.optInt("private_items", 0) ?: 0
+                    publicItems = itemsObj?.optInt("public_items", 0) ?: 0
+                    acquiredItems = itemsObj?.optInt("acquired_items", 0) ?: 0
+                    reservedItems = itemsObj?.optInt("reserved_items", 0) ?: 0
+                    soldItems = itemsObj?.optInt("sold_items", 0) ?: 0
+
+                    val activitiesObj = dataObj.optJSONObject("recent_activities")
+                    if (activitiesObj != null) {
+                        val registrationsArr = activitiesObj.optJSONArray("recent_registrations")
+                        recentRegistrations = (0 until (registrationsArr?.length() ?: 0)).map { i ->
+                            val obj = registrationsArr!!.getJSONObject(i)
+                            DashboardLine(
+                                title = obj.optString("name", ""),
+                                subtitle = obj.optString("email", ""),
+                            )
+                        }
+
+                        val itemsArr = activitiesObj.optJSONArray("recent_items")
+                        recentItemsList = (0 until (itemsArr?.length() ?: 0)).map { i ->
+                            val obj = itemsArr!!.getJSONObject(i)
+                            DashboardLine(
+                                title = obj.optString("title", ""),
+                                subtitle = "${obj.optString("seller", "")} · ${obj.optString("status", "")}",
+                            )
+                        }
+
+                        val verificationsArr = activitiesObj.optJSONArray("pending_verifications")
+                        pendingVerifications = (0 until (verificationsArr?.length() ?: 0)).map { i ->
+                            val obj = verificationsArr!!.getJSONObject(i)
+                            DashboardLine(
+                                title = obj.optString("student_name", ""),
+                                subtitle = obj.optString("email", ""),
+                            )
+                        }
+                    }
+                }
+            } else {
+                loadError = "The server did not return dashboard data."
+            }
+        } catch (e: Exception) {
+            loadError = e.message ?: "Could not load the dashboard."
+        } finally {
+            isLoading = false
         }
     }
 
+    val greeting = remember {
+        when (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)) {
+            in 5..11 -> "Good morning"
+            in 12..17 -> "Good afternoon"
+            else -> "Good evening"
+        }
+    }
+    val attentionCount = pendingStudents + privateItems + reservedItems
+
+    var showNotifications by remember { mutableStateOf(false) }
+    if (showNotifications) {
+        NotificationsDialog(onDismiss = { showNotifications = false })
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        AdminPageHeader(title = "Dashboard", onMenuClick = onMenuClick)
+        MarketHeader(
+            title = "$greeting${if (firstName.isNotBlank()) ", $firstName" else ""}",
+            subtitle = when {
+                isLoading -> "Loading today's numbers…"
+                attentionCount == 0 -> "All caught up. Nothing is waiting on you."
+                attentionCount == 1 -> "1 thing needs your attention"
+                else -> "$attentionCount things need your attention"
+            },
+            onMenuClick = onMenuClick,
+            actions = {
+                HeaderAction(
+                    icon = Icons.Outlined.Notifications,
+                    contentDescription = "Notifications",
+                    onClick = { showNotifications = true },
+                )
+            },
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xl)
         ) {
-            // USERS OVERVIEW
-            Text("USERS", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DarkGreen, letterSpacing = 1.sp)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Total", if (isLoading) "--" else totalStudents.toString(), Icons.Filled.School, Modifier.weight(1f))
-                StatCard("Active", if (isLoading) "--" else activeStudents.toString(), Icons.Filled.CheckCircle, Modifier.weight(1f))
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Pending", if (isLoading) "--" else pendingStudents.toString(), Icons.Filled.HourglassEmpty, Modifier.weight(1f))
-                StatCard("Verified", if (isLoading) "--" else verifiedStudents.toString(), Icons.Filled.VerifiedUser, Modifier.weight(1f))
-            }
-
-            // ITEMS OVERVIEW
-            Text("ITEMS", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DarkGreen, letterSpacing = 1.sp)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Total", if (isLoading) "--" else totalProducts.toString(), Icons.Filled.Storefront, Modifier.weight(1f))
-                StatCard("Public", if (isLoading) "--" else publicItems.toString(), Icons.Filled.Public, Modifier.weight(1f))
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Private", if (isLoading) "--" else privateItems.toString(), Icons.Filled.Lock, Modifier.weight(1f))
-                StatCard("Acquired", if (isLoading) "--" else acquiredItems.toString(), Icons.Filled.Download, Modifier.weight(1f))
-            }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Reserved", if (isLoading) "--" else reservedItems.toString(), Icons.Filled.Schedule, Modifier.weight(1f))
-                StatCard("Sold", if (isLoading) "--" else soldItems.toString(), Icons.Filled.ShoppingCart, Modifier.weight(1f))
+            loadError?.let { err ->
+                InfoBanner(
+                    title = "Could not refresh",
+                    text = err,
+                    tone = StatusTone.Danger,
+                    icon = Icons.Filled.ErrorOutline,
+                )
+                SecondaryButton(text = "Try again", compact = true, onClick = { refreshKey++ })
             }
 
-            // RECENT REGISTRATIONS
-            if (recentRegistrations.isNotEmpty()) {
-                Text("RECENT REGISTRATIONS", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DarkGreen, letterSpacing = 1.sp)
-                recentRegistrations.take(3).forEach { registration ->
-                    DashboardListItem(
-                        title = registration["name"] ?: "",
-                        subtitle = registration["email"] ?: "",
-                        icon = Icons.Filled.Person,
-                        iconColor = DarkGreen
+            // ── Needs attention ───────────────────────────────────────────
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                SectionHeader(title = "Needs attention", subtitle = "Tap a card to deal with it")
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    StatTile(
+                        label = "Students to approve",
+                        value = if (isLoading) "–" else pendingStudents.toString(),
+                        icon = Icons.Filled.HowToReg,
+                        tint = if (pendingStudents > 0) accents.warning else MaterialTheme.colorScheme.primary,
+                        onClick = onOpenStudents,
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatTile(
+                        label = "Offers to review",
+                        value = if (isLoading) "–" else privateItems.toString(),
+                        icon = Icons.Filled.LocalOffer,
+                        tint = if (privateItems > 0) accents.warning else MaterialTheme.colorScheme.primary,
+                        onClick = { onOpenPage(DrawerPage.PrivateOffers) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                    StatTile(
+                        label = "Reserved for pickup",
+                        value = if (isLoading) "–" else reservedItems.toString(),
+                        icon = Icons.Filled.Schedule,
+                        tint = accents.info,
+                        onClick = { onOpenPage(DrawerPage.ReservedItems) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatTile(
+                        label = "In stock, unlisted",
+                        value = if (isLoading) "–" else acquiredItems.toString(),
+                        icon = Icons.Filled.Inventory2,
+                        tint = accents.info,
+                        onClick = { onOpenPage(DrawerPage.AcquiredItems) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
 
-            // RECENT ITEMS
-            if (recentItemsList.isNotEmpty()) {
-                Text("RECENT ITEMS", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DarkGreen, letterSpacing = 1.sp)
-                recentItemsList.take(3).forEach { item ->
-                    DashboardListItem(
-                        title = item["title"]?.toString() ?: "",
-                        subtitle = "${item["seller"]?.toString() ?: ""} • ${item["status"]?.toString() ?: ""}",
-                        icon = Icons.Filled.ShoppingBag,
-                        iconColor = DarkGreen
-                    )
+            // ── Quick actions ─────────────────────────────────────────────
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                SectionHeader(title = "Quick actions")
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = Elevation.card,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.sm, horizontal = Spacing.xs),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        QuickAction(label = "Scan code", icon = Icons.Filled.QrCodeScanner, onClick = onScan, modifier = Modifier.weight(1f))
+                        QuickAction(label = "Orders", icon = Icons.Filled.ReceiptLong, onClick = { onOpenPage(DrawerPage.ManageOrders) }, modifier = Modifier.weight(1f))
+                        QuickAction(label = "Listings", icon = Icons.Filled.Storefront, onClick = { onOpenPage(DrawerPage.PublicListings) }, modifier = Modifier.weight(1f))
+                        QuickAction(label = "Messages", icon = Icons.Filled.ChatBubble, onClick = onOpenChat, modifier = Modifier.weight(1f))
+                    }
                 }
             }
 
-            // PENDING VERIFICATIONS
+            // ── Overview ──────────────────────────────────────────────────
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                SectionHeader(title = "Store overview")
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = Elevation.card,
+                ) {
+                    Column(modifier = Modifier.padding(Spacing.lg), verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                        Overline("Items")
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            OverviewFigure("Total", totalProducts, isLoading, Modifier.weight(1f))
+                            OverviewFigure("On sale", publicItems, isLoading, Modifier.weight(1f))
+                            OverviewFigure("Sold", soldItems, isLoading, Modifier.weight(1f))
+                        }
+                        SoftDivider()
+                        Overline("Students")
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            OverviewFigure("Registered", totalStudents, isLoading, Modifier.weight(1f))
+                            OverviewFigure("Verified", verifiedStudents, isLoading, Modifier.weight(1f))
+                            OverviewFigure("Active", activeStudents, isLoading, Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+
+            // ── Recent activity ───────────────────────────────────────────
             if (pendingVerifications.isNotEmpty()) {
-                Text("PENDING VERIFICATIONS", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFFFF6F00), letterSpacing = 1.sp)
-                pendingVerifications.take(3).forEach { verification ->
-                    DashboardListItem(
-                        title = verification["student_name"] ?: "",
-                        subtitle = verification["email"] ?: "",
-                        icon = Icons.Filled.Verified,
-                        iconColor = Color(0xFFFF6F00)
-                    )
-                }
+                ActivityGroup(
+                    title = "Waiting for approval",
+                    lines = pendingVerifications.take(3),
+                    icon = Icons.Filled.HowToReg,
+                    tint = accents.warning,
+                    actionLabel = "Review",
+                    onAction = onOpenStudents,
+                )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            if (recentItemsList.isNotEmpty()) {
+                ActivityGroup(
+                    title = "Recent items",
+                    lines = recentItemsList.take(3),
+                    icon = Icons.Filled.ShoppingBag,
+                    tint = MaterialTheme.colorScheme.primary,
+                    actionLabel = "All offers",
+                    onAction = { onOpenPage(DrawerPage.PrivateOffers) },
+                )
+            }
+
+            if (recentRegistrations.isNotEmpty()) {
+                ActivityGroup(
+                    title = "New students",
+                    lines = recentRegistrations.take(3),
+                    icon = Icons.Filled.PersonAdd,
+                    tint = accents.info,
+                    actionLabel = "All students",
+                    onAction = onOpenStudents,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.sm))
         }
     }
 }
 
+/** A figure inside the overview card. */
 @Composable
-private fun StatCard(title: String, value: String, icon: ImageVector, modifier: Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(3.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Icon(icon, null, tint = DarkGreen,
-                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp))
-                    .background(DarkGreen.copy(alpha = 0.1f)).padding(6.dp))
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(value, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+private fun OverviewFigure(label: String, value: Int, loading: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            if (loading) "–" else value.toString(),
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
+/** A titled list of recent lines with a link to the page that holds them all. */
 @Composable
-private fun DashboardListItem(
+private fun ActivityGroup(
     title: String,
-    subtitle: String,
+    lines: List<DashboardLine>,
     icon: ImageVector,
-    iconColor: Color
+    tint: Color,
+    actionLabel: String,
+    onAction: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        SectionHeader(title = title, actionLabel = actionLabel, onAction = onAction)
+        Surface(
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = Elevation.card,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(iconColor.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = iconColor, modifier = Modifier.size(20.dp))
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column {
+                lines.forEachIndexed { index, line ->
+                    if (index > 0) RowDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(tint.copy(alpha = 0.12f), MaterialTheme.shapes.extraSmall),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                line.title.ifBlank { "—" },
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                line.subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -3163,190 +2983,72 @@ fun AdminChatContent(
             )
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
-                AdminPageHeader(title = "Messages", onMenuClick = onMenuClick, favoritesCount = favoritesCount, onFavoritesClick = onFavoritesClick)
+                val unreadTotal = conversations.sumOf { it.unreadCount }
 
-                // Pusher debug banner
-                // val dbgStatus by pusherGlobalStatus
-                // val dbgLog    by pusherGlobalLog
-                // val (bannerBg, bannerDot, bannerLabel) = when (dbgStatus) {
-                //     "subscribed"                    -> Triple(Color(0xFF1B5E20), Color(0xFF69F0AE), "Live")
-                //     "connected"                     -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Authenticating…")
-                //     "reconnecting"                  -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Reconnecting…")
-                //     "auth_failed"                   -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Auth failed")
-                //     "error"                         -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Error")
-                //     "disconnected", "disconnecting" -> Triple(Color(0xFF4E1A1A), Color(0xFFFF5252), "Disconnected")
-                //     "idle"                          -> Triple(Color(0xFF1A237E), Color(0xFF82B1FF), "No active chat")
-                //     else                            -> Triple(Color(0xFF4A3800), Color(0xFFFFD740), "Connecting…")
-                // }
-                // Row(
-                //     modifier = Modifier
-                //         .fillMaxWidth()
-                //         .background(bannerBg)
-                //         .padding(horizontal = 16.dp, vertical = 6.dp),
-                //     verticalAlignment = Alignment.CenterVertically
-                // ) {
-                //     Canvas(modifier = Modifier.size(8.dp)) { drawCircle(bannerDot) }
-                //     Spacer(Modifier.width(8.dp))
-                //     Text(
-                //         "Pusher: $bannerLabel",
-                //         fontSize = 12.sp,
-                //         fontWeight = FontWeight.SemiBold,
-                //         color = bannerDot
-                //     )
-                //     if (dbgLog.isNotEmpty()) {
-                //         Text(
-                //             "  —  $dbgLog",
-                //             fontSize = 11.sp,
-                //             color = bannerDot.copy(alpha = 0.75f),
-                //             maxLines = 1,
-                //             overflow = TextOverflow.Ellipsis,
-                //             modifier = Modifier.weight(1f)
-                //         )
-                //     }
-                // }
+                AdminPageHeader(
+                    title = "Messages",
+                    subtitle = when {
+                        unreadTotal == 1 -> "1 unread conversation"
+                        unreadTotal > 1 -> "$unreadTotal unread conversations"
+                        else -> if (isAdmin) "Buyers and sellers, in one place" else "Your chats with Ofelia's Store"
+                    },
+                    onMenuClick = onMenuClick,
+                    favoritesCount = favoritesCount,
+                    onFavoritesClick = onFavoritesClick,
+                    showFavorites = !isAdmin,
+                )
 
                 // Search bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surface,
-                            RoundedCornerShape(24.dp)
-                        )
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                            RoundedCornerShape(24.dp)
-                        )
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Outlined.Search, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    androidx.compose.foundation.text.BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                        textStyle = TextStyle(
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                        singleLine = true,
-                        decorationBox = { innerTextField ->
-                            Box(contentAlignment = Alignment.CenterStart) {
-                                if (searchQuery.isEmpty()) {
-                                    Text(
-                                        "Search conversations…",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                        fontSize = 14.sp,
-                                        lineHeight = 20.sp
-                                    )
-                                }
-                                innerTextField()
-                            }
-                        }
-                    )
-                    if (searchQuery.isNotEmpty()) {
-                        Spacer(Modifier.width(4.dp))
-                        IconButton(
-                            onClick = { searchQuery = "" },
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Icon(
-                                Icons.Filled.Close, null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
+                SearchField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = if (isAdmin) "Search students or items…" else "Search your chats…",
+                    elevated = false,
+                    modifier = Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.md),
+                )
 
                 // ── Filter chips ──────────────────────────────────────────────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(horizontal = Spacing.screen)
+                        .padding(bottom = Spacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    listOf("All", "Unread").forEachIndexed { idx, label ->
-                        val isSelected = filterTab == idx
-                        val unreadTotal = if (idx == 1) conversations.sumOf { it.unreadCount } else 0
-                        Surface(
-                            onClick = { filterTab = idx },
-                            shape = RoundedCornerShape(50),
-                            color = if (isSelected) DarkGreen else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.height(32.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    label,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    color = if (isSelected) Color.White
-                                            else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (idx == 1 && unreadTotal > 0) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(18.dp)
-                                            .background(
-                                                if (isSelected) Color.White.copy(alpha = 0.3f)
-                                                else Color(0xFFE53935),
-                                                CircleShape
-                                            ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            if (unreadTotal > 99) "99+" else "$unreadTotal",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    ChoiceChip(label = "All", selected = filterTab == 0, onClick = { filterTab = 0 })
+                    ChoiceChip(label = "Unread", selected = filterTab == 1, onClick = { filterTab = 1 }, count = unreadTotal)
                 }
 
                 when {
-                    isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = DarkGreen)
+                    isLoading -> Column(modifier = Modifier.fillMaxSize()) {
+                        repeat(6) { ListRowSkeleton() }
                     }
-                    loadError || filteredConversations.isEmpty() -> Box(
+                    loadError -> ErrorState(
+                        title = "Could not load conversations",
+                        message = "Check your connection and try again.",
+                    )
+                    filteredConversations.isEmpty() -> Box(
                         Modifier.fillMaxSize(), contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Filled.ChatBubbleOutline, null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                modifier = Modifier.size(72.dp)
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                when {
-                                    loadError                -> "Failed to load conversations"
-                                    searchQuery.isNotEmpty() -> "No results for \"$searchQuery\""
-                                    filterTab == 1           -> "No unread messages"
-                                    else                     -> "No conversations yet"
-                                },
-                                fontSize = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        EmptyState(
+                            icon = Icons.Outlined.ChatBubbleOutline,
+                            title = when {
+                                searchQuery.isNotEmpty() -> "No results"
+                                filterTab == 1           -> "All caught up"
+                                else                     -> "No conversations yet"
+                            },
+                            message = when {
+                                searchQuery.isNotEmpty() -> "Nothing matches \"$searchQuery\"."
+                                filterTab == 1           -> "You have read every message."
+                                isAdmin                  -> "Chats open when a student offers an item or asks about a listing."
+                                else                     -> "Ask about an item on the marketplace, or offer one to Ofelia's Store, and the chat appears here."
+                            },
+                        )
                     }
-                    else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    else -> LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = Spacing.lg),
+                    ) {
                         items(filteredConversations, key = { "${it.otherUserId}_${it.itemId}" }) { conv ->
                             ConversationItem(conv, { onSelectConversation(conv) }, isAdmin = isAdmin, currentUserId = currentUserId)
                         }
@@ -3360,151 +3062,97 @@ fun AdminChatContent(
 @Composable
 private fun ConversationItem(conversation: Conversation, onClick: () -> Unit, isAdmin: Boolean = true, currentUserId: Int = 0) {
     val hasUnread = conversation.unreadCount > 0
+    val accents = LocalMarketAccents.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .background(
-                if (hasUnread) MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
+                if (hasUnread) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
                 else Color.Transparent
             )
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = Spacing.screen, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Avatar with item photo - overlapping circles (like messenger group chat)
-        Box(modifier = Modifier.size(64.dp)) {
-            // Profile picture - top left
+        // The person, with the item they are talking about tucked into the
+        // corner - the way a group chat shows two faces.
+        Box(modifier = Modifier.size(58.dp)) {
+            Avatar(
+                url = conversation.profilePicture,
+                initial = conversation.firstName.firstOrNull()?.toString() ?: "?",
+                size = 50.dp,
+                modifier = Modifier.align(Alignment.TopStart),
+            )
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .align(Alignment.TopStart)
-                    .clip(CircleShape)
-                    .background(DarkGreen.copy(alpha = 0.13f)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (conversation.profilePicture.isNotBlank()) {
-                    SubcomposeAsyncImage(
-                        model = conversation.profilePicture,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop,
-                        error = {
-                            Text(
-                                "${conversation.firstName.firstOrNull() ?: "?"}",
-                                fontSize = 18.sp, fontWeight = FontWeight.Bold, color = DarkGreen
-                            )
-                        }
-                    )
-                } else {
-                    Text(
-                        "${conversation.firstName.firstOrNull() ?: "?"}",
-                        fontSize = 18.sp, fontWeight = FontWeight.Bold, color = DarkGreen
-                    )
-                }
-            }
-
-            // Item photo - bottom right, overlapping
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
+                    .size(28.dp)
                     .align(Alignment.BottomEnd)
                     .clip(CircleShape)
-                    .background(DarkGreen.copy(alpha = 0.13f)),
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(2.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center
             ) {
                 if (conversation.itemPhoto.isNotBlank()) {
-                    SubcomposeAsyncImage(
+                    AsyncImage(
                         model = conversation.itemPhoto,
                         contentDescription = "Item photo",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
                         contentScale = ContentScale.Crop,
-                        error = {
-                            Icon(
-                                Icons.Filled.Image,
-                                null,
-                                modifier = Modifier.size(18.dp),
-                                tint = DarkGreen
-                            )
-                        }
                     )
                 } else {
                     Icon(
-                        Icons.Filled.Image,
+                        Icons.Outlined.Image,
                         null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(Spacing.md))
         // Text content
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             // Row 1: item title + time
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                // Item title
                 Text(
                     conversation.itemTitle,
-                    fontSize = 15.sp,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.SemiBold,
-                    color = DarkGreen,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-
-                // Time
                 Text(
                     timeAgo(conversation.lastMessageAt),
-                    fontSize = 11.sp,
+                    style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (hasUnread) DarkGreen
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                    color = if (hasUnread) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(Modifier.height(4.dp))
-            // Row 2: sender name + unread badge + status badge (only on admin)
+
+            // Row 2: sender name + status badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
                 Text(
                     "${conversation.firstName} ${conversation.lastName}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Normal,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-
-                // Unread count badge
-                if (hasUnread) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .background(Color(0xFFE53935), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            if (conversation.unreadCount > 99) "99+" else "${conversation.unreadCount}",
-                            fontSize = 7.sp,
-                            lineHeight = 7.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
 
                 // Status badge (different for admin and student)
                 val statusText = conversation.itemStatus.ifBlank { "Unknown" }
@@ -3514,64 +3162,50 @@ private fun ConversationItem(conversation: Conversation, onClick: () -> Unit, is
                 // included, so the list and the thread can never disagree.
                 val sellerStageLabel = when {
                     statusLower == "pending" || statusLower == "private" ->
-                        if (conversation.itemOfferAccepted) "Offer Accepted" else "Negotiating"
-                    statusLower == "acquired" -> "Item Acquired"
+                        if (conversation.itemOfferAccepted) "Offer accepted" else "Negotiating"
+                    statusLower == "acquired" -> "Acquired"
                     else -> statusText.replaceFirstChar { it.uppercaseChar() }
                 }
 
-                val (badgeText, badgeColor) = if (isAdmin) {
-                    // Admin view: "Status - Category"
+                val (badgeText, badgeTone) = if (isAdmin) {
+                    // Admin view: "Status · Buyer/Seller"
                     val isBuyer = statusLower == "public" || statusLower == "reserved" || statusLower == "sold"
-                    val categoryLabel = if (isBuyer) "Student Buyer" else "Student Seller"
+                    val categoryLabel = if (isBuyer) "Buyer" else "Seller"
                     val statusDisplay = if (isBuyer) {
                         statusText.replaceFirstChar { it.uppercaseChar() }
                     } else {
                         sellerStageLabel
                     }
-                    val text = "$statusDisplay - $categoryLabel"
-                    val color = when {
-                        isBuyer -> Color(0xFF2196F3)
+                    val tone = when {
+                        isBuyer -> StatusTone.Info
                         conversation.itemOfferAccepted && (statusLower == "pending" || statusLower == "private") ->
-                            Color(0xFF4CAF50)
-                        else -> Color(0xFFFF9800)
+                            StatusTone.Success
+                        else -> StatusTone.Warning
                     }
-                    text to color
+                    "$statusDisplay · $categoryLabel" to tone
                 } else {
                     // Student view: simple status labels
-                    val (text, color) = when (statusLower) {
+                    when (statusLower) {
                         "pending", "private" ->
-                            if (conversation.itemOfferAccepted) {
-                                "Offer Accepted" to Color(0xFF4CAF50)
-                            } else {
-                                "Negotiating" to Color(0xFFFF9800)
-                            }
-                        "acquired" -> "Item Acquired" to Color(0xFF4CAF50)
-                        "public" -> "Item Available" to Color(0xFF4CAF50) // Green
-                        "reserved" -> "Item Reserved" to Color(0xFFFF9800) // Orange
-                        "sold" -> "Item Sold" to Color(0xFFE53935) // Red
-                        "rejected" -> "Not Accepted" to Color(0xFFE53935)
-                        else -> "Negotiating" to Color(0xFF999999)
+                            if (conversation.itemOfferAccepted) "Offer accepted" to StatusTone.Success
+                            else "Negotiating" to StatusTone.Warning
+                        "acquired" -> "Acquired" to StatusTone.Success
+                        "public" -> "Available" to StatusTone.Success
+                        "reserved" -> "Reserved" to StatusTone.Warning
+                        "sold" -> "Sold" to StatusTone.Neutral
+                        "rejected" -> "Not accepted" to StatusTone.Danger
+                        else -> "Negotiating" to StatusTone.Neutral
                     }
-                    text to color
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = badgeColor.copy(alpha = 0.12f)
-                ) {
-                    Text(
-                        badgeText,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = badgeColor,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
+                StatusPill(label = badgeText, tone = badgeTone)
             }
-            // Row 3: latest message
+
+            // Row 3: latest message + unread count
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 val displayMessage = if (currentUserId == conversation.lastMessageSenderId)
                     "You: ${conversation.latestMessage}"
@@ -3579,20 +3213,36 @@ private fun ConversationItem(conversation: Conversation, onClick: () -> Unit, is
                     conversation.latestMessage
                 Text(
                     displayMessage,
-                    fontSize = 13.sp,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (hasUnread) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
+                if (hasUnread) {
+                    Box(
+                        modifier = Modifier
+                            .defaultMinSize(minWidth = 20.dp, minHeight = 20.dp)
+                            .background(MaterialTheme.colorScheme.primary, CircleShape)
+                            .padding(horizontal = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (conversation.unreadCount > 99) "99+" else "${conversation.unreadCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
             }
         }
     }
     HorizontalDivider(
-        modifier = Modifier.padding(start = 84.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+        modifier = Modifier.padding(start = 86.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     )
 }
 
@@ -4005,49 +3655,36 @@ private fun ChatDetailContent(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
+                    .background(brandGradient())
             ) {
                 Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    modifier = Modifier.fillMaxWidth().height(60.dp).padding(end = Spacing.md),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                     }
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .border(1.5.dp, Color.White.copy(alpha = 0.5f), CircleShape)
-                            .background(Color.White.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (conversation.profilePicture.isNotBlank()) {
-                            AsyncImage(
-                                model = conversation.profilePicture,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize().clip(CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Text(
-                                "${conversation.firstName.firstOrNull() ?: "?"}",
-                                fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(10.dp))
+                    Avatar(
+                        url = conversation.profilePicture,
+                        initial = conversation.firstName.firstOrNull()?.toString() ?: "?",
+                        size = 40.dp,
+                        ringColor = Color.White.copy(alpha = 0.5f),
+                        ringWidth = 1.5.dp,
+                        containerColor = Color.White.copy(alpha = 0.2f),
+                        contentColor = Color.White,
+                    )
+                    Spacer(Modifier.width(Spacing.md))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             "${conversation.firstName} ${conversation.lastName}",
-                            fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
                             color = Color.White,
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             conversation.itemTitle,
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.8f),
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
@@ -4079,11 +3716,11 @@ private fun ChatDetailContent(
 
                 // ── Item info bar (sticky, always visible) ────────────────────
                 chatItem?.let { item ->
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(DarkGreen.copy(alpha = 0.75f))
+                            .background(Color.Black.copy(alpha = 0.18f))
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -4175,7 +3812,7 @@ private fun ChatDetailContent(
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
                                     color = when {
-                                        offerAccepted -> Color(0xFF2E7D32).copy(alpha = 0.45f)
+                                        offerAccepted -> Color(0xFF2E7D32).copy(alpha = 0.55f)
                                         isPrivate -> Color(0xFFFF8F00).copy(alpha = 0.30f)
                                         else -> Color.White.copy(alpha = 0.20f)
                                     }
@@ -4247,34 +3884,20 @@ private fun ChatDetailContent(
             ) {
                     when {
                         isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = DarkGreen)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         }
-                        fetchError -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Warning,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(40.dp)
-                                )
-                                Text(
-                                    "Failed to load messages",
-                                    color = MaterialTheme.colorScheme.error,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Button(
-                                    onClick = { retryTrigger++ },
-                                    colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                                ) {
-                                    Text("Retry", color = Color.White)
-                                }
-                            }
-                        }
+                        fetchError -> ErrorState(
+                            title = "Could not load messages",
+                            message = "Check your connection and try again.",
+                            onRetry = { retryTrigger++ },
+                        )
                         messages.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No messages yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            EmptyState(
+                                icon = Icons.Outlined.ChatBubbleOutline,
+                                title = "Say hello",
+                                message = if (isAdmin) "Start the conversation about this item."
+                                          else "Ask Ofelia's Store anything about this item.",
+                            )
                         }
                         else -> LazyColumn(
                             state = listState,
@@ -4381,38 +4004,31 @@ private fun ChatDetailContent(
                             onValueChange = { messageText = it },
                             modifier = Modifier
                                 .weight(1f)
-                                .defaultMinSize(minHeight = 40.dp)
+                                .defaultMinSize(minHeight = 42.dp)
                                 .focusRequester(textFieldFocusRequester)
                                 .onFocusChanged { if (it.isFocused) showEmojiPicker = false }
                                 .background(
-                                    MaterialTheme.colorScheme.surface,
-                                    RoundedCornerShape(20.dp)
+                                    MaterialTheme.colorScheme.surfaceContainer,
+                                    RoundedCornerShape(21.dp)
                                 )
-                                .border(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                                    RoundedCornerShape(20.dp)
-                                )
-                                .padding(horizontal = 14.dp, vertical = 0.dp),
-                            textStyle = TextStyle(
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
+                                .padding(horizontal = 16.dp, vertical = 0.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
                                 color = MaterialTheme.colorScheme.onSurface
                             ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { doSend() }),
                             maxLines = 4,
                             decorationBox = { innerTextField ->
                                 Box(
-                                    modifier = Modifier.defaultMinSize(minHeight = 40.dp),
+                                    modifier = Modifier.defaultMinSize(minHeight = 42.dp),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     if (messageText.isEmpty()) {
                                         Text(
                                             "Type a message…",
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                            fontSize = 14.sp,
-                                            lineHeight = 20.sp
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            style = MaterialTheme.typography.bodyMedium,
                                         )
                                     }
                                     innerTextField()
@@ -4420,37 +4036,17 @@ private fun ChatDetailContent(
                             }
                         )
 
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(Spacing.sm))
 
                         // Send button
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (messageText.isNotBlank()) DarkGreen
-                                    else DarkGreen.copy(alpha = 0.35f)
-                                )
-                                .clickable(enabled = messageText.isNotBlank() && !isSending) {
-                                    doSend()
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isSending) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Filled.Send,
-                                    contentDescription = "Send",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
+                        RoundIconButton(
+                            icon = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Send",
+                            onClick = { doSend() },
+                            size = 42.dp,
+                            enabled = messageText.isNotBlank(),
+                            loading = isSending,
+                        )
                     }
                     // Emoji picker panel — shown when emoji button is toggled
                     if (showEmojiPicker) {
@@ -4587,7 +4183,7 @@ private fun EmojiPickerPanel(onEmojiClick: (String) -> Unit) {
         ScrollableTabRow(
             selectedTabIndex = selectedIndex,
             containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = DarkGreen,
+            contentColor = MaterialTheme.colorScheme.primary,
             edgePadding = 0.dp
         ) {
             emojiCategories.forEachIndexed { index, (label, _) ->
@@ -4607,7 +4203,7 @@ private fun EmojiPickerPanel(onEmojiClick: (String) -> Unit) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
         if (isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = DarkGreen, modifier = Modifier.size(28.dp))
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
             }
         } else {
             LazyVerticalGrid(
@@ -4644,31 +4240,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             // ── Top bar ────────────────────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
-            ) {
-                Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
-                    }
-                    Text(
-                        "Item Details",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-            // ── Scrollable content ──────────────────────────────────────────────
+            MarketPageTopBar(title = "Item details", onBack = onBack)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -4720,7 +4292,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                                         .clip(RoundedCornerShape(8.dp))
                                         .border(
                                                 width = if (index == currentImageIndex) 2.dp else 1.dp,
-                                                color = if (index == currentImageIndex) DarkGreen
+                                                color = if (index == currentImageIndex) MaterialTheme.colorScheme.primary
                                                         else MaterialTheme.colorScheme.outlineVariant,
                                                 shape = RoundedCornerShape(8.dp)
                                             )
@@ -4756,10 +4328,10 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(Icons.Filled.MonetizationOn, null, tint = DarkGreen, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Filled.MonetizationOn, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         Text(
                             Money.format(item.publicPrice ?: item.askingPrice),
-                            fontWeight = FontWeight.Bold, color = DarkGreen, fontSize = 20.sp
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 20.sp
                         )
                     }
                     if (item.publicPrice != null && item.rewardPoints > 0) {
@@ -4770,7 +4342,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                         )
                     }
                     val statusColor = when (item.status.lowercase()) {
-                        "approved" -> DarkGreen
+                        "approved" -> MaterialTheme.colorScheme.primary
                         "rejected" -> MaterialTheme.colorScheme.error
                         else       -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
@@ -4846,31 +4418,7 @@ private fun EditItemPage(
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             // ── Top bar ────────────────────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
-            ) {
-                Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
-                    }
-                    Text(
-                        "Edit Item",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-            // ── Scrollable content ──────────────────────────────────────────────
+            MarketPageTopBar(title = "Edit item", onBack = onBack)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -4922,7 +4470,7 @@ private fun EditItemPage(
                                         .clip(RoundedCornerShape(8.dp))
                                         .border(
                                             width = if (index == currentImageIndex) 2.dp else 1.dp,
-                                            color = if (index == currentImageIndex) DarkGreen
+                                            color = if (index == currentImageIndex) MaterialTheme.colorScheme.primary
                                                     else MaterialTheme.colorScheme.outlineVariant,
                                             shape = RoundedCornerShape(8.dp)
                                         )
@@ -4970,13 +4518,13 @@ private fun EditItemPage(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(Icons.Filled.MonetizationOn, null,
-                                tint = DarkGreen, modifier = Modifier.size(20.dp))
+                                tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 Money.format(item.askingPrice),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = DarkGreen
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -5003,7 +4551,7 @@ private fun EditItemPage(
                                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = DarkGreen,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
                         )
@@ -5049,7 +4597,7 @@ private fun EditItemPage(
                                 imeAction = ImeAction.Done
                             ),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = DarkGreen,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
                         )
@@ -5059,7 +4607,7 @@ private fun EditItemPage(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
-                                containerColor = DarkGreen.copy(alpha = 0.07f)
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
                             ),
                             shape = RoundedCornerShape(10.dp)
                         ) {
@@ -5077,7 +4625,7 @@ private fun EditItemPage(
                                         "$rewardPreview point${if (rewardPreview == 1) "" else "s"}",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = DarkGreen
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                                 acquisitionRef?.let { acquired ->
@@ -5102,7 +4650,7 @@ private fun EditItemPage(
                                                 Money.format(priced.subtract(acq).toPlainString()),
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF1565C0)
+                                                color = LocalMarketAccents.current.info
                                             )
                                         }
                                     }
@@ -5111,7 +4659,7 @@ private fun EditItemPage(
                                     Text(
                                         "This item cannot be published until it has been received and verified.",
                                         fontSize = 12.sp,
-                                        color = Color(0xFFE65100)
+                                        color = LocalMarketAccents.current.warning
                                     )
                                 }
                             }
@@ -5167,7 +4715,7 @@ private fun EditItemPage(
                                 Icon(
                                     Icons.Filled.CheckCircle,
                                     contentDescription = null,
-                                    tint = DarkGreen,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(36.dp)
                                 )
                             },
@@ -5190,9 +4738,9 @@ private fun EditItemPage(
                                 OutlinedButton(
                                     onClick = { showSuccessDialog = false },
                                     shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, DarkGreen)
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                                 ) {
-                                    Text("Close", color = DarkGreen)
+                                    Text("Close", color = MaterialTheme.colorScheme.primary)
                                 }
                             }
                         )
@@ -5343,31 +4891,7 @@ private fun EditItemPageForList(
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(modifier = Modifier.fillMaxSize()) {
             // ── Top bar ────────────────────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
-            ) {
-                Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White)
-                    }
-                    Text(
-                        "Edit Item",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-            
+            MarketPageTopBar(title = "Edit item", onBack = onBack)
             // ── Scrollable content ──────────────────────────────────────────────
             Column(
                 modifier = Modifier
@@ -5420,7 +4944,7 @@ private fun EditItemPageForList(
                                         .clip(RoundedCornerShape(8.dp))
                                         .border(
                                             width = if (index == currentImageIndex) 2.dp else 1.dp,
-                                            color = if (index == currentImageIndex) DarkGreen
+                                            color = if (index == currentImageIndex) MaterialTheme.colorScheme.primary
                                                     else MaterialTheme.colorScheme.outlineVariant,
                                             shape = RoundedCornerShape(8.dp)
                                         )
@@ -5471,13 +4995,13 @@ private fun EditItemPageForList(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(Icons.Filled.MonetizationOn, null,
-                                    tint = DarkGreen, modifier = Modifier.size(20.dp))
+                                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     item.displayAskingPrice,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = DarkGreen
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -5505,7 +5029,7 @@ private fun EditItemPageForList(
                                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = DarkGreen,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
                         )
@@ -5552,7 +5076,7 @@ private fun EditItemPageForList(
                                 imeAction = ImeAction.Done
                             ),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = DarkGreen,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
                         )
@@ -5560,7 +5084,7 @@ private fun EditItemPageForList(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
-                                containerColor = DarkGreen.copy(alpha = 0.07f)
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
                             ),
                             shape = RoundedCornerShape(10.dp)
                         ) {
@@ -5578,7 +5102,7 @@ private fun EditItemPageForList(
                                         "$rewardPreview point${if (rewardPreview == 1) "" else "s"}",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = DarkGreen
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                                 acquisitionRef?.let { acquired ->
@@ -5603,7 +5127,7 @@ private fun EditItemPageForList(
                                                 Money.format(priced.subtract(acq).toPlainString()),
                                                 fontSize = 14.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF1565C0)
+                                                color = LocalMarketAccents.current.info
                                             )
                                         }
                                     }
@@ -5612,7 +5136,7 @@ private fun EditItemPageForList(
                                     Text(
                                         "This item cannot be published until it has been received and verified.",
                                         fontSize = 12.sp,
-                                        color = Color(0xFFE65100)
+                                        color = LocalMarketAccents.current.warning
                                     )
                                 }
                             }
@@ -5670,7 +5194,7 @@ private fun EditItemPageForList(
                                 Icon(
                                     Icons.Filled.CheckCircle,
                                     contentDescription = null,
-                                    tint = DarkGreen,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(36.dp)
                                 )
                             },
@@ -5693,9 +5217,9 @@ private fun EditItemPageForList(
                                 OutlinedButton(
                                     onClick = { showSuccessDialog = false },
                                     shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, DarkGreen)
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                                 ) {
-                                    Text("Close", color = DarkGreen)
+                                    Text("Close", color = MaterialTheme.colorScheme.primary)
                                 }
                             }
                         )
@@ -5840,66 +5364,45 @@ private fun ChatBubble(msg: ChatMessage, isMe: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.CenterVertically // Changed from Top to CenterVertically
+        verticalAlignment = Alignment.Bottom,
     ) {
         if (!isMe) {
-            // Profile picture - centered vertically with the message bubble
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(DarkGreen.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (msg.senderProfilePicture.isNotBlank()) {
-                    AsyncImage(
-                        model = msg.senderProfilePicture,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Text(
-                        msg.senderName.firstOrNull()?.toString() ?: "?",
-                        fontSize = 13.sp,
-                        color = DarkGreen
-                    )
-                }
-            }
-            Spacer(Modifier.width(6.dp))
+            Avatar(
+                url = msg.senderProfilePicture,
+                initial = msg.senderName.firstOrNull()?.toString() ?: "?",
+                size = 30.dp,
+            )
+            Spacer(Modifier.width(Spacing.sm))
         }
 
         // Message content
         Column(
-            modifier = Modifier.widthIn(max = 260.dp),
+            modifier = Modifier.widthIn(max = 280.dp),
             horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
         ) {
-            // Message bubble
-            Box(
-                modifier = Modifier.background(
-                    color = if (isMe) DarkGreen else MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(
-                        topStart = 18.dp,
-                        topEnd = 18.dp,
-                        bottomStart = if (isMe) 18.dp else 4.dp,
-                        bottomEnd = if (isMe) 4.dp else 18.dp
-                    )
-                ).padding(horizontal = 14.dp, vertical = 10.dp)
+            Surface(
+                shape = RoundedCornerShape(
+                    topStart = 18.dp,
+                    topEnd = 18.dp,
+                    bottomStart = if (isMe) 18.dp else 4.dp,
+                    bottomEnd = if (isMe) 4.dp else 18.dp
+                ),
+                color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                shadowElevation = if (isMe) Elevation.flat else Elevation.card,
             ) {
                 Text(
                     msg.message,
-                    color = if (isMe) Color.White else MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp
+                    color = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
             }
 
             // Timestamp
             Text(
                 timeAgo(msg.sentAt),
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 modifier = Modifier.padding(
                     top = 3.dp,
                     start = if (isMe) 0.dp else 4.dp,
@@ -5908,7 +5411,7 @@ private fun ChatBubble(msg: ChatMessage, isMe: Boolean) {
             )
         }
 
-        if (isMe) Spacer(Modifier.width(6.dp))
+        if (isMe) Spacer(Modifier.width(Spacing.xs))
     }
 }
 
@@ -5928,6 +5431,7 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
     var selectedFilter  by remember { mutableStateOf("All") }
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
     var refreshKey      by remember { mutableStateOf(0) }
+    var searchQuery     by remember { mutableStateOf("") }
 
     // Always fetch ALL students — filter client-side via displayStatus so that
     // students with is_verified=true but status="pending" on the backend still
@@ -5950,14 +5454,17 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
 
     // Client-side filter using displayStatus (bridges is_verified / status mismatch)
     // Wrapped in remember so it only recomputes when students list or filter changes
-    val filteredStudents = remember(students, selectedFilter) {
-        when (selectedFilter) {
+    val filteredStudents = remember(students, selectedFilter, searchQuery) {
+        val byStatus = when (selectedFilter) {
             "Pending"  -> students.filter { it.displayStatus == "pending" }
             "Approved" -> students.filter { it.displayStatus == "approved" }
             "Declined" -> students.filter { it.displayStatus == "declined" }
             "Blocked"  -> students.filter { it.displayStatus == "blocked" }
             else       -> students
         }
+        val q = searchQuery.trim().lowercase()
+        if (q.isBlank()) byStatus
+        else byStatus.filter { it.fullName.lowercase().contains(q) || it.email.lowercase().contains(q) }
     }
 
     // Pre-compute counts once per students change — avoids 4x .count() on every recomposition
@@ -5980,19 +5487,32 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        AdminPageHeader(title = "User Management", onMenuClick = onMenuClick)
+        AdminPageHeader(
+            title = "Students",
+            subtitle = when {
+                pendingCount == 1 -> "1 account waiting for approval"
+                pendingCount > 1 -> "$pendingCount accounts waiting for approval"
+                else -> "${students.size} registered"
+            },
+            onMenuClick = onMenuClick,
+        )
+
+        SearchField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = "Search by name or email…",
+            elevated = false,
+            modifier = Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.md),
+        )
 
         // ── Filter chips ─────────────────────────────────────────────────────
         val filters = listOf("All", "Pending", "Approved", "Declined", "Blocked")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = Spacing.screen),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            modifier = Modifier.padding(bottom = Spacing.sm),
         ) {
-            filters.forEach { filter ->
-                val isSelected = selectedFilter == filter
+            items(filters, key = { it }) { filter ->
                 val count = when (filter) {
                     "Pending"  -> pendingCount
                     "Approved" -> approvedCount
@@ -6000,60 +5520,53 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
                     "Blocked"  -> blockedCount
                     else       -> students.size
                 }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) DarkGreen else MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { selectedFilter = filter }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text("$filter ($count)", fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                ChoiceChip(
+                    label = filter,
+                    selected = selectedFilter == filter,
+                    onClick = { selectedFilter = filter },
+                    count = if (filter == "All") null else count,
+                )
             }
         }
 
         // ── Content ──────────────────────────────────────────────────────────
         Box(modifier = Modifier.fillMaxSize()) {
             when {
-                isLoading -> CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center), color = DarkGreen)
-
-                errorMessage != null -> Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(48.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(errorMessage!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp,
-                        textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp))
+                isLoading -> Column(modifier = Modifier.fillMaxSize()) {
+                    repeat(7) { ListRowSkeleton() }
                 }
 
-                filteredStudents.isEmpty() -> Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Filled.PeopleOutline, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.size(72.dp))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = if (selectedFilter == "All") "No students found"
-                               else "No ${selectedFilter.lowercase()} students",
-                        fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+                errorMessage != null -> ErrorState(
+                    title = "Could not load students",
+                    message = errorMessage!!,
+                    onRetry = { refreshKey++ },
+                )
+
+                filteredStudents.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EmptyState(
+                        icon = Icons.Outlined.PeopleOutline,
+                        title = when {
+                            searchQuery.isNotBlank() -> "No matches"
+                            selectedFilter == "All" -> "No students yet"
+                            else -> "No ${selectedFilter.lowercase()} students"
+                        },
+                        message = when {
+                            searchQuery.isNotBlank() -> "Nothing matches \"$searchQuery\"."
+                            selectedFilter == "Pending" -> "Every account has been reviewed."
+                            else -> "Students appear here once they register."
+                        },
                     )
                 }
 
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                    contentPadding = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                 ) {
                     items(filteredStudents, key = { it.studentVerificationId }) { student ->
                         StudentCard(student = student, onClick = { selectedStudent = student })
                     }
+                    item { Spacer(Modifier.height(Spacing.sm)) }
                 }
             }
         }
@@ -6062,67 +5575,59 @@ private fun AdminUsersContent(onMenuClick: () -> Unit) {
 
 // ── Student Card ───────────────────────────────────────────────────────────────
 
+/** The badge tone for a verification status. */
+private fun studentStatusTone(status: String): StatusTone = when (status.lowercase()) {
+    "approved" -> StatusTone.Success
+    "declined" -> StatusTone.Danger
+    "blocked"  -> StatusTone.Neutral
+    else       -> StatusTone.Warning
+}
+
 @Composable
 private fun StudentCard(student: Student, onClick: () -> Unit) {
-    val sColor = statusColor(student.displayStatus)
+    MarketCard(onClick = onClick, contentPadding = PaddingValues(horizontal = Spacing.lg, vertical = Spacing.md)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(url = student.profilePicture ?: "", initial = student.initial, size = 48.dp)
 
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically) {
+            Spacer(modifier = Modifier.width(Spacing.md))
 
-            // Avatar — shimmer while loading, initial on error/no URL
-            Box(modifier = Modifier.size(50.dp).clip(CircleShape)
-                .background(DarkGreen.copy(alpha = 0.1f))) {
-                if (student.profilePicture != null) {
-                    SubcomposeAsyncImage(
-                        model = student.profilePicture,
-                        contentDescription = "Profile",
-                        modifier = Modifier.fillMaxSize().clip(CircleShape),
-                        contentScale = ContentScale.Crop,
-                        loading = { ShimmerEffect(Modifier.fillMaxSize()) },
-                        error = {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(student.initial, fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold, color = DarkGreen)
-                            }
-                        }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    student.fullName,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    student.email,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val detail = buildString {
+                    student.verificationType?.let { append(it.replace("_", " ").replaceFirstChar { c -> c.uppercaseChar() }) }
+                    if (student.isVerified) { if (isNotEmpty()) append(" · "); append("Verified") }
+                }
+                if (detail.isNotBlank()) {
+                    Text(
+                        detail,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (student.isVerified) LocalMarketAccents.current.success
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(student.initial, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = DarkGreen)
-                    }
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(student.fullName, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface)
-                Text(student.email, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    text = buildString {
-                        student.verificationType?.let { append(it.replace("_", " ").replaceFirstChar { c -> c.uppercaseChar() }) }
-                        if (student.isVerified) append(" · ✓ Verified")
-                    },
-                    fontSize = 11.sp,
-                    color = if (student.isVerified) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Spacer(modifier = Modifier.width(Spacing.sm))
 
             // Status badge — uses displayStatus so is_verified:true always shows Approved
-            Box(modifier = Modifier.clip(RoundedCornerShape(20.dp))
-                .background(sColor.copy(alpha = 0.12f))
-                .padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text(student.displayStatus.replaceFirstChar { it.uppercaseChar() },
-                    fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = sColor)
-            }
+            StatusPill(
+                label = student.displayStatus.replaceFirstChar { it.uppercaseChar() },
+                tone = studentStatusTone(student.displayStatus),
+            )
         }
     }
 }
@@ -6136,7 +5641,6 @@ private fun StudentDetailDialog(
     onDismiss: () -> Unit,
     onStatusUpdated: () -> Unit
 ) {
-    val sColor = statusColor(student.displayStatus)
     val scope  = rememberCoroutineScope()
 
     var declineReason    by remember { mutableStateOf(student.reason ?: "") }
@@ -6217,7 +5721,7 @@ private fun StudentDetailDialog(
                 Icon(
                     if (success) Icons.Filled.CheckCircle else Icons.Filled.Error,
                     contentDescription = null,
-                    tint = if (success) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                    tint = if (success) LocalMarketAccents.current.success else MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(32.dp)
                 )
             },
@@ -6241,6 +5745,8 @@ private fun StudentDetailDialog(
             dismissOnClickOutside = false
         )
     ) {
+        val accents = LocalMarketAccents.current
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -6248,43 +5754,55 @@ private fun StudentDetailDialog(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
 
-                // ── Top App Bar ───────────────────────────────────────────────
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))
-                ) {
-                    Spacer(modifier = Modifier.safeAreaTopHeight())
-                    Row(
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { if (!actionLoading) onDismiss() }) {
-                            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                        }
-                        Text(
-                            "Student Details",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .padding(end = 16.dp)
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Color.White.copy(alpha = 0.2f))
-                                .padding(horizontal = 10.dp, vertical = 3.dp)
+                // ── Header, with the identity block on the gradient ──────────
+                MarketHeader(
+                    title = "Student account",
+                    onBack = { if (!actionLoading) onDismiss() },
+                    actions = {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.2f),
+                            modifier = Modifier.padding(end = Spacing.md),
                         ) {
                             Text(
                                 student.displayStatus.replaceFirstChar { it.uppercaseChar() },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
                             )
                         }
-                    }
-                }
+                    },
+                    bottomContent = {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = Spacing.xl, end = Spacing.xl, top = Spacing.xs, bottom = Spacing.xl),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Avatar(
+                                url = student.profilePicture ?: "",
+                                initial = student.initial,
+                                size = 64.dp,
+                                ringColor = Color.White.copy(alpha = 0.5f),
+                                containerColor = Color.White.copy(alpha = 0.2f),
+                                contentColor = Color.White,
+                            )
+                            Spacer(modifier = Modifier.width(Spacing.lg))
+                            Column {
+                                Text(
+                                    student.fullName,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = accents.onBrand,
+                                )
+                                Text(
+                                    student.email,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = accents.onBrandMuted,
+                                )
+                            }
+                        }
+                    },
+                )
 
                 // ── Scrollable Content ────────────────────────────────────────
                 Column(
@@ -6292,190 +5810,160 @@ private fun StudentDetailDialog(
                         .fillMaxSize()
                         .safeAreaBottom()
                         .verticalScroll(rememberScrollState())
+                        .padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xl),
                 ) {
-                    // ── Profile header ────────────────────────────────────────
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(DarkGreenLight.copy(alpha = 0.85f))
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier.size(64.dp).clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f))
-                                .border(2.dp, Color.White.copy(alpha = 0.5f), CircleShape)
-                        ) {
-                            if (student.profilePicture != null) {
-                                SubcomposeAsyncImage(
-                                    model = student.profilePicture,
-                                    contentDescription = "Profile",
-                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                                    contentScale = ContentScale.Crop,
-                                    loading = { ShimmerEffect(Modifier.fillMaxSize()) },
-                                    error = {
-                                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                            Text(student.initial, fontSize = 26.sp,
-                                                fontWeight = FontWeight.Bold, color = Color.White)
-                                        }
-                                    }
-                                )
-                            } else {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text(student.initial, fontSize = 26.sp,
-                                        fontWeight = FontWeight.Bold, color = Color.White)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column {
-                            Text(student.fullName, fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold, color = Color.White)
-                            Text(student.email, fontSize = 13.sp,
-                                color = Color.White.copy(alpha = 0.85f))
-                        }
+                    // ── Pending nudge ─────────────────────────────────────────
+                    if (student.displayStatus == "pending") {
+                        InfoBanner(
+                            title = "Waiting for your decision",
+                            text = "Check the ID below is a real Fatima student card or registration form, then approve or decline.",
+                            tone = StatusTone.Warning,
+                            icon = Icons.Filled.HourglassTop,
+                        )
                     }
-
-                    // ── Info section ──────────────────────────────────────────
-                    Column(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text("STUDENT INFORMATION", fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold, color = DarkGreen, letterSpacing = 1.sp)
-
-                        InfoRow(Icons.Filled.Badge,          "Verification ID", "#${student.studentVerificationId}")
-                        InfoRow(Icons.Filled.Person,         "Full Name",       student.fullName)
-                        InfoRow(Icons.Filled.Email,          "Email",           student.email)
-                        InfoRow(Icons.Filled.VerifiedUser,   "Verified",
-                            if (student.isVerified) "Yes ✓" else "No",
-                            valueColor = if (student.isVerified) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurface)
-                        student.verificationType?.let {
-                            InfoRow(Icons.Filled.CreditCard, "ID Type",
-                                it.replace("_", " ").replaceFirstChar { c -> c.uppercaseChar() })
-                        }
-                        InfoRow(Icons.Filled.AccountBalanceWallet,
-                            "Wallet Points", "${student.walletPoints} pts")
-                        InfoRow(Icons.Filled.Circle, "Active",
-                            if (student.isActive) "Yes" else "No",
-                            valueColor = if (student.isActive) Color(0xFF4CAF50)
-                                         else MaterialTheme.colorScheme.onSurfaceVariant)
-                        InfoRow(Icons.Filled.CalendarToday, "Registered",
-                            formatDate(student.registeredDate))
-                        if (!student.reason.isNullOrBlank()) {
-                            InfoRow(Icons.Filled.Info, "Reason", student.reason,
-                                valueColor = MaterialTheme.colorScheme.error)
-                        }
+                    if (!student.reason.isNullOrBlank()) {
+                        InfoBanner(
+                            title = "Reason on file",
+                            text = student.reason,
+                            tone = StatusTone.Danger,
+                            icon = Icons.Filled.Info,
+                        )
                     }
 
                     // ── Verification document ─────────────────────────────────
                     student.verificationDocument?.let { docUrl ->
-                        Column(
-                            modifier = Modifier
-                                .padding(horizontal = 20.dp)
-                                .padding(bottom = 16.dp)
-                        ) {
-                            Text("VERIFICATION DOCUMENT", fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold, color = DarkGreen,
-                                letterSpacing = 1.sp,
-                                modifier = Modifier.padding(bottom = 8.dp))
-                            Box(
+                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            SectionHeader(
+                                title = "Verification document",
+                                subtitle = student.verificationType
+                                    ?.replace("_", " ")
+                                    ?.replaceFirstChar { c -> c.uppercaseChar() }
+                                    ?: "Student ID or registration card",
+                                actionLabel = "Zoom",
+                                onAction = { showDocViewer = true },
+                            )
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 160.dp, max = 280.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { showDocViewer = true }
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .clickable { showDocViewer = true },
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                shadowElevation = Elevation.card,
                             ) {
-                                SubcomposeAsyncImage(
-                                    model = docUrl,
-                                    contentDescription = "Verification Document",
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 280.dp),
-                                    contentScale = ContentScale.FillWidth,
-                                    loading = {
-                                        ShimmerEffect(
-                                            Modifier.fillMaxWidth()
-                                                .height(200.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                        )
-                                    },
-                                    error = {
-                                        Box(
-                                            modifier = Modifier.fillMaxWidth().height(120.dp)
-                                                .background(MaterialTheme.colorScheme.surfaceVariant),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Icon(Icons.Filled.BrokenImage, null,
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                                    modifier = Modifier.size(36.dp))
-                                                Spacer(Modifier.height(4.dp))
-                                                Text("Could not load document", fontSize = 12.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Box {
+                                    SubcomposeAsyncImage(
+                                        model = docUrl,
+                                        contentDescription = "Verification Document",
+                                        modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 300.dp),
+                                        contentScale = ContentScale.FillWidth,
+                                        loading = {
+                                            ShimmerBox(
+                                                Modifier.fillMaxWidth().height(200.dp),
+                                                shape = MaterialTheme.shapes.medium,
+                                            )
+                                        },
+                                        error = {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth().height(140.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    Icon(Icons.Outlined.BrokenImage, null,
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                        modifier = Modifier.size(36.dp))
+                                                    Spacer(Modifier.height(Spacing.xs))
+                                                    Text("Could not load document",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
                                             }
                                         }
+                                    )
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(Spacing.sm),
+                                        shape = CircleShape,
+                                        color = Color.Black.copy(alpha = 0.5f),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = Spacing.sm, vertical = Spacing.xs),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                                        ) {
+                                            Icon(Icons.Filled.ZoomIn, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                            Text("Tap to zoom", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                                        }
                                     }
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(8.dp)
-                                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text("Tap to zoom", fontSize = 11.sp, color = Color.White)
                                 }
                             }
                         }
                     }
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 20.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-
-                    // ── Decline reason input ──────────────────────────────────
-                    if (showDeclineInput) {
-                        OutlinedTextField(
-                            value = declineReason,
-                            onValueChange = { declineReason = it },
-                            label = { Text("Reason for declining") },
-                            placeholder = { Text("Enter reason (optional)") },
-                            modifier = Modifier.fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 8.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            maxLines = 3
+                    // ── Info section ──────────────────────────────────────────
+                    SettingsGroup(title = "Account details") {
+                        InfoRowItem(Icons.Outlined.Badge, "Verification ID", "#${student.studentVerificationId}")
+                        RowDivider()
+                        InfoRowItem(
+                            Icons.Outlined.VerifiedUser, "Verified",
+                            if (student.isVerified) "Yes" else "Not yet",
+                            valueColor = if (student.isVerified) accents.success else MaterialTheme.colorScheme.onSurface,
                         )
+                        RowDivider()
+                        InfoRowItem(Icons.Outlined.Stars, "Wallet points", "${student.walletPoints} pts", tint = accents.reward)
+                        RowDivider()
+                        InfoRowItem(
+                            Icons.Outlined.ToggleOn, "Active",
+                            if (student.isActive) "Yes" else "No",
+                            valueColor = if (student.isActive) accents.success else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        RowDivider()
+                        InfoRowItem(Icons.Outlined.CalendarToday, "Registered", formatDate(student.registeredDate))
                     }
 
-                    // ── Block reason input ────────────────────────────────────
-                    if (showBlockInput) {
-                        OutlinedTextField(
-                            value = blockReason,
-                            onValueChange = { blockReason = it },
-                            label = { Text("Reason for blocking") },
-                            placeholder = { Text("Enter reason for blocking this student") },
-                            modifier = Modifier.fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 8.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            maxLines = 3
-                        )
-                    }
+                    // ── Decisions ─────────────────────────────────────────────
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        SectionHeader(title = "Decision")
 
-                    // ── Action buttons ────────────────────────────────────────
-                    Column(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                        // ── Decline reason input ──────────────────────────────
+                        if (showDeclineInput) {
+                            MarketTextField(
+                                value = declineReason,
+                                onValueChange = { declineReason = it },
+                                label = "Reason for declining",
+                                placeholder = "Optional - the student will see this",
+                                singleLine = false,
+                                maxLines = 3,
+                            )
+                        }
+
+                        // ── Block reason input ────────────────────────────────
+                        if (showBlockInput) {
+                            MarketTextField(
+                                value = blockReason,
+                                onValueChange = { blockReason = it },
+                                label = "Reason for blocking",
+                                placeholder = "Why this student is being blocked",
+                                singleLine = false,
+                                maxLines = 3,
+                            )
+                        }
+
                         if (actionLoading) {
-                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = DarkGreen, modifier = Modifier.size(32.dp))
+                            Box(modifier = Modifier.fillMaxWidth().padding(Spacing.lg), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                             }
                         } else {
                             // Approve — shown when not already approved
                             if (student.displayStatus != "approved") {
-                                Button(
+                                PrimaryButton(
+                                    text = "Approve student",
+                                    icon = Icons.Filled.CheckCircle,
+                                    modifier = Modifier.fillMaxWidth(),
                                     onClick = {
-                                        if (token == null) return@Button
+                                        if (token == null) return@PrimaryButton
                                         showDeclineInput = false
                                         showBlockInput = false
                                         scope.launch {
@@ -6490,34 +5978,28 @@ private fun StudentDetailDialog(
                                                 Pair(false, "Approval failed. Please try again.")
                                         }
                                     },
-                                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                                ) {
-                                    Icon(Icons.Filled.CheckCircle, null,
-                                        modifier = Modifier.size(18.dp).padding(end = 4.dp))
-                                    Text("Approve", fontWeight = FontWeight.SemiBold, color = Color.White)
-                                }
+                                )
                             }
 
                             // Decline — shown when not already declined
                             if (student.displayStatus != "declined") {
                                 if (!showDeclineInput) {
-                                    OutlinedButton(
+                                    SecondaryButton(
+                                        text = "Decline",
+                                        icon = Icons.Outlined.Cancel,
+                                        contentColor = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.fillMaxWidth(),
                                         onClick = { showDeclineInput = true; showBlockInput = false },
-                                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF44336)),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF44336))
-                                    ) {
-                                        Icon(Icons.Filled.Cancel, null,
-                                            modifier = Modifier.size(18.dp).padding(end = 4.dp))
-                                        Text("Decline", fontWeight = FontWeight.SemiBold)
-                                    }
+                                    )
                                 } else {
-                                    Button(
+                                    PrimaryButton(
+                                        text = "Confirm decline",
+                                        icon = Icons.Outlined.Cancel,
+                                        containerColor = MaterialTheme.colorScheme.error,
+                                        contentColor = MaterialTheme.colorScheme.onError,
+                                        modifier = Modifier.fillMaxWidth(),
                                         onClick = {
-                                            if (token == null) return@Button
+                                            if (token == null) return@PrimaryButton
                                             scope.launch {
                                                 actionLoading = true
                                                 val ok = withContext(Dispatchers.IO) {
@@ -6535,35 +6017,29 @@ private fun StudentDetailDialog(
                                                     Pair(false, "Decline failed. Please try again.")
                                             }
                                         },
-                                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF44336))
-                                    ) {
-                                        Icon(Icons.Filled.Cancel, null,
-                                            modifier = Modifier.size(18.dp).padding(end = 4.dp))
-                                        Text("Confirm Decline", fontWeight = FontWeight.SemiBold, color = Color.White)
-                                    }
+                                    )
                                 }
                             }
 
                             // Block — shown when not already blocked
                             if (student.displayStatus != "blocked") {
                                 if (!showBlockInput) {
-                                    OutlinedButton(
+                                    SecondaryButton(
+                                        text = "Block student",
+                                        icon = Icons.Outlined.Block,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.fillMaxWidth(),
                                         onClick = { showBlockInput = true; showDeclineInput = false },
-                                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF9C27B0)),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF9C27B0))
-                                    ) {
-                                        Icon(Icons.Filled.Block, null,
-                                            modifier = Modifier.size(18.dp).padding(end = 4.dp))
-                                        Text("Block Student", fontWeight = FontWeight.SemiBold)
-                                    }
+                                    )
                                 } else {
-                                    Button(
+                                    PrimaryButton(
+                                        text = "Confirm block",
+                                        icon = Icons.Outlined.Block,
+                                        containerColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        contentColor = MaterialTheme.colorScheme.surface,
+                                        modifier = Modifier.fillMaxWidth(),
                                         onClick = {
-                                            if (token == null) return@Button
+                                            if (token == null) return@PrimaryButton
                                             scope.launch {
                                                 actionLoading = true
                                                 val ok = withContext(Dispatchers.IO) {
@@ -6576,28 +6052,13 @@ private fun StudentDetailDialog(
                                                     Pair(false, "Block failed. Please try again.")
                                             }
                                         },
-                                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9C27B0))
-                                    ) {
-                                        Icon(Icons.Filled.Block, null,
-                                            modifier = Modifier.size(18.dp).padding(end = 4.dp))
-                                        Text("Confirm Block", fontWeight = FontWeight.SemiBold, color = Color.White)
-                                    }
+                                    )
                                 }
                             }
                         }
-
-                        // Back / Close
-                        TextButton(
-                            onClick = { if (!actionLoading) onDismiss() },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Close", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
                     }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(Spacing.lg))
                 }
             }
         }
@@ -6612,7 +6073,7 @@ private fun InfoRow(
     valueColor: Color = Color.Unspecified
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Icon(icon, null, tint = DarkGreen.copy(alpha = 0.7f),
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
             modifier = Modifier.size(16.dp).padding(top = 1.dp))
         Spacer(modifier = Modifier.width(8.dp))
         Text("$label:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -6625,6 +6086,10 @@ private fun InfoRow(
 
 // ── Settings ───────────────────────────────────────────────────────────────────
 
+/**
+ * Kept for the drawer pages that still reach it. Day to day, the same rows
+ * live on the profile screen, which is where both roles now find them.
+ */
 @Composable
 fun AdminSettingsContent(
     isDarkMode: Boolean,
@@ -6634,79 +6099,50 @@ fun AdminSettingsContent(
     favoritesCount: Int = 0,
     onFavoritesClick: () -> Unit = {}
 ) {
-    val context = LocalContext.current
-    val versionName = remember {
-        try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0" }
-        catch (e: Exception) { "1.0" }
-    }
-
     Column(modifier = Modifier.fillMaxSize()) {
         AdminPageHeader(title = "Settings", onMenuClick = onMenuClick, favoritesCount = favoritesCount, onFavoritesClick = onFavoritesClick)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xl),
         ) {
-            SettingsSectionLabel("PREFERENCES")
-            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(2.dp)) {
-                Row(modifier = Modifier.fillMaxWidth().clickable { onThemeToggle() }
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
-                        .background(DarkGreen.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                        Icon(if (isDarkMode) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                            null, tint = DarkGreen, modifier = Modifier.size(20.dp))
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Dark Mode", fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        Text(if (isDarkMode) "Currently enabled" else "Currently disabled",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(checked = isDarkMode, onCheckedChange = { onThemeToggle() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White, checkedTrackColor = DarkGreen,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)))
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-            SettingsSectionLabel("ABOUT")
-            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(2.dp)) {
-                Column {
-                    SettingsInfoRow(Icons.Filled.ShoppingBag, "App Name", "FatiMarket")
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                    SettingsInfoRow(Icons.Filled.Info, "Version", "v$versionName")
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                    SettingsInfoRow(Icons.Filled.AdminPanelSettings, "Role", role)
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                    SettingsInfoRow(Icons.Filled.School, "Institution", "Our Lady of Fatima University")
-                }
-            }
+            AppearanceGroup(isDarkMode = isDarkMode, onThemeToggle = onThemeToggle)
+            AboutGroup(role = role)
         }
     }
 }
 
+/** The dark-mode switch, in a titled group. */
 @Composable
-private fun SettingsSectionLabel(text: String) {
-    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DarkGreen,
-        letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 10.dp))
+private fun AppearanceGroup(isDarkMode: Boolean, onThemeToggle: () -> Unit) {
+    SettingsGroup(title = "Appearance") {
+        SettingsRow(
+            icon = if (isDarkMode) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
+            title = "Dark mode",
+            subtitle = if (isDarkMode) "On" else "Off",
+            onClick = onThemeToggle,
+            trailing = { Switch(checked = isDarkMode, onCheckedChange = { onThemeToggle() }) },
+        )
+    }
 }
 
+/** App name, version and the institution it serves. */
 @Composable
-private fun SettingsInfoRow(icon: ImageVector, label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = DarkGreen, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(label, fontSize = 15.sp, modifier = Modifier.weight(1f))
-        Text(value, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium)
+private fun AboutGroup(role: String) {
+    val context = LocalContext.current
+    val versionName = remember {
+        try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0" }
+        catch (e: Exception) { "1.0" }
+    }
+
+    SettingsGroup(title = "About") {
+        InfoRowItem(Icons.Outlined.Storefront, "App", "Fati-Market v$versionName")
+        RowDivider()
+        InfoRowItem(Icons.Outlined.School, "Institution", "Our Lady of Fatima University")
+        RowDivider()
+        InfoRowItem(Icons.Outlined.Badge, "Signed in as", role.replaceFirstChar { it.uppercaseChar() })
     }
 }
 
@@ -6734,15 +6170,22 @@ fun AdminProfileContent(
     /** Admin-only: the full transactions screen. */
     onManageOrders: (() -> Unit)? = null,
     /** Admin-only: student management, which used to sit on the bottom bar. */
-    onManageStudents: (() -> Unit)? = null
+    onManageStudents: (() -> Unit)? = null,
+    /** Settings, which used to be a tab of their own, live here now. */
+    isDarkMode: Boolean = false,
+    onThemeToggle: (() -> Unit)? = null,
+    onLogout: (() -> Unit)? = null,
 ) {
     val context     = LocalContext.current
     val prefs       = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
     val scope       = rememberCoroutineScope()
-    val fullName    = "$firstName $lastName".trim().ifBlank { "Administrator" }
-    val initial     = firstName.firstOrNull()?.uppercaseChar()?.toString() ?: "A"
+    val accents     = LocalMarketAccents.current
+    val isAdmin     = role.equals("admin", true)
+    val fullName    = "$firstName $lastName".trim().ifBlank { if (isAdmin) "Administrator" else "Student" }
+    val initial     = firstName.firstOrNull()?.uppercaseChar()?.toString() ?: if (isAdmin) "A" else "S"
     var isUploading by remember { mutableStateOf(false) }
     var uploadError by remember { mutableStateOf<String?>(null) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     // The balance passed in is whatever login stored - a number frozen at
     // sign-in that never moved again, so a buyer who earned points saw zero
@@ -6764,7 +6207,7 @@ fun AdminProfileContent(
                 prefs.edit().putInt("user_wallet_points", result.value).apply()
             }
 
-            delay(10_000)
+            delay(15_000)
         }
     }
 
@@ -6824,122 +6267,218 @@ fun AdminProfileContent(
         }
     }
 
-    // The page header stays put; everything below it scrolls as one piece, so
-    // the avatar block no longer sits frozen above a moving list.
+    if (showLogoutDialog && onLogout != null) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            icon = { Icon(Icons.AutoMirrored.Filled.Logout, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(32.dp)) },
+            title = { Text("Log out?") },
+            text  = { Text("You will need to sign in again next time.") },
+            confirmButton = {
+                PrimaryButton(
+                    text = "Log out",
+                    compact = true,
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                    onClick = { showLogoutDialog = false; onLogout() },
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        AdminPageHeader(title = "Profile", onMenuClick = onMenuClick, favoritesCount = favoritesCount, onFavoritesClick = onFavoritesClick)
+        // The header carries the identity block, so the avatar sits on the
+        // brand gradient rather than floating in the page.
+        MarketHeader(
+            title = "Profile",
+            onMenuClick = onMenuClick,
+            bottomContent = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = Spacing.sm, bottom = Spacing.xxl),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(contentAlignment = Alignment.BottomEnd) {
+                        if (isUploading) {
+                            Box(
+                                modifier = Modifier
+                                    .size(96.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(40.dp),
+                                    color = accents.onBrand,
+                                    strokeWidth = 3.dp
+                                )
+                            }
+                        } else {
+                            Avatar(
+                                url = profilePic,
+                                initial = initial,
+                                size = 96.dp,
+                                ringColor = Color.White.copy(alpha = 0.7f),
+                                ringWidth = 3.dp,
+                                containerColor = Color.White.copy(alpha = 0.2f),
+                                contentColor = Color.White,
+                            )
+                        }
+                        // Camera badge
+                        Surface(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .clickable(enabled = !isUploading) { imagePicker.launch("image/*") },
+                            shape = CircleShape,
+                            color = accents.reward,
+                            shadowElevation = Elevation.raised,
+                        ) {
+                            Icon(
+                                Icons.Filled.CameraAlt, "Change photo",
+                                tint = Color(0xFF3D2900),
+                                modifier = Modifier.padding(7.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(Spacing.md))
+                    Text(
+                        fullName,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = accents.onBrand,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        if (isAdmin) "Store administrator" else email.ifBlank { "Student" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = accents.onBrandMuted,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (uploadError != null) {
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Text(
+                            text = uploadError!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFFFB4AB),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = Spacing.xl)
+                        )
+                    }
+                }
+            },
+        )
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .padding(horizontal = Spacing.screen)
+                .padding(top = Spacing.lg, bottom = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xl)
         ) {
+            // ── At a glance ───────────────────────────────────────────────
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                StatTile(
+                    label = "Points balance",
+                    value = "$livePoints",
+                    icon = Icons.Filled.Stars,
+                    tint = accents.reward,
+                    modifier = Modifier.weight(1f),
+                    // Points mean nothing to a buyer until they are shown in pesos.
+                    supporting = if (isAdmin) null else Money.format(
+                        LoyaltyRules.discountFor(livePoints).toPlainString()
+                    ) + " off at checkout",
+                )
+                if (isAdmin) {
+                    StatTile(
+                        label = "Students",
+                        value = "Manage",
+                        icon = Icons.Filled.Group,
+                        modifier = Modifier.weight(1f),
+                        onClick = onManageStudents,
+                        supporting = "Approve, decline, block",
+                    )
+                } else {
+                    StatTile(
+                        label = "Favourites",
+                        value = "$favoritesCount",
+                        icon = Icons.Filled.Favorite,
+                        tint = FavoriteRed,
+                        modifier = Modifier.weight(1f),
+                        onClick = onFavoritesClick,
+                        supporting = "Saved for later",
+                    )
+                }
+            }
 
-        // ── Identity block (scrolls with the rest) ────────────────────────────
-        Column(
-            modifier = Modifier.fillMaxWidth()
-                .padding(top = 20.dp, bottom = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Avatar with camera-icon overlay
-            Box(contentAlignment = Alignment.BottomEnd) {
-                Box(
-                    modifier = Modifier.size(96.dp).clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .border(3.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isUploading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(48.dp),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            strokeWidth = 3.dp
+            // ── Activity ──────────────────────────────────────────────────
+            // Only buyers get this group; admin has the full transactions
+            // screen and does not shop.
+            onMyOrders?.let { openOrders ->
+                SettingsGroup(title = "My activity") {
+                    SettingsRow(
+                        icon = Icons.Outlined.ReceiptLong,
+                        title = "My purchases",
+                        subtitle = "Track payments and download receipts",
+                        onClick = openOrders
+                    )
+                    onMySales?.let { openSales ->
+                        RowDivider()
+                        SettingsRow(
+                            icon = Icons.Outlined.Sell,
+                            title = "My listings",
+                            subtitle = "Items you offered, and where each one stands",
+                            onClick = openSales
                         )
-                    } else if (profilePic.isNotBlank()) {
-                        SubcomposeAsyncImage(
-                            model = profilePic,
-                            contentDescription = "Profile",
-                            modifier = Modifier.fillMaxSize().clip(CircleShape),
-                            contentScale = ContentScale.Crop,
-                            loading = { ShimmerEffect(Modifier.fillMaxSize()) },
-                            error = {
-                                Text(initial, fontSize = 36.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            }
-                        )
-                    } else {
-                        Text(initial, fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
-                // Camera badge
-                Box(
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clip(CircleShape)
-                        .background(if (isUploading) DarkGreen.copy(alpha = 0.5f) else DarkGreen)
-                        .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
-                        .clickable(enabled = !isUploading) { imagePicker.launch("image/*") },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Filled.CameraAlt, "Change Photo",
-                        tint = Color.White, modifier = Modifier.size(16.dp))
+            }
+
+            // ── Store management ─────────────────────────────────────────
+            // The admin's day-to-day: every order in one screen, and the
+            // student roster that used to occupy the bottom bar.
+            if (onManageOrders != null || onManageStudents != null) {
+                SettingsGroup(title = "Store") {
+                    onManageOrders?.let { openOrders ->
+                        SettingsRow(
+                            icon = Icons.Outlined.ReceiptLong,
+                            title = "Transactions",
+                            subtitle = "Every order - pending, reserved, unpaid, completed",
+                            onClick = openOrders
+                        )
+                    }
+
+                    if (onManageOrders != null && onManageStudents != null) RowDivider()
+
+                    onManageStudents?.let { openStudents ->
+                        SettingsRow(
+                            icon = Icons.Outlined.Group,
+                            title = "Students",
+                            subtitle = "Approve, decline or block student accounts",
+                            onClick = openStudents
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(fullName, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
-            Text(role.replaceFirstChar { it.uppercaseChar() },
-                fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center)
-            if (uploadError != null) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = uploadError!!,
-                    fontSize = 12.sp,
-                    color = Color(0xFFFF6B6B),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
-            }
-        }
-
-        // ── Sections ──────────────────────────────────────────────────────────
-        // Grouped by what each thing *is*: who you are, what you have earned,
-        // and what you can do. Mixing an action into the identity list made
-        // both harder to scan.
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-
             // ── Account ───────────────────────────────────────────────────
-            ProfileSection(title = "Account") {
-                ProfileInfoRow(Icons.Filled.Person, "Full Name", fullName.ifBlank { "—" })
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                ProfileInfoRow(Icons.Filled.Email, "Email", email.ifBlank { "—" })
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                ProfileInfoRow(
-                    Icons.Filled.AdminPanelSettings, "Role",
-                    role.replaceFirstChar { it.uppercaseChar() }
-                )
+            SettingsGroup(title = "Account") {
+                InfoRowItem(Icons.Outlined.Person, "Full name", fullName)
+                RowDivider()
+                InfoRowItem(Icons.Outlined.Email, "Email", email.ifBlank { "—" })
 
                 // The address that outlives the school account. Only students
                 // need it - an admin account is not lent out by a school.
-                if (!role.equals("admin", true)) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
+                if (!isAdmin) {
+                    RowDivider()
 
                     var linked by remember {
                         mutableStateOf(prefs.getString("personal_email", "").orEmpty())
@@ -6954,344 +6493,86 @@ fun AdminProfileContent(
                         )
                     }
 
-                    ProfileActionRow(
-                        icon = Icons.Filled.AlternateEmail,
+                    SettingsRow(
+                        icon = Icons.Outlined.AlternateEmail,
                         title = "Personal email",
                         subtitle = linked.ifBlank {
-                            "Not set - you will lose this account when your school email stops working"
+                            "Not set - add one so you keep this account after graduation"
                         },
+                        tint = if (linked.isBlank()) accents.warning else MaterialTheme.colorScheme.primary,
                         onClick = { editing = true }
                     )
                 }
             }
 
-            // ── Rewards ───────────────────────────────────────────────────
-            ProfileSection(title = "Rewards") {
-                ProfileInfoRow(
-                    Icons.Filled.Stars, "Points balance",
-                    "$livePoints pts", valueColor = DarkGreen
+            // ── Preferences ───────────────────────────────────────────────
+            onThemeToggle?.let { toggle ->
+                AppearanceGroup(isDarkMode = isDarkMode, onThemeToggle = toggle)
+            }
+
+            AboutGroup(role = role)
+
+            onLogout?.let {
+                SecondaryButton(
+                    text = "Log out",
+                    icon = Icons.AutoMirrored.Outlined.Logout,
+                    onClick = { showLogoutDialog = true },
+                    contentColor = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 0.5.dp)
-                // Points mean nothing to a buyer until they are shown in pesos.
-                ProfileInfoRow(
-                    Icons.Filled.Savings, "Worth at checkout",
-                    Money.format(
-                        LoyaltyRules.discountFor(livePoints).toPlainString()
-                    ) + " off"
-                )
             }
 
-            // ── Store management ─────────────────────────────────────────
-            // The admin's day-to-day: every order in one screen, and the
-            // student roster that used to occupy the bottom bar.
-            if (onManageOrders != null || onManageStudents != null) {
-                ProfileSection(title = "Store") {
-                    onManageOrders?.let { openOrders ->
-                        ProfileActionRow(
-                            icon = Icons.Filled.ReceiptLong,
-                            title = "Transactions",
-                            subtitle = "Every order - pending, reserved, unpaid, completed",
-                            onClick = openOrders
-                        )
-                    }
-
-                    if (onManageOrders != null && onManageStudents != null) {
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            thickness = 0.5.dp
-                        )
-                    }
-
-                    onManageStudents?.let { openStudents ->
-                        ProfileActionRow(
-                            icon = Icons.Filled.Group,
-                            title = "Students",
-                            subtitle = "Approve, decline or block student accounts",
-                            onClick = openStudents
-                        )
-                    }
-                }
-            }
-
-            // ── Activity ──────────────────────────────────────────────────
-            // Only buyers get this group; admin has the full transactions
-            // screen and does not shop.
-            onMyOrders?.let { openOrders ->
-                ProfileSection(title = "Activity") {
-                    ProfileActionRow(
-                        icon = Icons.Filled.ReceiptLong,
-                        title = "My Purchases",
-                        subtitle = "Track payments and download receipts",
-                        onClick = openOrders
-                    )
-                    onMySales?.let { openSales ->
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                            thickness = 0.5.dp
-                        )
-                        ProfileActionRow(
-                            icon = Icons.Filled.Sell,
-                            title = "My Sales",
-                            subtitle = "Items you listed, offers and turnover",
-                            onClick = openSales
-                        )
-                    }
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        thickness = 0.5.dp
-                    )
-                    ProfileActionRow(
-                        icon = Icons.Filled.Favorite,
-                        title = "Favourites",
-                        subtitle = if (favoritesCount > 0) {
-                            "$favoritesCount saved item${if (favoritesCount == 1) "" else "s"}"
-                        } else {
-                            "Items you saved for later"
-                        },
-                        onClick = onFavoritesClick
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-        }
-        }
-    }
-}
-
-/** A titled group of related rows. */
-@Composable
-private fun ProfileSection(
-    title: String,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            title.uppercase(),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = DarkGreen,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(start = 4.dp)
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(2.dp)
-        ) {
-            Column(content = content)
-        }
-    }
-}
-
-/** A row that goes somewhere, distinguished from an info row by the chevron. */
-@Composable
-private fun ProfileActionRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(DarkGreen.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, null, tint = DarkGreen, modifier = Modifier.size(18.dp))
-        }
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                subtitle,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Icon(
-            Icons.Filled.ChevronRight,
-            null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-        )
-    }
-}
-
-@Composable
-private fun ProfileInfoRow(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    valueColor: Color = Color.Unspecified
-) {
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
-            .background(DarkGreen.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = DarkGreen, modifier = Modifier.size(18.dp))
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, fontSize = 15.sp, fontWeight = FontWeight.Medium,
-                color = if (valueColor == Color.Unspecified) MaterialTheme.colorScheme.onSurface else valueColor)
+            Spacer(Modifier.height(Spacing.sm))
         }
     }
 }
 
 // ── Shared Page Header ─────────────────────────────────────────────────────────
 
+/**
+ * The header for the admin's pages, and for any student page that still
+ * calls it. Now a thin wrapper over [MarketHeader]: the wallet chip and its
+ * five-second polling are gone - points live on the home hero and the
+ * profile - and favourites only show where a student can use them.
+ */
 @Composable
 fun AdminPageHeader(
     title: String,
     onMenuClick: () -> Unit,
     favoritesCount: Int = 0,
-    onFavoritesClick: () -> Unit = {}
+    onFavoritesClick: () -> Unit = {},
+    subtitle: String? = null,
+    showFavorites: Boolean = false,
 ) {
-    val context = LocalContext.current
-    val prefs   = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
-    val token   = remember { prefs.getString("auth_token", "") ?: "" }
+    // The bell was dead until now: a push banner is gone the moment
+    // it is dismissed, so anything that arrived while the app was
+    // closed had nowhere to be read.
+    var showNotifications by remember { mutableStateOf(false) }
 
-    var walletPoints by remember { mutableStateOf(0) }
-    var isPointsVisible by remember { mutableStateOf(prefs.getBoolean("points_visibility", false)) }
-    val scope = rememberCoroutineScope()
-
-    // Fetch wallet points from API with polling every 5 seconds
-    LaunchedEffect(token) {
-        if (token.isNotBlank()) {
-            while (true) {
-                scope.launch {
-                    try {
-                        val points = withContext(Dispatchers.IO) {
-                            val request = Request.Builder()
-                                .url("https://fati-api.alertaraqc.com/api/wallet")
-                                .header("Authorization", "Bearer $token")
-                                .header("Accept", "application/json")
-                                .get()
-                                .build()
-                            adminHttpClient.newCall(request).execute().use { response ->
-                                if (response.isSuccessful) {
-                                    val body = response.body?.string() ?: ""
-                                    val json = JSONObject(body)
-                                    val dataObj = json.optJSONObject("data")
-                                    dataObj?.optInt("wallet_points", 0) ?: 0
-                                } else {
-                                    0
-                                }
-                            }
-                        }
-                        walletPoints = points
-                    } catch (e: Exception) {
-                    }
-                }
-                delay(5000) // Poll every 5 seconds
-            }
-        }
+    if (showNotifications) {
+        NotificationsDialog(onDismiss = { showNotifications = false })
     }
 
-    // Save visibility preference when it changes
-    LaunchedEffect(isPointsVisible) {
-        prefs.edit().putBoolean("points_visibility", isPointsVisible).apply()
-    }
-
-    Column(modifier = Modifier.fillMaxWidth()
-        .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight)))) {
-        Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        Row(modifier = Modifier.fillMaxWidth().height(56.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onMenuClick) {
-                Icon(Icons.Filled.Menu, "Menu", tint = Color.White)
-            }
-            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White,
-                modifier = Modifier.weight(1f))
-            // Wallet points chip
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .padding(end = 4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.18f))
-                    .clickable { isPointsVisible = !isPointsVisible }
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Icon(
-                    Icons.Filled.AccountBalanceWallet,
-                    contentDescription = "Wallet",
-                    tint = Color.White,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (isPointsVisible) "$walletPoints pts" else "... pts",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = if (isPointsVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
-                    contentDescription = if (isPointsVisible) "Hide points" else "Show points",
-                    tint = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.size(14.dp)
+    MarketHeader(
+        title = title,
+        subtitle = subtitle,
+        onMenuClick = onMenuClick,
+        actions = {
+            if (showFavorites) {
+                HeaderAction(
+                    icon = Icons.Outlined.FavoriteBorder,
+                    contentDescription = "Favourites",
+                    onClick = onFavoritesClick,
+                    badge = favoritesCount,
                 )
             }
-            Box {
-                IconButton(onClick = onFavoritesClick) {
-                    Icon(Icons.Outlined.FavoriteBorder, "Favorites", tint = Color.White)
-                }
-                if (favoritesCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = (-4).dp, y = 4.dp)
-                            .size(18.dp)
-                            .background(Color(0xFFFF4444), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text       = if (favoritesCount > 99) "99+" else favoritesCount.toString(),
-                            fontSize   = 8.sp,
-                            lineHeight = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            color      = Color.White,
-                            textAlign  = TextAlign.Center
-                        )
-                    }
-                }
-            }
-            // The bell was dead until now: a push banner is gone the moment
-            // it is dismissed, so anything that arrived while the app was
-            // closed had nowhere to be read.
-            var showNotifications by remember { mutableStateOf(false) }
-
-            if (showNotifications) {
-                NotificationsDialog(onDismiss = { showNotifications = false })
-            }
-
-            IconButton(onClick = { showNotifications = true }) {
-                Icon(Icons.Filled.NotificationsNone, "Notifications", tint = Color.White)
-            }
-        }
-    }
+            HeaderAction(
+                icon = Icons.Outlined.Notifications,
+                contentDescription = "Notifications",
+                onClick = { showNotifications = true },
+            )
+        },
+    )
 }
 
 // ── Chat item network ──────────────────────────────────────────────────────────
@@ -7575,7 +6856,7 @@ private fun PointsTransactionContent(
 
             when {
                 isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DarkGreen)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
@@ -7626,7 +6907,7 @@ private fun PointsTransactionContent(
                                 Text(
                                     "${if (pointsChange > 0) "+" else ""}${pointsChange} pts • $reason",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (pointsChange > 0) DarkGreen else MaterialTheme.colorScheme.error
+                                    color = if (pointsChange > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                 )
                                 if (itemTitle.isNotEmpty()) {
                                     Text(itemTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -7761,7 +7042,7 @@ private fun TransactionsContent(
 
             when {
                 isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DarkGreen)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
@@ -7815,14 +7096,14 @@ private fun TransactionsContent(
                         }
 
                         val methodColor = when (paymentMethod.lowercase()) {
-                            "gcash" -> DarkGreen
+                            "gcash" -> MaterialTheme.colorScheme.primary
                             "points_full" -> LocalMarketAccents.current.reward
                             else -> MaterialTheme.colorScheme.outline
                         }
 
                         val statusColor = when (status.lowercase()) {
-                            "completed" -> DarkGreen
-                            "pending" -> Color(0xFFFFC107)
+                            "completed" -> MaterialTheme.colorScheme.primary
+                            "pending" -> LocalMarketAccents.current.warning
                             "failed" -> MaterialTheme.colorScheme.error
                             else -> MaterialTheme.colorScheme.outline
                         }
@@ -7882,7 +7163,7 @@ private fun TransactionsContent(
                                         "$pointsUsed pts used",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = DarkGreen
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             }
@@ -7989,7 +7270,7 @@ private fun ProfitSummaryContent(
 
             when {
                 isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DarkGreen)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
@@ -8200,7 +7481,7 @@ private fun SalesReportContent(
 
             when {
                 isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DarkGreen)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
@@ -8252,7 +7533,7 @@ private fun SalesReportContent(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         Surface(
-                                            color = Color(0xFF4CAF50).copy(alpha = 0.1f),
+                                            color = LocalMarketAccents.current.success.copy(alpha = 0.1f),
                                             shape = RoundedCornerShape(4.dp),
                                             modifier = Modifier.weight(1f)
                                         ) {
@@ -8260,12 +7541,12 @@ private fun SalesReportContent(
                                                 modifier = Modifier.padding(8.dp),
                                                 horizontalAlignment = Alignment.CenterHorizontally
                                             ) {
-                                                Text("$sold", fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+                                                Text("$sold", fontWeight = FontWeight.Bold, color = LocalMarketAccents.current.success)
                                                 Text("Sold", style = MaterialTheme.typography.labelSmall)
                                             }
                                         }
                                         Surface(
-                                            color = Color(0xFF2196F3).copy(alpha = 0.1f),
+                                            color = LocalMarketAccents.current.info.copy(alpha = 0.1f),
                                             shape = RoundedCornerShape(4.dp),
                                             modifier = Modifier.weight(1f)
                                         ) {
@@ -8273,7 +7554,7 @@ private fun SalesReportContent(
                                                 modifier = Modifier.padding(8.dp),
                                                 horizontalAlignment = Alignment.CenterHorizontally
                                             ) {
-                                                Text("$acquired", fontWeight = FontWeight.Bold, color = Color(0xFF2196F3))
+                                                Text("$acquired", fontWeight = FontWeight.Bold, color = LocalMarketAccents.current.info)
                                                 Text("Acquired", style = MaterialTheme.typography.labelSmall)
                                             }
                                         }
@@ -8307,7 +7588,7 @@ private fun SalesReportContent(
                                             "$pointsUsed pts used",
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = DarkGreen
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }
@@ -8438,7 +7719,7 @@ private fun ProfitReportContent(
 
             when {
                 isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DarkGreen)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
@@ -8482,7 +7763,7 @@ private fun ProfitReportContent(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text("Total Markup Profit", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.format(totalMarkupProfit), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = DarkGreen)
+                                Text(Money.format(totalMarkupProfit), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -8506,7 +7787,7 @@ private fun ProfitReportContent(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(monthName, fontWeight = FontWeight.Bold)
-                                    Text("$profit pts", style = MaterialTheme.typography.bodySmall, color = DarkGreen, fontWeight = FontWeight.Bold)
+                                    Text("$profit pts", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -8531,7 +7812,7 @@ private fun ProfitReportContent(
                                     Text(title, fontWeight = FontWeight.Bold)
                                     Text("Seller: $sellerEmail", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Spacer(Modifier.height(4.dp))
-                                    Text(Money.format(markup), style = MaterialTheme.typography.bodySmall, color = DarkGreen, fontWeight = FontWeight.Bold)
+                                    Text(Money.format(markup), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -8653,7 +7934,7 @@ private fun CategoryReportContent(
 
             when {
                 isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DarkGreen)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
@@ -8692,14 +7973,14 @@ private fun CategoryReportContent(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50).copy(alpha = 0.1f))
+                                colors = CardDefaults.cardColors(containerColor = LocalMarketAccents.current.success.copy(alpha = 0.1f))
                             ) {
                                 Column(
                                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Text("Most Sold Category", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50))
-                                    Text(mostSoldCategory, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+                                    Text("Most Sold Category", style = MaterialTheme.typography.bodySmall, color = LocalMarketAccents.current.success)
+                                    Text(mostSoldCategory, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = LocalMarketAccents.current.success)
                                     Text("$mostSoldCount sold", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                                 }
                             }
@@ -8717,9 +7998,9 @@ private fun CategoryReportContent(
                             val markupProfit = category["total_markup_profit"] as? Int ?: 0
 
                             val performanceColor = when {
-                                itemsSold >= 10 -> DarkGreen
-                                itemsSold >= 5 -> Color(0xFFFFC107)
-                                else -> Color(0xFFFF5252)
+                                itemsSold >= 10 -> MaterialTheme.colorScheme.primary
+                                itemsSold >= 5 -> LocalMarketAccents.current.warning
+                                else -> MaterialTheme.colorScheme.error
                             }
 
                             Card(
@@ -8747,7 +8028,7 @@ private fun CategoryReportContent(
                                         }
                                     }
                                     Spacer(Modifier.height(8.dp))
-                                    Text("Profit: $markupProfit pts", style = MaterialTheme.typography.bodySmall, color = DarkGreen, fontWeight = FontWeight.Bold)
+                                    Text("Profit: $markupProfit pts", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -8891,7 +8172,7 @@ private fun UserReportContent(
 
             when {
                 isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DarkGreen)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
@@ -9014,7 +8295,7 @@ private fun UserReportContent(
                                         Text(
                                             "$points pts",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = DarkGreen,
+                                            color = MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
@@ -9053,7 +8334,7 @@ private fun UserReportContent(
                                         Text(
                                             "$points pts",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = DarkGreen,
+                                            color = MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
@@ -9087,7 +8368,7 @@ private fun UserReportContent(
                                     Text(
                                         "$count active users",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = DarkGreen,
+                                        color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }

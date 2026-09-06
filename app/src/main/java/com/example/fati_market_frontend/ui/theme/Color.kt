@@ -10,54 +10,57 @@ import androidx.compose.ui.graphics.Color
  * relationship with each other. Every pairing used for text on a background in
  * this file clears WCAG AA at body size.
  *
+ * Brand: Our Lady of Fatima University green, with gold reserved for points
+ * and rewards so that "gold" always means "you earned something".
+ *
  * The legacy names (DarkGreen, Gold, OffWhite, ...) are kept because screens
  * across the app import them directly; they now point at the tuned ramp values.
  */
 
 // ── Brand green ─────────────────────────────────────────────────────────
-// The market's identity colour. 700 is the resting brand tone; 500 lifts it
+// The market's identity colour. 700 is the resting brand tone; 300 lifts it
 // for dark mode, where a deep green would disappear into the background.
-val Green50 = Color(0xFFE8F3EC)
-val Green100 = Color(0xFFC6E2D1)
-val Green200 = Color(0xFF9ECEB3)
-val Green300 = Color(0xFF72B994)
-val Green400 = Color(0xFF4CA67D)
-val Green500 = Color(0xFF2E8F63)
-val Green600 = Color(0xFF247551)
-val Green700 = Color(0xFF1A5C38)
-val Green800 = Color(0xFF124528)
-val Green900 = Color(0xFF0B2E1A)
+val Green50 = Color(0xFFE9F5EE)
+val Green100 = Color(0xFFC9E7D4)
+val Green200 = Color(0xFFA3D4B7)
+val Green300 = Color(0xFF7AC199)
+val Green400 = Color(0xFF52AD7E)
+val Green500 = Color(0xFF2F9564)
+val Green600 = Color(0xFF247A51)
+val Green700 = Color(0xFF1A5F3A)
+val Green800 = Color(0xFF12472A)
+val Green900 = Color(0xFF0B2F1B)
 
-// ── Amber ───────────────────────────────────────────────────────────────
-// Reserved for loyalty points and rewards, so "amber" reads as "points"
+// ── Gold ────────────────────────────────────────────────────────────────
+// Reserved for loyalty points and rewards, so "gold" reads as "points"
 // everywhere in the app rather than as a generic highlight.
-val Amber50 = Color(0xFFFFF6E0)
-val Amber100 = Color(0xFFFFE9B3)
-val Amber300 = Color(0xFFFFCF52)
-val Amber500 = Color(0xFFE0A213)
-val Amber600 = Color(0xFFC4880A)
-val Amber700 = Color(0xFF9A6A05)
+val Amber50 = Color(0xFFFFF7E1)
+val Amber100 = Color(0xFFFFEBB5)
+val Amber300 = Color(0xFFFFD25A)
+val Amber500 = Color(0xFFE7A81A)
+val Amber600 = Color(0xFFC98C0C)
+val Amber700 = Color(0xFF9C6C06)
 
 // ── Neutrals ────────────────────────────────────────────────────────────
 // Very slightly warm, so the greys sit comfortably beside the green instead
 // of looking blue against it.
 val Neutral0 = Color(0xFFFFFFFF)
-val Neutral50 = Color(0xFFFAFAF8)
-val Neutral100 = Color(0xFFF2F2EE)
-val Neutral200 = Color(0xFFE6E6E0)
-val Neutral300 = Color(0xFFD3D3CB)
-val Neutral400 = Color(0xFFA9A9A0)
-val Neutral500 = Color(0xFF7C7C74)
-val Neutral600 = Color(0xFF5C5C56)
-val Neutral700 = Color(0xFF42423E)
-val Neutral800 = Color(0xFF2A2A27)
-val Neutral900 = Color(0xFF1A1A18)
-val Neutral950 = Color(0xFF111110)
+val Neutral50 = Color(0xFFF8F9F6)
+val Neutral100 = Color(0xFFF1F2EE)
+val Neutral200 = Color(0xFFE4E6E0)
+val Neutral300 = Color(0xFFD1D4CC)
+val Neutral400 = Color(0xFFA7AAA1)
+val Neutral500 = Color(0xFF7B7E76)
+val Neutral600 = Color(0xFF5B5E57)
+val Neutral700 = Color(0xFF41443F)
+val Neutral800 = Color(0xFF2A2C28)
+val Neutral900 = Color(0xFF1A1C19)
+val Neutral950 = Color(0xFF111311)
 
 // ── Semantic ────────────────────────────────────────────────────────────
 val Success = Color(0xFF2E7D32)
 val SuccessContainer = Color(0xFFDCF0DD)
-val SuccessDark = Color(0xFF6ADf8B)
+val SuccessDark = Color(0xFF6ADF8B)
 
 val Warning = Color(0xFFB25E02)
 val WarningContainer = Color(0xFFFFE9D1)
@@ -70,6 +73,9 @@ val DangerDark = Color(0xFFFF8A80)
 val Info = Color(0xFF1565C0)
 val InfoContainer = Color(0xFFDCE9FA)
 val InfoDark = Color(0xFF82B1FF)
+
+/** The heart on a saved item. One red, everywhere. */
+val FavoriteRed = Color(0xFFE5484D)
 
 // ── Legacy aliases ──────────────────────────────────────────────────────
 // Kept so existing screens compile unchanged while they migrate to the ramp.

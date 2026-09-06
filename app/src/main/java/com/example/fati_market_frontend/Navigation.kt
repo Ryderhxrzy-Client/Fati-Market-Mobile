@@ -1,7 +1,10 @@
 package com.fati_market
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
@@ -24,13 +27,18 @@ fun AppNavigation(isDarkMode: Boolean, onThemeToggle: () -> Unit) {
     val navController = rememberNavController()
     val context = LocalContext.current
 
+    // Short, quiet transitions: a fade with a small slide. The splash hands
+    // over with a plain fade so the brand gradient does not appear to move.
     NavHost(
         navController = navController,
         startDestination = "splash",
-        enterTransition = { EnterTransition.None },
-        exitTransition = { ExitTransition.None },
-        popEnterTransition = { EnterTransition.None },
-        popExitTransition = { ExitTransition.None }
+        enterTransition = {
+            if (initialState.destination.route == "splash") fadeIn(tween(350))
+            else fadeIn(tween(220)) + slideInHorizontally(tween(260)) { it / 12 }
+        },
+        exitTransition = { fadeOut(tween(180)) },
+        popEnterTransition = { fadeIn(tween(220)) + slideInHorizontally(tween(260)) { -it / 12 } },
+        popExitTransition = { fadeOut(tween(180)) + slideOutHorizontally(tween(260)) { it / 12 } },
     ) {
         composable("splash") {
             // Resume straight into the app when the saved session is still live

@@ -8,78 +8,46 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import android.graphics.BitmapFactory
-import com.fati_market.auth.utils.getFileName
-import com.fati_market.ui.theme.DarkGreen
-import com.fati_market.ui.theme.DarkGreenLight
-import com.fati_market.ui.theme.DarkText
-import com.fati_market.ui.theme.Gold
+import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.PrimaryButton
+import com.fati_market.ui.components.StatusTone
+import com.fati_market.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignUpScreen(navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    var firstName by remember { mutableStateOf("") }
-    var lastName by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var confirmPasswordVisible by remember { mutableStateOf(false) }
-
-    // ── Realtime validation ───────────────────────────────────────────────
-    val emailSuffix = "@student.fatima.edu.ph"
-    val normalizedEmail = email.trim()
-
-    val isEmailEmpty = normalizedEmail.isEmpty()
-    val isEmailSuffixValid = normalizedEmail.endsWith(emailSuffix)
-
-    val hasMinLen8 = password.length >= 8
-    val hasLowercase = password.any { it.isLowerCase() }
-    val hasUppercase = password.any { it.isUpperCase() }
-    val hasDigit = password.any { it.isDigit() }
-    val allowedSpecialChars = "@$!%*?&"
-    val hasAllowedSpecialChar = password.any { allowedSpecialChars.contains(it) }
-
-    val isPasswordValid = hasMinLen8 && hasLowercase && hasUppercase && hasDigit && hasAllowedSpecialChar
-    val isConfirmPasswordEmpty = confirmPassword.isBlank()
-    val isConfirmPasswordMatch = !isConfirmPasswordEmpty && confirmPassword == password
-
 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -88,12 +56,6 @@ fun SignUpScreen(navController: NavController) {
     // Profile picture
     var profileBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var profileUri by remember { mutableStateOf<Uri?>(null) }
-
-    // Verification
-    val verificationOptions = listOf("Student ID", "Registration Card")
-    // The account is not usable until the emailed code comes back, so the
-    // screen stays put and asks for it rather than sending them to a login
-    // they would only be turned away from.
 
     // Image picker for profile photo
     val profileLauncher = rememberLauncherForActivityResult(
@@ -109,196 +71,217 @@ fun SignUpScreen(navController: NavController) {
         }
     }
 
-    val headerGradient = Brush.verticalGradient(
-        colors = listOf(DarkGreen, DarkGreenLight)
-    )
+    // ── Success ───────────────────────────────────────────────────────────
+    successMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = {
+                successMessage = null
+                navController.navigate("login")
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp),
+                )
+            },
+            title = { Text("You're in!", fontWeight = FontWeight.Bold) },
+            text = { Text(msg) },
+            confirmButton = {
+                PrimaryButton(
+                    text = "Go to login",
+                    compact = true,
+                    onClick = {
+                        successMessage = null
+                        navController.navigate("login")
+                    },
+                )
+            },
+        )
+    }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            // Edge-to-edge is on, so the screen insets itself: the last
-            // button must clear the gesture bar, and the form must rise
-            // above the keyboard.
-            .navigationBarsPadding()
-            .imePadding()
-            .verticalScroll(rememberScrollState())
+    AuthScaffold(
+        title = "Create your account",
+        subtitle = "Signing up takes one tap with your Fatima Google account.",
+        onBack = { navController.navigateUp() },
+        heroIcon = Icons.Filled.PersonAdd,
     ) {
-        // ── Header with tab switcher ─────────────────────────────────────────────
+        // ── Why it is one tap ─────────────────────────────────────────
+        // The school account is what proves a student, Google has already
+        // verified it, and there is no document and nobody to wait for -
+        // so there is no form here to fill in and no password to invent.
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+            SignUpPoint(
+                icon = Icons.Filled.School,
+                title = "Use your school email",
+                text = "Only @student.fatima.edu.ph accounts can join, so everyone here is a Fatima student.",
+            )
+            SignUpPoint(
+                icon = Icons.Filled.Verified,
+                title = "No forms, no waiting",
+                text = "Your name and email come straight from Google. No password to invent and no code to type.",
+            )
+            SignUpPoint(
+                icon = Icons.Filled.Shield,
+                title = "Your account stays yours",
+                text = "Add a personal email later so you keep access after graduation.",
+            )
+        }
+
+        Spacer(Modifier.height(Spacing.xl))
+
+        // ── Optional photo ────────────────────────────────────────────
+        // Google already has a picture of them, so this one is a bonus,
+        // not a hurdle.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .clickable(enabled = !isLoading) { profileLauncher.launch("image/*") }
+                .padding(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                val bmp = profileBitmap
+                if (bmp != null) {
+                    Image(
+                        painter = BitmapPainter(bmp),
+                        contentDescription = "Profile photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    if (profileBitmap != null) "Profile photo added" else "Add a profile photo",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    "Optional. You can change it any time from your profile.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.Filled.AddAPhoto,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+
+        errorMessage?.let { msg ->
+            Spacer(Modifier.height(Spacing.md))
+            InfoBanner(text = msg, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
+        }
+
+        Spacer(Modifier.height(Spacing.xl))
+
+        // ── The whole of signing up ───────────────────────────────────
+        GoogleButton(
+            text = "Sign up with Google",
+            enabled = !isLoading && googleSignInConfigured,
+            onClick = {
+                scope.launch {
+                    errorMessage = null
+                    isLoading = true
+
+                    try {
+                        val idToken = requestGoogleIdToken(context)
+
+                        if (idToken == null) {
+                            isLoading = false
+                            return@launch
+                        }
+
+                        val result = withContext(Dispatchers.IO) {
+                            googleRegister(
+                                context = context,
+                                idToken = idToken,
+                                profilePictureUri = profileUri,
+                            )
+                        }
+
+                        if (result.success && result.body != null) {
+                            // Google verified the address, so there is
+                            // no code and no queue - they are in.
+                            persistSession(context, result.body)
+                            successMessage = result.message
+                        } else {
+                            errorMessage = result.message
+                        }
+                    } catch (e: Exception) {
+                        errorMessage = "Google sign-up failed: ${e.message}"
+                    } finally {
+                        isLoading = false
+                    }
+                }
+            }
+        )
+
+        if (!googleSignInConfigured) {
+            Text(
+                "Google sign-up is not set up in this build yet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(top = Spacing.sm),
+            )
+        }
+
+        Spacer(Modifier.height(Spacing.xl))
+
+        AuthFooterLink(
+            prompt = "Already have an account?",
+            action = "Log in",
+            onClick = { navController.navigate("login") },
+        )
+    }
+}
+
+@Composable
+private fun SignUpPoint(icon: ImageVector, title: String, text: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalAlignment = Alignment.Top,
+    ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(300.dp)
-                .background(headerGradient),
-            contentAlignment = Alignment.Center
+                .size(36.dp)
+                .background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.extraSmall),
+            contentAlignment = Alignment.Center,
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Logo — same as login screen
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.15f))
-                        .border(2.dp, Gold, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ShoppingCart,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(38.dp)
-                    )
-                }
-                Text(
-                    text = "Fati-Market",
-                    color = Color.White,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    text = "Create Your Account",
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 13.sp
-                )
-                // ── Login / Sign Up tab switcher ──────────────────────────────────
-                AuthTabSwitcher(
-                    isLoginSelected = false,
-                    onLoginClick = { navController.navigate("login") },
-                    onSignUpClick = { /* already here */ }
-                )
-            }
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(19.dp),
+            )
         }
-
-        // ── Floating Form Card ─────────────────────────────────────────────────
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .offset(y = (-28).dp),
-            shape = RoundedCornerShape(20.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-
-                // Signing up is one tap. The school account is what proves a
-                // student, Google has already verified it, and there is no
-                // document and nobody to wait for - so there is no form here
-                // to fill in and no password to invent.
-                Text(
-                    text = "Use your Fatima account to join. We take your name and email from Google - nothing to fill in, nothing to upload.",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
-                )
-
-                // ── Success Dialog ────────────────────────────────────────────────
-                successMessage?.let { msg ->
-                    AlertDialog(
-                        onDismissRequest = {
-                            successMessage = null
-                            navController.navigate("login")
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Filled.CheckCircle,
-                                contentDescription = null,
-                                tint = DarkGreen,
-                                modifier = Modifier.size(36.dp)
-                            )
-                        },
-                        title = { Text("Registration Successful", fontWeight = FontWeight.Bold) },
-                        text = { Text(msg) },
-                        confirmButton = {
-                            Button(
-                                onClick = {
-                                    successMessage = null
-                                    navController.navigate("login")
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                            ) {
-                                Text("Go to Login", color = Color.White, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    )
-                }
-
-                // ── Error Message ─────────────────────────────────────────────────
-                errorMessage?.let { msg ->
-                    Text(
-                        text = msg,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp)
-                    )
-                }
-
-                // ── The whole of signing up ───────────────────────────────────
-                GoogleButton(
-                    text = "Continue with Google",
-                    enabled = !isLoading && googleSignInConfigured,
-                    onClick = {
-                        scope.launch {
-                            errorMessage = null
-                            isLoading = true
-
-                            try {
-                                val idToken = requestGoogleIdToken(context)
-
-                                if (idToken == null) {
-                                    isLoading = false
-                                    return@launch
-                                }
-
-                                val result = withContext(Dispatchers.IO) {
-                                    googleRegister(
-                                        context = context,
-                                        idToken = idToken,
-                                        // Google already has a picture of them,
-                                        // so this one is a bonus, not a hurdle.
-                                        profilePictureUri = profileUri,
-                                    )
-                                }
-
-                                if (result.success && result.body != null) {
-                                    // Google verified the address, so there is
-                                    // no code and no queue - they are in.
-                                    persistSession(context, result.body)
-                                    successMessage = result.message
-                                } else {
-                                    errorMessage = result.message
-                                }
-                            } catch (e: Exception) {
-                                errorMessage = "Google sign-up failed: ${e.message}"
-                            } finally {
-                                isLoading = false
-                            }
-                        }
-                    }
-                )
-
-                Text(
-                    text = if (googleSignInConfigured) {
-                        "Your name and email come from Google - no password and no code needed."
-                    } else {
-                        "Google sign-up is not set up in this build yet."
-                    },
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                )
-            }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-
-        Spacer(modifier = Modifier.height(32.dp))
     }
 }

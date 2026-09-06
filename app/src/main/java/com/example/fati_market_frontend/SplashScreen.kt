@@ -1,43 +1,63 @@
 package com.fati_market
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.fati_market.ui.theme.DarkGreen
-import com.fati_market.ui.theme.DarkGreenLight
-import com.fati_market.ui.theme.Gold
+import com.fati_market.ui.components.BrandMark
+import com.fati_market.ui.theme.LocalMarketAccents
+import com.fati_market.ui.theme.brandGradient
 import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(navController: NavController, destination: String = "login") {
+    val accents = LocalMarketAccents.current
     var visible by remember { mutableStateOf(false) }
 
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = 700),
-        label = "splash_alpha"
+        animationSpec = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+        label = "splash_alpha",
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.86f,
+        animationSpec = tween(durationMillis = 650, easing = FastOutSlowInEasing),
+        label = "splash_scale",
     )
 
     LaunchedEffect(Unit) {
         visible = true
-        delay(2000)
+        delay(1600)
         navController.navigate(destination) {
             popUpTo("splash") { inclusive = true }
         }
@@ -46,51 +66,66 @@ fun SplashScreen(navController: NavController, destination: String = "login") {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(DarkGreen, DarkGreenLight))),
-        contentAlignment = Alignment.Center
+            .background(brandGradient()),
     ) {
+        // Two soft discs give the flat gradient a little depth without
+        // needing an image asset.
+        Box(
+            modifier = Modifier
+                .size(320.dp)
+                .offset(x = (-120).dp, y = (-80).dp)
+                .background(Color.White.copy(alpha = 0.05f), CircleShape),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(260.dp)
+                .offset(x = 90.dp, y = 110.dp)
+                .background(accents.reward.copy(alpha = 0.10f), CircleShape),
+        )
+
         Column(
-            modifier = Modifier.alpha(alpha),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .alpha(alpha)
+                .scale(scale),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            // Logo
-            Box(
-                modifier = Modifier
-                    .size(90.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.15f))
-                    .border(2.dp, Gold, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ShoppingCart,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(46.dp)
-                )
-            }
+            BrandMark(size = 96.dp, icon = Icons.Filled.Storefront)
 
             Text(
                 text = "Fati-Market",
-                color = Color.White,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
+                style = MaterialTheme.typography.displaySmall,
+                color = accents.onBrand,
             )
 
             Text(
-                text = "Our Lady of Fatima University",
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 13.sp
+                text = "Ofelia's Store  ·  Our Lady of Fatima University",
+                style = MaterialTheme.typography.bodySmall,
+                color = accents.onBrandMuted,
             )
+        }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 40.dp)
+                .alpha(alpha),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             CircularProgressIndicator(
-                color = Color.White,
+                color = accents.onBrand,
                 strokeWidth = 2.5.dp,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Buy, sell and swap school supplies",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = accents.onBrandMuted,
             )
         }
     }

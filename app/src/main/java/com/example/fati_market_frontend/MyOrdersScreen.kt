@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -41,9 +42,29 @@ import kotlinx.coroutines.withContext
  * Doubles as their receipt drawer: every order opens a receipt they can read
  * on screen or download as a PDF to show at the store.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MyOrdersScreen(onDismiss: () -> Unit) {
+    BackHandler(onBack = onDismiss)
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            MyOrdersContent(topBar = { MarketPageTopBar("My Orders", onDismiss) })
+        }
+    }
+}
+
+/**
+ * The order list itself, with whatever header the host wants above it.
+ *
+ * Lives on the student's Orders tab, and inside [MyOrdersScreen] when a
+ * notification or the drawer opens it as an overlay.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
     val token = remember { prefs.getString("auth_token", "") ?: "" }
@@ -57,8 +78,6 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
     var openReceiptFor by remember { mutableStateOf<MarketTransaction?>(null) }
     var payingFor by remember { mutableStateOf<MarketTransaction?>(null) }
     var selectedTab by remember { mutableStateOf(OrderFilter.All) }
-
-    BackHandler(onBack = onDismiss)
 
     LaunchedEffect(refreshKey) {
         // A pull already shows its own spinner, so do not also blank the list
@@ -101,16 +120,11 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
         )
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            Scaffold(
+    Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 containerColor = MaterialTheme.colorScheme.background,
                 contentWindowInsets = WindowInsets(0),
-                topBar = { MarketPageTopBar("My Orders", onDismiss) },
+                topBar = topBar,
             ) { padding ->
                 val visible = remember(orders, selectedTab) {
                     orders.filter { selectedTab.matches(it) }
@@ -118,25 +132,19 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
 
                 Column(modifier = Modifier.padding(padding)) {
 
-                // Tracking tabs: where each order stands, at a glance.
-                ScrollableTabRow(
-                    selectedTabIndex = OrderFilter.entries.indexOf(selectedTab),
-                    edgePadding = Spacing.md,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    divider = {},
+                // Tracking chips: where each order stands, at a glance.
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.md),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 ) {
-                    OrderFilter.entries.forEach { filter ->
+                    items(OrderFilter.entries, key = { it.name }) { filter ->
                         val count = orders.count { filter.matches(it) }
 
-                        Tab(
+                        ChoiceChip(
+                            label = filter.label,
                             selected = selectedTab == filter,
                             onClick = { selectedTab = filter },
-                            text = {
-                                Text(
-                                    if (count > 0) "${filter.label} ($count)" else filter.label,
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
-                            },
+                            count = if (filter == OrderFilter.All) null else count,
                         )
                     }
                 }
@@ -215,8 +223,6 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
                 }
                 }
             }
-        }
-    }
 }
 
 /**
