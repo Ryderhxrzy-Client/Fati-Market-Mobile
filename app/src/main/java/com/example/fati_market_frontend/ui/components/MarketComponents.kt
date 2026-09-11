@@ -608,7 +608,7 @@ fun DrawerRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Icon(
+        MarketIcon(
             icon,
             contentDescription = null,
             tint = if (selected) tint else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -971,7 +971,7 @@ fun QuickAction(
                     .background(tint.copy(alpha = 0.12f), MaterialTheme.shapes.medium),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(26.dp))
+                MarketIcon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(26.dp))
             }
             if (badge > 0) {
                 CountBadge(
@@ -1078,7 +1078,7 @@ fun InfoRowItem(
                 .background(tint.copy(alpha = 0.12f), MaterialTheme.shapes.extraSmall),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+            MarketIcon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -1478,7 +1478,7 @@ fun PrimaryButton(
             )
         } else {
             if (icon != null) {
-                Icon(icon, null, modifier = Modifier.size(18.dp))
+                MarketIcon(icon, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(Spacing.sm))
             }
             Text(
@@ -1632,7 +1632,7 @@ fun InfoBanner(
             verticalAlignment = Alignment.Top,
         ) {
             if (icon != null) {
-                Icon(icon, null, tint = content, modifier = Modifier.size(18.dp))
+                MarketIcon(icon, null, tint = content, modifier = Modifier.size(18.dp))
             }
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.xxs)) {
                 if (title != null) {
@@ -1673,7 +1673,7 @@ fun EmptyState(
                 .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
+            MarketIcon(
                 icon,
                 null,
                 tint = MaterialTheme.colorScheme.primary,
@@ -1889,11 +1889,21 @@ fun BrandMark(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = if (onGradient) Color.White else MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(size * 0.5f),
-        )
+        if (icon === StoreLogoIcon) {
+            // The logo is a tile of its own, so it fills the mark inside the ring.
+            StoreLogo(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(1.5.dp),
+                shape = RoundedCornerShape(size * 0.28f),
+            )
+        } else {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (onGradient) Color.White else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(size * 0.5f),
+            )
+        }
     }
 }

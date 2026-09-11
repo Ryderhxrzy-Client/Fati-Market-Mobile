@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.fati_market.ui.components.BrandMark
+import com.fati_market.ui.components.StoreLogoIcon
 import com.fati_market.ui.theme.LocalMarketAccents
 import com.fati_market.ui.theme.brandGradient
 import kotlinx.coroutines.delay
@@ -92,7 +91,7 @@ fun SplashScreen(navController: NavController, destination: String = "login") {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            BrandMark(size = 96.dp, icon = Icons.Filled.Storefront)
+            BrandMark(size = 96.dp, icon = StoreLogoIcon)
 
             Text(
                 text = "Fati-Market",

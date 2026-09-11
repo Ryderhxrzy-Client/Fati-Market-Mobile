@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.HorizontalDivider
@@ -45,9 +44,11 @@ import com.fati_market.auth.network.loginUser
 import com.fati_market.auth.network.parseToken
 import com.fati_market.ui.components.BrandMark
 import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.MarketIcon
 import com.fati_market.ui.components.MarketTextField
 import com.fati_market.ui.components.PrimaryButton
 import com.fati_market.ui.components.StatusTone
+import com.fati_market.ui.components.StoreLogoIcon
 import com.fati_market.ui.theme.Elevation
 import com.fati_market.ui.theme.LocalMarketAccents
 import com.fati_market.ui.theme.Spacing
@@ -317,7 +318,7 @@ fun AuthScaffold(
     title: String,
     subtitle: String,
     onBack: (() -> Unit)? = null,
-    heroIcon: ImageVector = Icons.Filled.Storefront,
+    heroIcon: ImageVector = StoreLogoIcon,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val accents = LocalMarketAccents.current
@@ -445,7 +446,7 @@ fun RoleSwitch(selected: String, onSelect: (String) -> Unit) {
             )
             RoleOption(
                 label = "Store admin",
-                icon = Icons.Filled.Storefront,
+                icon = StoreLogoIcon,
                 selected = selected == "admin",
                 modifier = Modifier.weight(1f),
                 onClick = { onSelect("admin") },
@@ -480,7 +481,7 @@ private fun RoleOption(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxSize(),
         ) {
-            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+            MarketIcon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(Spacing.sm))
             Text(
                 label,

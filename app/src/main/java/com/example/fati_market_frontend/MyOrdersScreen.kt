@@ -77,6 +77,7 @@ internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
     var refreshing by remember { mutableStateOf(false) }
     var openReceiptFor by remember { mutableStateOf<MarketTransaction?>(null) }
     var payingFor by remember { mutableStateOf<MarketTransaction?>(null) }
+    var changingPaymentFor by remember { mutableStateOf<MarketTransaction?>(null) }
     var selectedTab by remember { mutableStateOf(OrderFilter.All) }
 
     LaunchedEffect(refreshKey) {
@@ -116,6 +117,19 @@ internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
             onSubmitted = {
                 payingFor = null
                 refreshKey++
+            },
+        )
+    }
+
+    changingPaymentFor?.let { order ->
+        ChangePaymentMethodDialog(
+            order = order,
+            token = token,
+            onDismiss = { changingPaymentFor = null },
+            onChanged = { updated ->
+                changingPaymentFor = null
+                orders = orders.map { if (it.transactionId == updated.transactionId) updated else it }
+                Toast.makeText(context, "Payment method updated.", Toast.LENGTH_SHORT).show()
             },
         )
     }
@@ -214,6 +228,7 @@ internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
                                     order = order,
                                     onViewReceipt = { openReceiptFor = order },
                                     onPay = { payingFor = order },
+                                    onChangePayment = { changingPaymentFor = order },
                                 )
                             }
 
@@ -258,6 +273,7 @@ private fun OrderHistoryCard(
     order: MarketTransaction,
     onViewReceipt: () -> Unit,
     onPay: () -> Unit,
+    onChangePayment: () -> Unit,
 ) {
     val accents = LocalMarketAccents.current
 
@@ -388,7 +404,7 @@ private fun OrderHistoryCard(
                 text = "Show your pickup code when you collect the item and hand over " +
                     Money.format(order.amountDue) + " in cash. It is marked paid then.",
                 tone = StatusTone.Info,
-                icon = Icons.Filled.Storefront,
+                icon = StoreLogoIcon,
             )
         } else if (stillOwes) {
             PrimaryButton(
@@ -401,6 +417,17 @@ private fun OrderHistoryCard(
                 modifier = Modifier.fillMaxWidth(),
                 icon = Icons.Filled.Payments,
             )
+
+            // Nothing paid or approved yet, so the buyer can still switch
+            // between cash and GCash - the same choice the checkout offered.
+            if (order.canChangePaymentMethod) {
+                SecondaryButton(
+                    text = "Change payment method",
+                    onClick = onChangePayment,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Filled.SwapHoriz,
+                )
+            }
         }
 
         if (order.paymentStatus == "rejected") {
@@ -474,6 +501,78 @@ private fun OrderHistoryCard(
         // complete it - and for a cash order, to take the payment first.
         PickupQrButton(order = order, modifier = Modifier.fillMaxWidth())
     }
+}
+
+/**
+ * Switch an unpaid order between cash and GCash.
+ *
+ * The same options the checkout offers, drawn by the same composable. The
+ * server decides whether the order can still change, and its refusal is shown
+ * as-is.
+ */
+@Composable
+private fun ChangePaymentMethodDialog(
+    order: MarketTransaction,
+    token: String,
+    onDismiss: () -> Unit,
+    onChanged: (MarketTransaction) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+
+    var method by remember { mutableStateOf(order.paymentMethod) }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("Change payment method") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Text(
+                    "Amount due: " + Money.format(order.amountDue),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                PaymentMethodOptions(
+                    selected = method,
+                    onSelect = {
+                        method = it
+                        error = null
+                    },
+                )
+
+                error?.let {
+                    InfoBanner(text = it, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !saving && method != order.paymentMethod,
+                onClick = {
+                    scope.launch {
+                        saving = true
+                        error = null
+
+                        when (val result = withContext(Dispatchers.IO) {
+                            MarketplaceApi.changePaymentMethod(token, order.transactionId, method)
+                        }) {
+                            is MarketplaceApi.Result.Ok -> onChanged(result.value)
+                            is MarketplaceApi.Result.Failure -> error = result.message
+                        }
+
+                        saving = false
+                    }
+                },
+            ) {
+                Text(if (saving) "Saving…" else "Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancel") }
+        },
+    )
 }
 
 /**

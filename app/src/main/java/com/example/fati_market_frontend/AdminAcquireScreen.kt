@@ -507,23 +507,18 @@ internal fun AdminAcquireScreen(
                         }
                     }
                 }
-            }
 
-            // ── 3. Mark acquired ─────────────────────────────────────────
-            val current = item
+                // ── 3. Mark acquired ─────────────────────────────────────
+                // The end of the page, not a bar pinned to the window, so it
+                // never sits under the system's navigation buttons.
+                val current = item
 
-            val actionable = current != null && !done && lookupError == null &&
-                current.offerAccepted && !current.isRejected &&
-                !(current.isTurnoverVerified || current.isAcquired || current.isPublic || current.isSold)
+                val actionable = current != null && !done && lookupError == null &&
+                    current.offerAccepted && !current.isRejected &&
+                    !(current.isTurnoverVerified || current.isAcquired || current.isPublic || current.isSold)
 
-            if (actionable && current != null) {
-                Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 12.dp) {
+                if (actionable && current != null) {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(Spacing.lg),
-                    ) {
                         val hasProof = itemPhoto != null && payoutPhoto != null
                         val priceGiven = publicPrice.isNotBlank()
 
@@ -653,11 +648,10 @@ internal fun AdminAcquireScreen(
                             containerColor = accents.success,
                         )
                     }
-
-                    // The clearance, laid out like the tab bar's.
-                    SafeAreaBottomSpacer()
-                    }
                 }
+
+                // Clearance for the system's navigation bar.
+                SafeAreaBottomSpacer()
             }
         }
     }

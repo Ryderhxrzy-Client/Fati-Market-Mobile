@@ -277,18 +277,15 @@ internal fun AdminScanScreen(
                         }
                     }
                 }
-            }
 
-            // ── 3. Complete ──────────────────────────────────────────────
-            val current = order
+                // ── 3. Complete ──────────────────────────────────────────
+                // The end of the page, not a bar pinned to the window, so it
+                // never sits under the system's navigation buttons.
+                val current = order
 
-            if (current != null && !current.isTerminal && completedPoints == null && lookupError == null) {
-                Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 12.dp) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                if (current != null && !current.isTerminal && completedPoints == null && lookupError == null) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(Spacing.lg),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     ) {
                         // Cash is settled by this very act - the buyer is at the
@@ -353,11 +350,10 @@ internal fun AdminScanScreen(
                             containerColor = accents.success,
                         )
                     }
-
-                    // The clearance, laid out like the tab bar's.
-                    SafeAreaBottomSpacer()
-                    }
                 }
+
+                // Clearance for the system's navigation bar.
+                SafeAreaBottomSpacer()
             }
         }
     }

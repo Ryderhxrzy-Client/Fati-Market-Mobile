@@ -58,6 +58,7 @@ import com.fati_market.ui.components.ChoiceChip
 import com.fati_market.ui.components.DrawerRow
 import com.fati_market.ui.components.EmptyState
 import com.fati_market.ui.components.ErrorState
+import com.fati_market.ui.components.FittedPhoto
 import com.fati_market.ui.components.HeaderAction
 import com.fati_market.ui.components.InfoBanner
 import com.fati_market.ui.components.ItemCardSkeleton
@@ -80,6 +81,8 @@ import com.fati_market.ui.components.SecondaryButton
 import com.fati_market.ui.components.SectionHeader
 import com.fati_market.ui.components.SoftDivider
 import com.fati_market.ui.components.StatusTone
+import com.fati_market.ui.components.StoreLogo
+import com.fati_market.ui.components.StoreLogoIcon
 import com.fati_market.ui.theme.Elevation
 import com.fati_market.ui.theme.FavoriteRed
 import com.fati_market.ui.theme.LocalMarketAccents
@@ -256,11 +259,21 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
         )
     }
 
+    val drawerShowing = drawerState.isOpen || drawerState.targetValue == DrawerValue.Open
+
     ModalNavigationDrawer(
         drawerState   = drawerState,
-        // The edge/right-swipe drawer gesture is available only on Home.
-        gesturesEnabled = selectedTab == StudentTab.HOME && !showMyListings && chatConversation == null,
+        // Swiping the drawer open works only on Home, where no other screen
+        // wants that edge. Once it is open, though, every page has to be able
+        // to close it - and these same gestures are what make a tap on the
+        // scrim outside the drawer close it, so they stay on while it shows.
+        gesturesEnabled = drawerShowing ||
+            (selectedTab == StudentTab.HOME && !showMyListings && chatConversation == null),
         drawerContent = {
+            // Composed after the page, so while the drawer shows, Back closes
+            // it instead of reaching the page underneath.
+            BackHandler(enabled = drawerShowing) { scope.launch { drawerState.close() } }
+
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 drawerTonalElevation = 0.dp,
@@ -269,6 +282,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                 modifier             = Modifier.width(292.dp)
             ) {
                 StudentDrawerContent(
+                    onClose        = { scope.launch { drawerState.close() } },
                     showMyListings = showMyListings,
                     userFirstName  = userFirstName,
                     userLastName   = userLastName,
@@ -499,8 +513,21 @@ private fun StudentHomeContent(
         prefs.edit().putBoolean("points_visibility", isPointsVisible).apply()
     }
 
+    // "See all" under the featured listings: the whole catalog, with the sort bar.
+    var showAll by remember { mutableStateOf(false) }
+
     val categoryMap  = remember(categories) { categories.associateBy { it.id } }
-    val isFiltered   = searchQuery.isNotBlank() || selectedCategory != null || sortOption != SortOption.NEWEST
+    val isFiltered   = showAll || searchQuery.isNotBlank() || selectedCategory != null || sortOption != SortOption.NEWEST
+
+    fun clearFilters() {
+        searchQuery      = ""
+        selectedCategory = null
+        sortOption       = SortOption.NEWEST
+        showAll          = false
+    }
+
+    // Back from a filtered view returns to the home page, not out of the app.
+    BackHandler(enabled = isFiltered) { clearFilters() }
 
     val displayItems = remember(allItems, searchQuery, selectedCategory, sortOption) {
         allItems
@@ -520,12 +547,9 @@ private fun StudentHomeContent(
             }
     }
 
-    val categoryRows = remember(allItems, categories) {
-        categories.mapNotNull { cat ->
-            val catItems = allItems.filter { it.categoryId == cat.id }
-            if (catItems.isNotEmpty()) Pair(cat, catItems) else null
-        }
-    }
+    // The home page's own pick, across every category: the newest arrivals.
+    // The catalog already comes back newest first.
+    val featuredItems = remember(allItems) { allItems.take(FEATURED_COUNT) }
 
     fun toggleFavorite(item: Item) {
         scope.launch {
@@ -574,31 +598,9 @@ private fun StudentHomeContent(
             onMenuClick      = onMenuClick,
         )
 
-        // ── Category chips (pinned under the hero) ────────────────────────────
-        if (categories.isNotEmpty()) {
-            LazyRow(
-                contentPadding        = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.md),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                item(key = "all") {
-                    ChoiceChip(
-                        label    = "All",
-                        selected = selectedCategory == null,
-                        onClick  = { selectedCategory = null },
-                        leadingIcon = Icons.Filled.GridView,
-                    )
-                }
-                items(categories, key = { it.id }) { cat ->
-                    ChoiceChip(
-                        label    = cat.name,
-                        selected = selectedCategory == cat.id,
-                        onClick  = { selectedCategory = if (selectedCategory == cat.id) null else cat.id },
-                    )
-                }
-            }
-        }
-
         // ── Content ───────────────────────────────────────────────────────────
+        // One grid for the whole page: the category circles and the headers
+        // span both columns, the listings fill them two by two.
         Box(modifier = Modifier.fillMaxSize()) {
             when {
                 isLoading -> LazyVerticalGrid(
@@ -617,96 +619,115 @@ private fun StudentHomeContent(
                     onRetry = { loadData() },
                 )
 
-                isFiltered && displayItems.isEmpty() -> EmptyState(
-                    icon        = Icons.Filled.SearchOff,
-                    title       = "No items match",
-                    message     = "Try a different word, or clear the filters to see everything.",
-                    actionLabel = "Clear filters",
-                    onAction    = { searchQuery = ""; selectedCategory = null; sortOption = SortOption.NEWEST },
-                    modifier    = Modifier.padding(top = Spacing.xxl),
-                )
-
-                isFiltered -> LazyVerticalGrid(
+                else -> LazyVerticalGrid(
                     columns               = GridCells.Fixed(2),
-                    contentPadding        = PaddingValues(start = Spacing.screen, end = Spacing.screen, bottom = Spacing.xl),
+                    contentPadding        = PaddingValues(
+                        start  = Spacing.screen,
+                        end    = Spacing.screen,
+                        top    = Spacing.sm,
+                        bottom = Spacing.xl,
+                    ),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                     verticalArrangement   = Arrangement.spacedBy(Spacing.md),
                     modifier              = Modifier.fillMaxSize()
                 ) {
-                    item(span = { GridItemSpan(maxLineSpan) }, key = "results-header") {
-                        ResultsBar(
-                            label        = "${displayItems.size} item${if (displayItems.size == 1) "" else "s"} found",
-                            sortOption   = sortOption,
-                            onSortChange = { sortOption = it },
-                        )
-                    }
-                    items(displayItems, key = { it.itemId }) { item ->
-                        PublicItemCard(
-                            item             = item,
-                            categoryName     = categoryMap[item.categoryId]?.name ?: "",
-                            isFavorited      = favoritedIds.contains(item.itemId),
-                            onFavoriteToggle = { toggleFavorite(item) },
-                            onItemClick      = { selectedItem = item }
-                        )
-                    }
-                }
-
-                categoryRows.isEmpty() -> EmptyState(
-                    icon        = Icons.Filled.Storefront,
-                    title       = "The shelves are empty",
-                    message     = "Nothing is on sale right now. Have something you no longer need? Offer it to Ofelia's Store.",
-                    actionLabel = "Sell an item",
-                    onAction    = onSell,
-                    modifier    = Modifier.padding(top = Spacing.xxl),
-                )
-
-                else -> LazyColumn(
-                    modifier       = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = Spacing.xl)
-                ) {
-                    item(key = "points") {
+                    // ── Points, above everything else ─────────────────────────
+                    // Always shown, so the circles below never jump when a
+                    // filter goes on or off.
+                    item(span = { GridItemSpan(maxLineSpan) }, key = "points") {
                         PointsStrip(
                             points    = walletPoints,
                             visible   = isPointsVisible,
                             onToggle  = { isPointsVisible = !isPointsVisible },
                             onClick   = onOpenProfile,
-                            modifier  = Modifier.padding(horizontal = Spacing.screen, vertical = Spacing.xs),
                         )
                     }
 
-                    item(key = "results-header") {
-                        ResultsBar(
-                            label        = "${allItems.size} item${if (allItems.size == 1) "" else "s"} on sale",
-                            sortOption   = sortOption,
-                            onSortChange = { sortOption = it },
-                        )
-                    }
-
-                    items(categoryRows, key = { it.first.id }) { (category, catItems) ->
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            SectionHeader(
-                                title       = category.name,
-                                subtitle    = "${catItems.size} item${if (catItems.size == 1) "" else "s"}",
-                                actionLabel = "See all",
-                                onAction    = { selectedCategory = category.id },
-                                modifier    = Modifier.padding(start = Spacing.screen, end = Spacing.sm, top = Spacing.md, bottom = Spacing.sm),
+                    // ── Categories, as round icons ────────────────────────────
+                    if (categories.isNotEmpty()) {
+                        item(span = { GridItemSpan(maxLineSpan) }, key = "categories") {
+                            CategoryCircles(
+                                categories = categories,
+                                selectedId = selectedCategory,
+                                onSelect   = { selectedCategory = it },
                             )
-                            LazyRow(
-                                contentPadding        = PaddingValues(horizontal = Spacing.screen),
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                            ) {
-                                items(catItems.take(10), key = { it.itemId }) { item ->
+                        }
+                    }
+
+                    when {
+                        // ── A category, a search, or "See all" ───────────────
+                        isFiltered -> {
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "results-header") {
+                                val count = "${displayItems.size} item${if (displayItems.size == 1) "" else "s"}"
+                                val scopeName = categoryMap[selectedCategory]?.name
+                                    ?: if (showAll && searchQuery.isBlank()) "All items" else null
+
+                                ResultsBar(
+                                    label        = listOfNotNull(scopeName, count).joinToString(" · "),
+                                    sortOption   = sortOption,
+                                    onSortChange = { sortOption = it },
+                                    onClear      = { clearFilters() },
+                                )
+                            }
+
+                            if (displayItems.isEmpty()) {
+                                item(span = { GridItemSpan(maxLineSpan) }, key = "no-results") {
+                                    EmptyState(
+                                        icon        = Icons.Filled.SearchOff,
+                                        title       = "No items match",
+                                        message     = "Try a different word, or clear the filters to see everything.",
+                                        actionLabel = "Clear filters",
+                                        onAction    = { clearFilters() },
+                                        modifier    = Modifier.padding(top = Spacing.lg),
+                                    )
+                                }
+                            } else {
+                                items(displayItems, key = { it.itemId }) { item ->
                                     PublicItemCard(
                                         item             = item,
-                                        categoryName     = "",
-                                        modifier         = Modifier.width(164.dp),
+                                        categoryName     = categoryMap[item.categoryId]?.name ?: "",
                                         isFavorited      = favoritedIds.contains(item.itemId),
                                         onFavoriteToggle = { toggleFavorite(item) },
                                         onItemClick      = { selectedItem = item }
                                     )
                                 }
                             }
-                            Spacer(Modifier.height(Spacing.sm))
+                        }
+
+                        allItems.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }, key = "empty") {
+                            EmptyState(
+                                icon        = StoreLogoIcon,
+                                title       = "The shelves are empty",
+                                message     = "Nothing is on sale right now. Have something you no longer need? Offer it to Ofelia's Store.",
+                                actionLabel = "Sell an item",
+                                onAction    = onSell,
+                                modifier    = Modifier.padding(top = Spacing.lg),
+                            )
+                        }
+
+                        // ── The home page itself ──────────────────────────────
+                        else -> {
+                            // The newest arrivals across every category - not
+                            // grouped by it; the circles above are for that.
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "featured-header") {
+                                SectionHeader(
+                                    title       = "Featured Listings",
+                                    subtitle    = "Fresh on the shelves, from every category",
+                                    actionLabel = "See all",
+                                    onAction    = { showAll = true },
+                                    modifier    = Modifier.padding(top = Spacing.xs),
+                                )
+                            }
+
+                            items(featuredItems, key = { it.itemId }) { item ->
+                                PublicItemCard(
+                                    item             = item,
+                                    categoryName     = categoryMap[item.categoryId]?.name ?: "",
+                                    isFavorited      = favoritedIds.contains(item.itemId),
+                                    onFavoriteToggle = { toggleFavorite(item) },
+                                    onItemClick      = { selectedItem = item }
+                                )
+                            }
                         }
                     }
                 }
@@ -806,19 +827,24 @@ private fun HomeHero(
     Spacer(Modifier.height(24.dp))
 }
 
-/** "N items · Sort: Newest" - the line above a list of results. */
+/**
+ * "Books · 5 items · Sort: Newest" - the line above a list of results. Sits
+ * inside the already padded catalog grid, so it adds no side padding of its own.
+ */
 @Composable
 private fun ResultsBar(
     label: String,
     sortOption: SortOption,
     onSortChange: (SortOption) -> Unit,
+    /** Back to the home page; the button shows only when this is set. */
+    onClear: (() -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.screen, vertical = Spacing.xs),
+            .padding(vertical = Spacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -826,7 +852,13 @@ private fun ResultsBar(
             label,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        if (onClear != null) {
+            TextButton(onClick = onClear) { Text("Clear") }
+        }
         Box {
             Row(
                 modifier = Modifier
@@ -929,8 +961,16 @@ private fun PointsStrip(
     }
 }
 
-// ── My Listings (private, with edit) ──────────────────────────────────────────
+// ── My Listings ────────────────────────────────────────────────────────────────
 
+/**
+ * Everything the student has offered to the store.
+ *
+ * Offers that are still open keep the full card: edit, remove, message Ofelia,
+ * show the turnover QR. Everything past that point - handed over, on sale,
+ * sold, or declined - stays on as the seller's history under "Recent
+ * listings", in a compact card of its own.
+ */
 @Composable
 private fun StudentMyListingsContent(
     onMenuClick: () -> Unit,
@@ -951,17 +991,20 @@ private fun StudentMyListingsContent(
         scope.launch {
             isLoading    = true
             errorMessage = null
-            try {
-                itemList = withContext(Dispatchers.IO) { fetchItems(token, "private") }
-            } catch (e: Exception) {
-                errorMessage = e.message ?: "Failed to load listings"
-            } finally {
-                isLoading = false
+            when (val result = withContext(Dispatchers.IO) { MarketplaceApi.fetchMyItems(token) }) {
+                is MarketplaceApi.Result.Ok      -> itemList = result.value
+                is MarketplaceApi.Result.Failure -> errorMessage = result.message
             }
+            isLoading = false
         }
     }
 
     LaunchedEffect(Unit) { loadItems() }
+
+    // Still open - under review, or accepted and waiting to be brought in -
+    // so the seller can still act on it. The rest is history.
+    val openOffers = remember(itemList) { itemList.filter { it.isPending } }
+    val history    = remember(itemList) { itemList.filterNot { it.isPending } }
 
     editingItem?.let { item ->
         EditItemDialog(
@@ -1004,15 +1047,37 @@ private fun StudentMyListingsContent(
                     contentPadding      = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.md),
                     verticalArrangement = Arrangement.spacedBy(Spacing.md)
                 ) {
-                    items(itemList, key = { it.itemId }) { item ->
-                        PrivateItemCard(
-                            item       = item,
-                            token      = token,
-                            onEdit     = { editingItem = item },
-                            onDelete   = { itemList = itemList.filter { it.itemId != item.itemId } },
-                            onGoToChat = onGoToChat
-                        )
+                    if (openOffers.isNotEmpty()) {
+                        item(key = "open-header") {
+                            SectionHeader(
+                                title    = "Open offers",
+                                subtitle = "Waiting on Ofelia's review or on your hand-over",
+                            )
+                        }
+                        items(openOffers, key = { it.itemId }) { item ->
+                            PrivateItemCard(
+                                item       = item,
+                                token      = token,
+                                onEdit     = { editingItem = item },
+                                onDelete   = { itemList = itemList.filter { it.itemId != item.itemId } },
+                                onGoToChat = onGoToChat
+                            )
+                        }
                     }
+
+                    if (history.isNotEmpty()) {
+                        item(key = "history-header") {
+                            SectionHeader(
+                                title    = "Recent listings",
+                                subtitle = "What you have handed over, and what became of it",
+                                modifier = Modifier.padding(top = if (openOffers.isNotEmpty()) Spacing.sm else 0.dp),
+                            )
+                        }
+                        items(history, key = { it.itemId }) { item ->
+                            ListingHistoryCard(item = item)
+                        }
+                    }
+
                     item { Spacer(Modifier.height(Spacing.sm)) }
                 }
             }
@@ -1051,10 +1116,8 @@ private fun PublicItemCard(
                     .background(MaterialTheme.colorScheme.surfaceContainer)
             ) {
                 if (item.photos.isNotEmpty()) {
-                    AsyncImage(
+                    FittedPhoto(
                         model = item.photos.first(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
@@ -1132,11 +1195,7 @@ private fun PublicItemCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    Icon(
-                        Icons.Filled.Storefront, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(12.dp)
-                    )
+                    StoreLogo(Modifier.size(12.dp))
                     Text(
                         // The catalog sells the store's stock, not the
                         // consigning student's.
@@ -1230,11 +1289,9 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
         ) {
             val photoUrl = item.photos.firstOrNull() ?: ""
             if (photoUrl.isNotBlank()) {
-                AsyncImage(
-                    model              = photoUrl,
-                    contentDescription = null,
-                    contentScale       = ContentScale.Crop,
-                    modifier           = Modifier.fillMaxSize()
+                FittedPhoto(
+                    model    = photoUrl,
+                    modifier = Modifier.fillMaxSize()
                 )
             } else {
                 Icon(
@@ -2021,18 +2078,22 @@ internal fun ItemDetailDialog(
                                 verticalAlignment     = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(Spacing.md)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        if (storeOwned) Icons.Filled.Storefront else Icons.Filled.Person,
-                                        null,
-                                        tint     = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                if (storeOwned) {
+                                    StoreLogo(Modifier.size(40.dp), shape = CircleShape)
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Person,
+                                            null,
+                                            tint     = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                                 Column {
                                     Text(
@@ -2101,43 +2162,38 @@ internal fun ItemDetailDialog(
 
                             Spacer(Modifier.height(Spacing.sm))
                         }
-                    }
 
-                    // ── Buy bar ──────────────────────────────────────────
-                    // Pinned, the way the tab bar is: the price and the one
-                    // action, with a real spacer clearing the gesture bar.
-                    if (detailItem.isPublic) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            shadowElevation = Elevation.bar,
-                        ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = Spacing.screen, vertical = Spacing.md),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(Spacing.lg),
-                                ) {
-                                    Column {
-                                        Text(
-                                            "Total",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        PriceTag(detailItem.displayPrice, size = PriceSize.Medium)
-                                    }
-                                    PrimaryButton(
-                                        text = "Buy now",
-                                        icon = Icons.Filled.ShoppingBag,
-                                        onClick = { onBuyNow(detailItem) },
-                                        modifier = Modifier.weight(1f),
+                        // ── Buy ──────────────────────────────────────────
+                        // The last thing on the page rather than a bar pinned
+                        // to the window, so it can never end up under the
+                        // system's navigation buttons.
+                        if (detailItem.isPublic) {
+                            SoftDivider(Modifier.padding(horizontal = Spacing.screen))
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.lg),
+                            ) {
+                                Column {
+                                    Text(
+                                        "Total",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    PriceTag(detailItem.displayPrice, size = PriceSize.Medium)
                                 }
-                                SafeAreaBottomSpacer()
+                                PrimaryButton(
+                                    text = "Buy now",
+                                    icon = Icons.Filled.ShoppingBag,
+                                    onClick = { onBuyNow(detailItem) },
+                                    modifier = Modifier.weight(1f),
+                                )
                             }
                         }
-                    } else {
+
                         SafeAreaBottomSpacer()
                     }
                 }
@@ -2303,7 +2359,8 @@ private fun FavoriteItemCard(
 
 // ── Add Item ───────────────────────────────────────────────────────────────────
 
-private data class Category(val id: Int, val name: String)
+/** A catalog category. Shared with the home page's category circles. */
+internal data class Category(val id: Int, val name: String)
 
 private fun fetchCategories(token: String): List<Category> {
     val request = Request.Builder()
@@ -2818,6 +2875,8 @@ private fun sendMessageToAdmin(token: String, itemId: Int, message: String): Boo
 
 @Composable
 private fun StudentDrawerContent(
+    /** The X in the header: shuts the drawer without choosing anything. */
+    onClose: () -> Unit,
     showMyListings: Boolean,
     userFirstName: String,
     userLastName: String,
@@ -2900,6 +2959,9 @@ private fun StudentDrawerContent(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close menu", tint = accents.onBrand)
+                    }
                 }
                 Spacer(Modifier.height(Spacing.md))
                 Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.16f)) {
@@ -2927,7 +2989,7 @@ private fun StudentDrawerContent(
         ) {
             Spacer(modifier = Modifier.height(Spacing.sm))
 
-            DrawerRow(icon = Icons.Outlined.Storefront, label = "Marketplace", selected = !showMyListings, onClick = onHome)
+            DrawerRow(icon = StoreLogoIcon, label = "Marketplace", selected = !showMyListings, onClick = onHome)
             DrawerRow(icon = Icons.Outlined.Sell, label = "Sell an item", selected = false, onClick = onSell)
             DrawerRow(icon = Icons.Outlined.ListAlt, label = "My listings", selected = showMyListings, onClick = onMyListings)
             DrawerRow(icon = Icons.Outlined.ReceiptLong, label = "My orders", selected = false, onClick = onMyOrders)

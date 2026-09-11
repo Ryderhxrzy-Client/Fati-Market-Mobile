@@ -1,7 +1,6 @@
 package com.fati_market.auth
 
 import android.content.Context
-import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -9,11 +8,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
-import com.fati_market.auth.utils.getFileName
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -106,32 +103,18 @@ fun googleLogin(idToken: String): GoogleAuthResult {
  * Register with Google.
  *
  * Nothing to upload and nobody to wait for: Google has already proven a school
- * address, which is the whole of what registration establishes. The profile
- * picture is optional - Google has one of those too.
+ * address, which is the whole of what registration establishes. The backend
+ * stores the name and profile picture asserted by Google with the ID token.
  */
-fun googleRegister(
-    context: Context,
-    idToken: String,
-    profilePictureUri: Uri? = null,
-): GoogleAuthResult {
-    val builder = MultipartBody.Builder()
-        .setType(MultipartBody.FORM)
-        .addFormDataPart("id_token", idToken)
-
-    profilePictureUri?.let { uri ->
-        context.contentResolver.openInputStream(uri)?.readBytes()?.let { bytes ->
-            builder.addFormDataPart(
-                "profile_picture",
-                getFileName(context, uri).ifEmpty { "profile.jpg" },
-                bytes.toRequestBody((context.contentResolver.getType(uri) ?: "image/jpeg").toMediaType()),
-            )
-        }
-    }
+fun googleRegister(idToken: String): GoogleAuthResult {
+    val body = JSONObject().put("id_token", idToken)
+        .toString()
+        .toRequestBody("application/json".toMediaType())
 
     val request = Request.Builder()
         .url("$API/auth/google/register")
         .header("Accept", "application/json")
-        .post(builder.build())
+        .post(body)
         .build()
 
     return call(request)
@@ -372,10 +355,17 @@ fun requestPersonalEmail(token: String, personalEmail: String): GoogleAuthResult
 }
 
 /** Finish the link with the code that arrived at the new address. */
-fun confirmPersonalEmail(token: String, personalEmail: String, code: String): GoogleAuthResult {
+fun confirmPersonalEmail(
+    token: String,
+    personalEmail: String,
+    code: String,
+    password: String,
+): GoogleAuthResult {
     val body = JSONObject()
         .put("personal_email", personalEmail)
         .put("code", code)
+        .put("password", password)
+        .put("password_confirmation", password)
         .toString()
         .toRequestBody("application/json".toMediaType())
 

@@ -110,6 +110,19 @@ internal object MarketplaceApi {
             parseTransaction(it.getJSONObject("data"))
         }
 
+    /**
+     * Switch an unpaid order between cash and GCash - the same choice the
+     * checkout offers, while nothing has been paid or approved yet.
+     */
+    fun changePaymentMethod(token: String, transactionId: Int, paymentMethod: String): Result<MarketTransaction> =
+        post(token, "/checkout/$transactionId/payment-method", JSONObject().apply {
+            put("payment_method", paymentMethod)
+        }) { parseTransaction(it.getJSONObject("data")) }
+
+    /** When the store is open. The meet-up picker is drawn from this. */
+    fun fetchStoreHours(token: String): Result<StoreHours> =
+        get(token, "/store/hours") { parseStoreHours(it.getJSONObject("data")) }
+
     fun fetchMyTransactions(token: String): Result<List<MarketTransaction>> =
         get(token, "/transactions") { json ->
             val arr = json.getJSONArray("data")
@@ -168,6 +181,16 @@ internal object MarketplaceApi {
      */
     fun fetchItem(token: String, itemId: Int): Result<Item> =
         get(token, "/items/$itemId") { parseItem(it.getJSONObject("data")) }
+
+    /**
+     * Everything the student has offered, whatever became of it - their
+     * listing history, newest first.
+     */
+    fun fetchMyItems(token: String): Result<List<Item>> =
+        get(token, "/items/mine") { json ->
+            val arr = json.getJSONArray("data")
+            (0 until arr.length()).map { parseItem(arr.getJSONObject(it)) }
+        }
 
     fun fetchWalletPoints(token: String): Result<Int> =
         get(token, "/wallet") { it.optJSONObject("data")?.optInt("wallet_points", 0) ?: 0 }
@@ -295,6 +318,45 @@ internal object MarketplaceApi {
         post(token, "/admin/items/$itemId/reject", JSONObject().apply {
             put("reason", reason)
         }) { parseItem(it.getJSONObject("data")) }
+
+    // ── Admin: listing photos ────────────────────────────────────────────
+
+    /** The listing's photos, with the ids that removing one needs. */
+    fun fetchItemPhotos(token: String, itemId: Int): Result<List<ItemPhoto>> =
+        get(token, "/admin/items/$itemId/photos") { parseItemPhotos(it) }
+
+    /**
+     * Add photos to a listing that is not on sale yet. Answers with the
+     * listing's whole photo set, so the caller never has to merge.
+     */
+    fun addItemPhotos(token: String, itemId: Int, photos: List<Pair<File, String>>): Result<List<ItemPhoto>> {
+        val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+
+        photos.forEach { (file, mimeType) ->
+            builder.addFormDataPart("photos[]", file.name, file.asRequestBody(mimeType.toMediaType()))
+        }
+
+        val request = Request.Builder()
+            .url("$BASE_URL/admin/items/$itemId/photos")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .post(builder.build())
+            .build()
+
+        return execute(request) { parseItemPhotos(it) }
+    }
+
+    /** Remove one photo. The server refuses to remove the last one. */
+    fun deleteItemPhoto(token: String, itemId: Int, photoId: Int): Result<List<ItemPhoto>> {
+        val request = Request.Builder()
+            .url("$BASE_URL/admin/items/$itemId/photos/$photoId")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .delete()
+            .build()
+
+        return execute(request) { parseItemPhotos(it) }
+    }
 
     // ── Admin: transactions ──────────────────────────────────────────────
 

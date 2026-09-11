@@ -112,7 +112,7 @@ internal fun PaymentProofDialog(
                                 "collect the item. The admin confirms your payment on handover, " +
                                 "and your receipt becomes official then.",
                             tone = StatusTone.Info,
-                            icon = Icons.Filled.Storefront,
+                            icon = StoreLogoIcon,
                         )
                     } else {
                         // -- Step 1: send it ------------------------------

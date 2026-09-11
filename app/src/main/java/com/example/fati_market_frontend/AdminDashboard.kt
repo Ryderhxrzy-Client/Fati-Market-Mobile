@@ -114,6 +114,8 @@ import com.fati_market.ui.components.PointsBalanceChip
 import com.fati_market.ui.components.PriceSize
 import com.fati_market.ui.components.PriceTag
 import com.fati_market.ui.components.PrimaryButton
+import com.fati_market.ui.components.StoreLogo
+import com.fati_market.ui.components.StoreLogoIcon
 import com.fati_market.ui.components.RewardChip
 import com.fati_market.ui.components.RoundIconButton
 import com.fati_market.ui.components.SecondaryButton
@@ -494,6 +496,12 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
+            // Composed after the page, so while the drawer shows, Back closes
+            // it instead of reaching the page underneath.
+            BackHandler(enabled = drawerState.isOpen || drawerState.targetValue == DrawerValue.Open) {
+                scope.launch { drawerState.close() }
+            }
+
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 drawerTonalElevation = 0.dp,
@@ -502,6 +510,7 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                 modifier = Modifier.width(300.dp)
             ) {
                 AdminDrawerContent(
+                    onClose       = { scope.launch { drawerState.close() } },
                     currentPage   = drawerPage,
                     userFirstName = userFirstName,
                     userLastName  = userLastName,
@@ -656,7 +665,9 @@ private fun AdminDrawerContent(
     onThemeToggle: () -> Unit,
     onPageSelect: (DrawerPage) -> Unit,
     onScan: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    /** The X in the header: shuts the drawer without choosing anything. */
+    onClose: () -> Unit,
 ) {
     val accents  = LocalMarketAccents.current
     val fullName = "$userFirstName $userLastName".trim().ifBlank { "Ofelia's Store" }
@@ -745,6 +756,9 @@ private fun AdminDrawerContent(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Filled.Close, contentDescription = "Close menu", tint = accents.onBrand)
+                    }
                 }
                 Spacer(Modifier.height(Spacing.md))
                 Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.16f)) {
@@ -753,7 +767,7 @@ private fun AdminDrawerContent(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                     ) {
-                        Icon(Icons.Filled.Storefront, null, tint = accents.onBrand, modifier = Modifier.size(14.dp))
+                        StoreLogo(Modifier.size(14.dp))
                         Text(
                             "Store administrator",
                             style = MaterialTheme.typography.labelSmall,
@@ -1103,7 +1117,7 @@ private fun AdminPrivateOffersContent(
                     token = token,
                     onBack = { editingItem = null },
                     onItemUpdated = { updatedItem ->
-                        if (updatedItem.status.lowercase() != "private") {
+                        if (updatedItem.status.lowercase() !in listOf("private", "pending")) {
                             val targetPage = when (updatedItem.status.lowercase()) {
                                 "acquired" -> DrawerPage.AcquiredItems
                                 "public"   -> DrawerPage.PublicListings
@@ -1124,7 +1138,8 @@ private fun AdminPrivateOffersContent(
                                         publicPrice        = updatedItem.publicPrice,
                                         rewardPoints       = updatedItem.rewardPoints,
                                         sellerPayoutStatus = updatedItem.sellerPayoutStatus,
-                                        isTurnoverVerified = updatedItem.isTurnoverVerified
+                                        isTurnoverVerified = updatedItem.isTurnoverVerified,
+                                        photos             = updatedItem.photos
                                     )
                                 } else it
                             }
@@ -1276,7 +1291,8 @@ private fun AdminItemListContent(
                                         publicPrice        = updatedItem.publicPrice,
                                         rewardPoints       = updatedItem.rewardPoints,
                                         sellerPayoutStatus = updatedItem.sellerPayoutStatus,
-                                        isTurnoverVerified = updatedItem.isTurnoverVerified
+                                        isTurnoverVerified = updatedItem.isTurnoverVerified,
+                                        photos             = updatedItem.photos
                                     )
                                 else it
                             }
@@ -2065,7 +2081,7 @@ private fun AdminPrivateOfferCard(
                 if (item.isTurnoverVerified && !item.isPublic && !item.isSold) {
                     PrimaryButton(
                         text = "Set selling price and publish",
-                        icon = Icons.Outlined.Storefront,
+                        icon = StoreLogoIcon,
                         onClick = { onEditClick(item) },
                         modifier = Modifier.fillMaxWidth(),
                         containerColor = LocalMarketAccents.current.info,
@@ -2328,11 +2344,16 @@ private fun AdminHomeContent(
                     ) {
                         QuickAction(label = "Scan code", icon = Icons.Filled.QrCodeScanner, onClick = onScan, modifier = Modifier.weight(1f))
                         QuickAction(label = "Orders", icon = Icons.Filled.ReceiptLong, onClick = { onOpenPage(DrawerPage.ManageOrders) }, modifier = Modifier.weight(1f))
-                        QuickAction(label = "Listings", icon = Icons.Filled.Storefront, onClick = { onOpenPage(DrawerPage.PublicListings) }, modifier = Modifier.weight(1f))
+                        QuickAction(label = "Listings", icon = StoreLogoIcon, onClick = { onOpenPage(DrawerPage.PublicListings) }, modifier = Modifier.weight(1f))
                         QuickAction(label = "Messages", icon = Icons.Filled.ChatBubble, onClick = onOpenChat, modifier = Modifier.weight(1f))
                     }
                 }
             }
+
+            // ── Meet-ups ──────────────────────────────────────────────────
+            // Who is coming in with an item, and when - booked from the offer
+            // chats, rescheduled from here.
+            AdminMeetupsCard(token = token)
 
             // ── Overview ──────────────────────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -4385,7 +4406,8 @@ private fun EditItemPage(
     onItemUpdated: (ChatItem) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var currentImageIndex by remember { mutableStateOf(0) }
+    // The listing's photos, kept current by the photo editor below.
+    var photos by remember { mutableStateOf(item.photos) }
 
     // Status dropdown
     var expanded by remember { mutableStateOf(false) }
@@ -4424,76 +4446,8 @@ private fun EditItemPage(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Photo viewer
-                if (item.photos.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp)
-                    ) {
-                        AsyncImage(
-                            model = item.photos[currentImageIndex],
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        if (item.photos.size > 1) {
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(10.dp),
-                                color = Color.Black.copy(alpha = 0.55f),
-                                shape = RoundedCornerShape(50)
-                            ) {
-                                Text(
-                                    "${currentImageIndex + 1} / ${item.photos.size}",
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                    // Thumbnail strip
-                    if (item.photos.size > 1) {
-                        LazyRow(
-                            contentPadding = PaddingValues(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            itemsIndexed(item.photos) { index, url ->
-                                AsyncImage(
-                                    model = url,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .border(
-                                            width = if (index == currentImageIndex) 2.dp else 1.dp,
-                                            color = if (index == currentImageIndex) MaterialTheme.colorScheme.primary
-                                                    else MaterialTheme.colorScheme.outlineVariant,
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .clickable { currentImageIndex = index }
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Filled.Photo, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(64.dp)
-                        )
-                    }
-                }
+                AdminItemPhotoViewer(photos)
+
                 // Editable info section
                 Column(
                     modifier = Modifier
@@ -4502,6 +4456,16 @@ private fun EditItemPage(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(item.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+
+                    // Ofelia's own photos, while the listing is still off the catalog.
+                    if (item.status.lowercase() in listOf("pending", "private", "acquired")) {
+                        AdminItemPhotoEditor(
+                            itemId = item.itemId,
+                            token = token,
+                            onPhotosChanged = { photos = it },
+                        )
+                        HorizontalDivider()
+                    }
 
                     // Seller asking price - read-only reference
                     Text("Seller Asking Price", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
@@ -4814,7 +4778,8 @@ private fun EditItemPage(
                                         publicPrice = normalizedPrice ?: item.publicPrice,
                                         rewardPoints = LoyaltyRules.rewardPointsFor(
                                             normalizedPrice ?: item.publicPrice
-                                        )
+                                        ),
+                                        photos = photos,
                                     )
                                     // Show dialog FIRST — onItemUpdated is called from Back button
                                     showSuccessDialog = true
@@ -4858,8 +4823,9 @@ private fun EditItemPageForList(
     onItemUpdated: (ChatItem) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var currentImageIndex by remember { mutableStateOf(0) }
-    
+    // The listing's photos, kept current by the photo editor below.
+    var photos by remember { mutableStateOf(item.photos) }
+
     // Status dropdown
     var expanded by remember { mutableStateOf(false) }
     var editStatus by remember { mutableStateOf(item.status) }
@@ -4898,77 +4864,8 @@ private fun EditItemPageForList(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Photo viewer (same as before)
-                if (item.photos.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(300.dp)
-                    ) {
-                        AsyncImage(
-                            model = item.photos[currentImageIndex],
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        if (item.photos.size > 1) {
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(10.dp),
-                                color = Color.Black.copy(alpha = 0.55f),
-                                shape = RoundedCornerShape(50)
-                            ) {
-                                Text(
-                                    "${currentImageIndex + 1} / ${item.photos.size}",
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                    // Thumbnail strip
-                    if (item.photos.size > 1) {
-                        LazyRow(
-                            contentPadding = PaddingValues(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            itemsIndexed(item.photos) { index, url ->
-                                AsyncImage(
-                                    model = url,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .border(
-                                            width = if (index == currentImageIndex) 2.dp else 1.dp,
-                                            color = if (index == currentImageIndex) MaterialTheme.colorScheme.primary
-                                                    else MaterialTheme.colorScheme.outlineVariant,
-                                            shape = RoundedCornerShape(8.dp)
-                                        )
-                                        .clickable { currentImageIndex = index }
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Filled.Photo, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.size(64.dp)
-                        )
-                    }
-                }
-                
+                AdminItemPhotoViewer(photos)
+
                 // Editable info section
                 Column(
                     modifier = Modifier
@@ -4977,6 +4874,16 @@ private fun EditItemPageForList(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(item.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+
+                    // Ofelia's own photos, while the listing is still off the catalog.
+                    if (item.status.lowercase() in listOf("pending", "private", "acquired")) {
+                        AdminItemPhotoEditor(
+                            itemId = item.itemId,
+                            token = token,
+                            onPhotosChanged = { photos = it },
+                        )
+                        HorizontalDivider()
+                    }
 
                     // Seller asking price - read-only reference, hidden once the
                     // item is on the public catalog and the selling price rules.
@@ -5303,7 +5210,7 @@ private fun EditItemPageForList(
                                         sellerId = item.sellerId,
                                         sellerEmail = item.sellerEmail,
                                         status = editStatus,
-                                        photos = item.photos
+                                        photos = photos
                                     )
                                     // Show dialog FIRST — onItemUpdated is called from the Back button
                                     showSuccessDialog = true
@@ -6138,7 +6045,7 @@ private fun AboutGroup(role: String) {
     }
 
     SettingsGroup(title = "About") {
-        InfoRowItem(Icons.Outlined.Storefront, "App", "Fati-Market v$versionName")
+        InfoRowItem(StoreLogoIcon, "App", "Fati-Market v$versionName")
         RowDivider()
         InfoRowItem(Icons.Outlined.School, "Institution", "Our Lady of Fatima University")
         RowDivider()
@@ -6288,10 +6195,13 @@ fun AdminProfileContent(
         )
     }
 
+    // One scroll for the whole page: the header and its identity block scroll
+    // away with the rest instead of staying pinned over a shrinking list.
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
     ) {
         // The header carries the identity block, so the avatar sits on the
         // brand gradient rather than floating in the page.
@@ -6378,8 +6288,7 @@ fun AdminProfileContent(
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
                 .padding(horizontal = Spacing.screen)
                 .padding(top = Spacing.lg, bottom = Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.xl)

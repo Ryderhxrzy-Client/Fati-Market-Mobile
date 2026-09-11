@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.fati_market.auth.confirmPersonalEmail
 import com.fati_market.auth.requestPersonalEmail
 import com.fati_market.ui.components.*
@@ -44,6 +45,8 @@ internal fun PersonalEmailDialog(
 
     var address by remember { mutableStateOf(existing.orEmpty()) }
     var code by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordConfirmation by remember { mutableStateOf("") }
     var codeSent by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -87,6 +90,34 @@ internal fun PersonalEmailDialog(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.small,
                     )
+
+                    Text(
+                        "Set a password for signing in with this personal email.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it; error = null },
+                        label = { Text("Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
+                    )
+
+                    OutlinedTextField(
+                        value = passwordConfirmation,
+                        onValueChange = { passwordConfirmation = it; error = null },
+                        label = { Text("Confirm password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.small,
+                    )
                 }
 
                 notice?.let {
@@ -100,7 +131,11 @@ internal fun PersonalEmailDialog(
         },
         confirmButton = {
             Button(
-                enabled = !working && if (codeSent) code.length == 6 else address.isNotBlank(),
+                enabled = !working && if (codeSent) {
+                    code.length == 6 && password.length >= 8 && password == passwordConfirmation
+                } else {
+                    address.isNotBlank()
+                },
                 onClick = {
                     scope.launch {
                         working = true
@@ -108,7 +143,7 @@ internal fun PersonalEmailDialog(
 
                         val result = withContext(Dispatchers.IO) {
                             if (codeSent) {
-                                confirmPersonalEmail(token, address.trim(), code)
+                                confirmPersonalEmail(token, address.trim(), code, password)
                             } else {
                                 requestPersonalEmail(token, address.trim())
                             }
@@ -136,7 +171,7 @@ internal fun PersonalEmailDialog(
                 Text(
                     when {
                         working -> "Please wait..."
-                        codeSent -> "Link it"
+                        codeSent -> "Link email and set password"
                         else -> "Send me a code"
                     }
                 )

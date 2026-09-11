@@ -315,13 +315,26 @@ internal fun ItemOfferCard(msg: ChatMessage, isMe: Boolean) {
     val token = remember { prefs.getString("auth_token", "") ?: "" }
     val isAdmin = remember { (prefs.getString("user_role", "") ?: "").equals("admin", true) }
 
-    val scope = rememberCoroutineScope()
     var showItem by remember { mutableStateOf(false) }
     var offerAction by remember { mutableStateOf<String?>(null) }
     var confirmAcquire by remember { mutableStateOf(false) }
     var acquireError by remember { mutableStateOf<String?>(null) }
+    var scheduling by remember { mutableStateOf(false) }
 
-    fun pickSchedule() = pickMeetupSchedule(context, scope, token, listing.itemId)
+    fun pickSchedule() {
+        scheduling = true
+    }
+
+    if (scheduling) {
+        MeetupScheduleDialog(
+            itemId = listing.itemId,
+            token = token,
+            current = listing.meetupSchedule,
+            onDismiss = { scheduling = false },
+            // The chat's poll repaints the card with the new time.
+            onSaved = { scheduling = false },
+        )
+    }
 
     if (showItem) {
         ChatItemPreviewDialog(
@@ -535,56 +548,6 @@ internal fun ItemOfferCard(msg: ChatMessage, isMe: Boolean) {
             }
         }
     }
-}
-
-/**
- * Date then time via the platform pickers, posted as the meet-up the
- * 6h/1h/30m reminders count down from. Failures surface as a toast; success
- * shows up when the chat poll repaints whatever invoked this.
- */
-internal fun pickMeetupSchedule(
-    context: android.content.Context,
-    scope: kotlinx.coroutines.CoroutineScope,
-    token: String,
-    itemId: Int,
-) {
-    val calendar = java.util.Calendar.getInstance().apply {
-        add(java.util.Calendar.DAY_OF_YEAR, 1)
-    }
-
-    android.app.DatePickerDialog(
-        context,
-        { _, year, month, day ->
-            android.app.TimePickerDialog(
-                context,
-                { _, hour, minute ->
-                    val schedule = String.format(
-                        java.util.Locale.US,
-                        "%04d-%02d-%02d %02d:%02d:00",
-                        year, month + 1, day, hour, minute,
-                    )
-
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) {
-                            MarketplaceApi.setMeetupSchedule(token, itemId, schedule)
-                        }
-
-                        if (result is MarketplaceApi.Result.Failure) {
-                            android.widget.Toast
-                                .makeText(context, result.message, android.widget.Toast.LENGTH_LONG)
-                                .show()
-                        }
-                    }
-                },
-                10,
-                0,
-                false,
-            ).show()
-        },
-        calendar.get(java.util.Calendar.YEAR),
-        calendar.get(java.util.Calendar.MONTH),
-        calendar.get(java.util.Calendar.DAY_OF_MONTH),
-    ).show()
 }
 
 /**
@@ -841,8 +804,6 @@ internal fun ItemOfferPanel(
 ) {
     val context = LocalContext.current
     val accents = LocalMarketAccents.current
-    val scope = rememberCoroutineScope()
-
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE) }
     val isAdmin = remember { (prefs.getString("user_role", "") ?: "").equals("admin", true) }
 
@@ -850,6 +811,7 @@ internal fun ItemOfferPanel(
     var refreshKey by remember(itemId) { mutableStateOf(0) }
     var offerAction by remember { mutableStateOf<String?>(null) }
     var confirmAcquire by remember { mutableStateOf(false) }
+    var scheduling by remember { mutableStateOf(false) }
 
     LaunchedEffect(itemId, refreshKey) {
         if (itemId <= 0) return@LaunchedEffect
@@ -882,6 +844,16 @@ internal fun ItemOfferPanel(
             token = token,
             onDismiss = { offerAction = null },
             onDone = { offerAction = null; refreshKey++ },
+        )
+    }
+
+    if (scheduling) {
+        MeetupScheduleDialog(
+            itemId = item.itemId,
+            token = token,
+            current = item.meetupSchedule,
+            onDismiss = { scheduling = false },
+            onSaved = { scheduling = false; refreshKey++ },
         )
     }
 
@@ -927,7 +899,7 @@ internal fun ItemOfferPanel(
                 isAdmin -> {
                     SecondaryButton(
                         text = if (item.meetupSchedule == null) "Set schedule" else "Change schedule",
-                        onClick = { pickMeetupSchedule(context, scope, token, item.itemId) },
+                        onClick = { scheduling = true },
                         modifier = Modifier.weight(1f),
                         compact = true,
                     )

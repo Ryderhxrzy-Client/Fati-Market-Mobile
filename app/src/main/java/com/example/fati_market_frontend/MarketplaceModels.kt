@@ -242,6 +242,12 @@ internal data class MarketTransaction(
 
     /** When the handover happened, for captioning that photo. */
     val completedAt: String? = null,
+
+    /**
+     * The buyer may still switch between cash and GCash: nothing has been
+     * paid or approved yet. Decided by the server.
+     */
+    val canChangePaymentMethod: Boolean = false,
 ) {
     val awaitingProofReview: Boolean get() = paymentStatus == "proof_submitted"
     val isTerminal: Boolean get() = status in listOf("completed", "cancelled", "rejected")
@@ -296,7 +302,21 @@ internal fun parseTransaction(obj: JSONObject): MarketTransaction {
         qrCode = str("qr_code"),
         handoverPhoto = str("handover_photo"),
         completedAt = str("completed_at"),
+        canChangePaymentMethod = obj.optBoolean("can_change_payment_method", false),
     )
+}
+
+/** One photo on a listing, with the id the admin needs to remove it. */
+internal data class ItemPhoto(val photoId: Int, val url: String)
+
+/** The `data` array the admin photo endpoints answer with. */
+internal fun parseItemPhotos(json: JSONObject): List<ItemPhoto> {
+    val arr = json.optJSONArray("data") ?: return emptyList()
+
+    return (0 until arr.length()).map { i ->
+        val obj = arr.getJSONObject(i)
+        ItemPhoto(photoId = obj.optInt("photo_id"), url = obj.optString("photo_url"))
+    }
 }
 
 /**

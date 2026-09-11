@@ -292,20 +292,9 @@ internal fun CheckoutScreen(
                             Overline("Payment method")
                             Spacer(Modifier.height(Spacing.xs))
 
-                            PaymentOption(
-                                selected = paymentMethod == "cash",
-                                icon = Icons.Filled.Storefront,
-                                title = "Cash at the store",
-                                subtitle = "Pay Ofelia in person when you collect the item.",
-                                onClick = { paymentMethod = "cash" },
-                            )
-                            PaymentOption(
-                                selected = paymentMethod == "gcash",
-                                icon = Icons.Filled.PhoneAndroid,
-                                title = "GCash",
-                                subtitle = "Send the payment, then upload your receipt for " +
-                                    "the admin to verify.",
-                                onClick = { paymentMethod = "gcash" },
+                            PaymentMethodOptions(
+                                selected = paymentMethod,
+                                onSelect = { paymentMethod = it },
                             )
                         }
                     }
@@ -382,6 +371,29 @@ internal fun CheckoutScreen(
     }
 }
 
+/**
+ * Cash or GCash - the two ways to settle what is left after points. Shared
+ * with the order history, where an unpaid order can still switch methods, so
+ * the choice reads the same in both places.
+ */
+@Composable
+internal fun PaymentMethodOptions(selected: String, onSelect: (String) -> Unit) {
+    PaymentOption(
+        selected = selected == "cash",
+        icon = StoreLogoIcon,
+        title = "Cash at the store",
+        subtitle = "Pay Ofelia in person when you collect the item.",
+        onClick = { onSelect("cash") },
+    )
+    PaymentOption(
+        selected = selected == "gcash",
+        icon = Icons.Filled.PhoneAndroid,
+        title = "GCash",
+        subtitle = "Send the payment, then upload your receipt for the admin to verify.",
+        onClick = { onSelect("gcash") },
+    )
+}
+
 /** A selectable payment method row. */
 @Composable
 private fun PaymentOption(
@@ -408,7 +420,7 @@ private fun PaymentOption(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
-            Icon(
+            MarketIcon(
                 icon,
                 null,
                 tint = if (selected) {
@@ -558,7 +570,7 @@ private fun OrderPlacedSection(
                     text = "Bring ${Money.format(current.amountDue)} when you collect the item. " +
                         "The admin will confirm your payment on handover.",
                     tone = StatusTone.Info,
-                    icon = Icons.Filled.Storefront,
+                    icon = StoreLogoIcon,
                 )
             }
         }

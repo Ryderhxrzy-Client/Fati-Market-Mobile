@@ -1,19 +1,10 @@
 package com.fati_market.auth
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Shield
@@ -25,17 +16,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import android.graphics.BitmapFactory
 import com.fati_market.ui.components.InfoBanner
 import com.fati_market.ui.components.PrimaryButton
 import com.fati_market.ui.components.StatusTone
@@ -52,24 +37,6 @@ fun SignUpScreen(navController: NavController) {
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
-
-    // Profile picture
-    var profileBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    var profileUri by remember { mutableStateOf<Uri?>(null) }
-
-    // Image picker for profile photo
-    val profileLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        profileUri = uri
-        uri?.let {
-            scope.launch(Dispatchers.IO) {
-                val stream = context.contentResolver.openInputStream(it)
-                val bmp = BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                withContext(Dispatchers.Main) { profileBitmap = bmp }
-            }
-        }
-    }
 
     // ── Success ───────────────────────────────────────────────────────────
     successMessage?.let { msg ->
@@ -132,62 +99,7 @@ fun SignUpScreen(navController: NavController) {
         Spacer(Modifier.height(Spacing.xl))
 
         // ── Optional photo ────────────────────────────────────────────
-        // Google already has a picture of them, so this one is a bonus,
-        // not a hurdle.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .clickable(enabled = !isLoading) { profileLauncher.launch("image/*") }
-                .padding(Spacing.md),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                val bmp = profileBitmap
-                if (bmp != null) {
-                    Image(
-                        painter = BitmapPainter(bmp),
-                        contentDescription = "Profile photo",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(26.dp),
-                    )
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    if (profileBitmap != null) "Profile photo added" else "Add a profile photo",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Text(
-                    "Optional. You can change it any time from your profile.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(
-                Icons.Filled.AddAPhoto,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-
+        // Google supplies the name and profile picture after the account is chosen.
         errorMessage?.let { msg ->
             Spacer(Modifier.height(Spacing.md))
             InfoBanner(text = msg, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
@@ -213,11 +125,7 @@ fun SignUpScreen(navController: NavController) {
                         }
 
                         val result = withContext(Dispatchers.IO) {
-                            googleRegister(
-                                context = context,
-                                idToken = idToken,
-                                profilePictureUri = profileUri,
-                            )
+                            googleRegister(idToken)
                         }
 
                         if (result.success && result.body != null) {
