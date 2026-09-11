@@ -14,3 +14,7 @@
 .cxx
 local.properties
 /node_modules
+# Release signing credentials -- never commit
+keystore.properties
+*.jks
+*.keystore
