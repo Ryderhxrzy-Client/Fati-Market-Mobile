@@ -11,12 +11,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import com.fati_market.auth.confirmPersonalEmail
 import com.fati_market.auth.requestPersonalEmail
+import com.fati_market.auth.verifyPersonalEmailCode
+import com.fati_market.auth.personalEmailStatus
 import com.fati_market.ui.components.*
 import com.fati_market.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
@@ -43,11 +47,15 @@ internal fun PersonalEmailDialog(
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
     val token = remember { prefs.getString("auth_token", "") ?: "" }
 
-    var address by remember { mutableStateOf(existing.orEmpty()) }
+    val pendingEmail = remember { prefs.getString("personal_email_pending", "").orEmpty() }
+    var address by remember { mutableStateOf(existing?.takeIf { it.isNotBlank() } ?: pendingEmail) }
     var code by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordConfirmation by remember { mutableStateOf("") }
-    var codeSent by remember { mutableStateOf(false) }
+    var codeSent by remember { mutableStateOf(pendingEmail.isNotBlank() && existing.isNullOrBlank()) }
+    var codeVerified by remember { mutableStateOf(false) }
+    var showPassword by remember { mutableStateOf(false) }
+    var showPasswordConfirmation by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -80,9 +88,10 @@ internal fun PersonalEmailDialog(
                 )
 
                 if (codeSent) {
+                    if (!codeVerified) {
                     OutlinedTextField(
                         value = code,
-                        onValueChange = { code = it.filter { c -> c.isDigit() }.take(6); error = null },
+                        onValueChange = { code = it.filter { c -> c.isDigit() }.take(6); codeVerified = false; error = null },
                         label = { Text("6-digit code") },
                         placeholder = { Text("Sent to that address") },
                         singleLine = true,
@@ -91,8 +100,62 @@ internal fun PersonalEmailDialog(
                         shape = MaterialTheme.shapes.small,
                     )
 
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(onClick = {
+                            codeSent = false
+                            codeVerified = false
+                            code = ""
+                            notice = null
+                            error = null
+                        }, enabled = !working) { Text("Edit email") }
+                        TextButton(onClick = {
+                            scope.launch {
+                                working = true
+                                error = null
+                                val result = withContext(Dispatchers.IO) { requestPersonalEmail(token, address.trim()) }
+                                working = false
+                                if (result.success) {
+                                    prefs.edit().putString("personal_email_pending", address.trim()).apply()
+                                    notice = result.message
+                                } else error = result.message
+                            }
+                        }, enabled = !working && address.isNotBlank()) { Text("Resend OTP") }
+                    }
+
+                    TextButton(
+                        onClick = {
+                            if (code.length != 6) error = "Enter the complete 6-digit code first."
+                            else scope.launch {
+                                working = true
+                                error = null
+                                val result = withContext(Dispatchers.IO) { verifyPersonalEmailCode(token, address.trim(), code) }
+                                working = false
+                                if (result.success) {
+                                    codeVerified = true
+                                    notice = result.message.ifBlank { "Code verified successfully." }
+                                    // OTP verification is its own step. The
+                                    // backend has already persisted and
+                                    // verified the email; password setup is a
+                                    // separate account action.
+                                    prefs.edit().putString("personal_email", address.trim()).remove("personal_email_pending").apply()
+                                    scope.launch {
+                                        delay(1200)
+                                        onLinked(address.trim())
+                                    }
+                                } else {
+                                    codeVerified = false
+                                    error = result.message.ifBlank { "That OTP is incorrect or expired." }
+                                }
+                            }
+                        },
+                        enabled = !working,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (codeVerified) "Code verified" else "Verify code") }
+                    }
+
                     Text(
-                        "Set a password for signing in with this personal email.",
+                        if (codeVerified) "OTP verified. Set a password for signing in with this personal email."
+                        else "Set a password for signing in with this personal email.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -102,7 +165,12 @@ internal fun PersonalEmailDialog(
                         onValueChange = { password = it; error = null },
                         label = { Text("Password") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Show password")
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.small,
@@ -113,7 +181,12 @@ internal fun PersonalEmailDialog(
                         onValueChange = { passwordConfirmation = it; error = null },
                         label = { Text("Confirm password") },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (showPasswordConfirmation) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPasswordConfirmation = !showPasswordConfirmation }) {
+                                Icon(if (showPasswordConfirmation) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Show password")
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.small,
@@ -132,7 +205,7 @@ internal fun PersonalEmailDialog(
         confirmButton = {
             Button(
                 enabled = !working && if (codeSent) {
-                    code.length == 6 && password.length >= 8 && password == passwordConfirmation
+                    codeVerified && password.length >= 8 && password == passwordConfirmation
                 } else {
                     address.isNotBlank()
                 },
@@ -156,12 +229,13 @@ internal fun PersonalEmailDialog(
 
                             codeSent -> {
                                 // Remembered so the dashboard stops asking.
-                                prefs.edit().putString("personal_email", address.trim()).apply()
+                                prefs.edit().putString("personal_email", address.trim()).remove("personal_email_pending").apply()
                                 onLinked(address.trim())
                             }
 
                             else -> {
                                 codeSent = true
+                                prefs.edit().putString("personal_email_pending", address.trim()).apply()
                                 notice = result.message
                             }
                         }
@@ -171,15 +245,15 @@ internal fun PersonalEmailDialog(
                 Text(
                     when {
                         working -> "Please wait..."
-                        codeSent -> "Link email and set password"
-                        else -> "Send me a code"
+                        codeSent -> "Save password"
+                        else -> "Save email & send verification code"
                     }
                 )
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !working) {
-                Text(if (codeSent) "Cancel" else "Not now")
+                TextButton(onClick = onDismiss, enabled = !working) {
+                Text(if (codeSent) "Close" else "Not now")
             }
         },
     )
@@ -201,6 +275,15 @@ internal fun PersonalEmailPrompt(context: Context, content: @Composable () -> Un
     var asking by remember { mutableStateOf(false) }
 
     val isStudent = remember { (prefs.getString("user_role", "") ?: "").equals("student", true) }
+
+    LaunchedEffect(isStudent) {
+        if (!isStudent) return@LaunchedEffect
+        val result = withContext(Dispatchers.IO) { personalEmailStatus(prefs.getString("auth_token", "").orEmpty()) }
+        if (result.success) {
+            runCatching { org.json.JSONObject(result.body.orEmpty()).optString("personal_email") }
+                .getOrNull()?.takeIf { it.isNotBlank() }?.let { linked = it }
+        }
+    }
 
     if (asking) {
         PersonalEmailDialog(
