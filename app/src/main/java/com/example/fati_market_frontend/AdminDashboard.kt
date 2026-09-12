@@ -139,6 +139,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.fati_market.auth.personalEmailStatus
 // import com.pusher.client.Pusher
 // import com.pusher.client.PusherOptions
 // import android.util.Log
@@ -424,6 +425,9 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
     val prefs   = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
 
     val token            = remember { prefs.getString("auth_token", "") ?: "" }
+    LaunchedEffect(token) {
+        requestNotificationPermissionAndRegister(context)
+    }
     var userFirstName    by remember { mutableStateOf(prefs.getString("user_first_name", "") ?: "") }
     var userLastName     by remember { mutableStateOf(prefs.getString("user_last_name",  "") ?: "") }
     val userEmail        = remember { prefs.getString("user_email", "") ?: "" }
@@ -6093,6 +6097,19 @@ fun AdminProfileContent(
     var isUploading by remember { mutableStateOf(false) }
     var uploadError by remember { mutableStateOf<String?>(null) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showGcashSettings by remember { mutableStateOf(false) }
+    var showStoreHoursSettings by remember { mutableStateOf(false) }
+    var showStoreHours by remember { mutableStateOf(false) }
+
+    if (isAdmin && showGcashSettings) {
+        AdminGcashSettingsDialog(onDismiss = { showGcashSettings = false })
+    }
+    if (isAdmin && showStoreHoursSettings) {
+        AdminStoreHoursSettingsDialog(onDismiss = { showStoreHoursSettings = false })
+    }
+    if (!isAdmin && showStoreHours) {
+        StoreHoursInfoDialog(onDismiss = { showStoreHours = false })
+    }
 
     // The balance passed in is whatever login stored - a number frozen at
     // sign-in that never moved again, so a buyer who earned points saw zero
@@ -6351,11 +6368,38 @@ fun AdminProfileContent(
                 }
             }
 
+            if (!isAdmin) {
+                SettingsGroup(title = "Store information") {
+                    SettingsRow(
+                        icon = Icons.Outlined.Schedule,
+                        title = "Store hours",
+                        subtitle = "See opening times, open days and booking slots",
+                        onClick = { showStoreHours = true },
+                    )
+                }
+            }
+
             // ── Store management ─────────────────────────────────────────
             // The admin's day-to-day: every order in one screen, and the
             // student roster that used to occupy the bottom bar.
             if (onManageOrders != null || onManageStudents != null) {
                 SettingsGroup(title = "Store") {
+                    if (isAdmin) {
+                        SettingsRow(
+                            icon = Icons.Outlined.Schedule,
+                            title = "Store hours & booking slots",
+                            subtitle = "Opening times, open days and slot length",
+                            onClick = { showStoreHoursSettings = true },
+                        )
+                        RowDivider()
+                        SettingsRow(
+                            icon = Icons.Outlined.Payment,
+                            title = "GCash payment settings",
+                            subtitle = "Account name, mobile number and payment QR",
+                            onClick = { showGcashSettings = true },
+                        )
+                        RowDivider()
+                    }
                     onManageOrders?.let { openOrders ->
                         SettingsRow(
                             icon = Icons.Outlined.ReceiptLong,
@@ -6382,7 +6426,7 @@ fun AdminProfileContent(
             SettingsGroup(title = "Account") {
                 InfoRowItem(Icons.Outlined.Person, "Full name", fullName)
                 RowDivider()
-                InfoRowItem(Icons.Outlined.Email, "Email", email.ifBlank { "—" })
+                InfoRowItem(Icons.Outlined.Email, "School email", email.ifBlank { "—" })
 
                 // The address that outlives the school account. Only students
                 // need it - an admin account is not lent out by a school.
@@ -6392,7 +6436,20 @@ fun AdminProfileContent(
                     var linked by remember {
                         mutableStateOf(prefs.getString("personal_email", "").orEmpty())
                     }
+                    val pending = prefs.getString("personal_email_pending", "").orEmpty()
                     var editing by remember { mutableStateOf(false) }
+                    var settingPassword by remember { mutableStateOf(false) }
+                    var passwordSet by remember { mutableStateOf(prefs.getBoolean("personal_email_password_set", false)) }
+                    var emailVerified by remember { mutableStateOf(linked.isNotBlank()) }
+                    LaunchedEffect(Unit) {
+                        val result = withContext(Dispatchers.IO) { personalEmailStatus(prefs.getString("auth_token", "").orEmpty()) }
+                        val status = runCatching { org.json.JSONObject(result.body.orEmpty()) }.getOrNull()
+                        val payload = status?.optJSONObject("data") ?: status
+                        linked = payload?.optString("personal_email").orEmpty().ifBlank { linked }
+                        emailVerified = payload?.optBoolean("personal_email_verified", false) == true
+                        passwordSet = payload?.optBoolean("password_set", false) == true
+                        prefs.edit().putBoolean("personal_email_password_set", passwordSet).apply()
+                    }
 
                     if (editing) {
                         PersonalEmailDialog(
@@ -6401,16 +6458,43 @@ fun AdminProfileContent(
                             existing = linked.takeIf { it.isNotBlank() },
                         )
                     }
+                    if (settingPassword) {
+                        PersonalEmailPasswordDialog(
+                            onDismiss = { settingPassword = false },
+                            onChangeEmail = { settingPassword = false; editing = true },
+                            passwordAlreadySet = passwordSet,
+                            onSaved = { passwordSet = true },
+                        )
+                    }
 
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     SettingsRow(
                         icon = Icons.Outlined.AlternateEmail,
                         title = "Personal email",
                         subtitle = linked.ifBlank {
+                            pending.takeIf { it.isNotBlank() }?.let { "Verify $it and set a password" } ?:
                             "Not set - add one so you keep this account after graduation"
                         },
                         tint = if (linked.isBlank()) accents.warning else MaterialTheme.colorScheme.primary,
-                        onClick = { editing = true }
+                        onClick = { if (linked.isBlank() || !emailVerified) editing = true else settingPassword = true },
+                        trailing = if (emailVerified) ({
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Verified, "Verified", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                Text("Verified", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }) else null,
                     )
+                    if (passwordSet) {
+                        Row(
+                            Modifier.padding(start = Spacing.lg + 38.dp + Spacing.md, bottom = Spacing.md),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Filled.Lock, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            Text("Password set", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    }
                 }
             }
 
@@ -6518,14 +6602,13 @@ private fun fetchChatItem(token: String, itemId: Int): ChatItem? {
 }
 
 fun performLogout(token: String): Boolean {
-    // Pushes follow the account, not the phone. Unregister this device from
-    // the account being left, then discard the FCM token itself - the next
-    // sign-in (possibly a different person) triggers a fresh token, which the
-    // dashboard registers to whoever is actually logged in, with no new
-    // permission prompt since that is device-level and already granted.
+    // Remove only this device's association. Keep the Firebase token stable
+    // so a delayed deletion cannot invalidate the next login's registration.
     runCatching {
         val messaging = com.google.firebase.messaging.FirebaseMessaging.getInstance()
-        val fcmToken = com.google.android.gms.tasks.Tasks.await(messaging.token)
+        val fcmToken = com.google.android.gms.tasks.Tasks.await(
+            messaging.token, 10, java.util.concurrent.TimeUnit.SECONDS,
+        )
 
         val unregister = Request.Builder()
             .url("https://fati-api.alertaraqc.com/api/device-tokens")
@@ -6539,7 +6622,6 @@ fun performLogout(token: String): Boolean {
             .build()
 
         adminHttpClient.newCall(unregister).execute().close()
-        com.google.android.gms.tasks.Tasks.await(messaging.deleteToken())
     }
 
     return try {
