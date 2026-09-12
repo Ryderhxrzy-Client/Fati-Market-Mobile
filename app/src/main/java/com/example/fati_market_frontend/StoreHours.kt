@@ -15,7 +15,8 @@ import java.util.Locale
  *
  * Times are wall-clock times in [zone]; [openDays] are ISO weekdays, 1 being
  * Monday. The meet-up picker is built from this, and the server checks a
- * booking against the same figures - both set in the backend's .env.
+ * booking against the same figures. The admin can save them in the backend;
+ * its .env values remain the fallback before any setting is saved.
  */
 internal data class StoreHours(
     val openTime: LocalTime,

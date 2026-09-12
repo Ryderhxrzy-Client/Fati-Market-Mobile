@@ -354,6 +354,28 @@ fun requestPersonalEmail(token: String, personalEmail: String): GoogleAuthResult
     )
 }
 
+/** Validate the one-time code without linking the address yet. */
+fun verifyPersonalEmailCode(token: String, personalEmail: String, code: String): GoogleAuthResult {
+    val body = JSONObject().put("personal_email", personalEmail).put("code", code)
+        .toString().toRequestBody("application/json".toMediaType())
+    return call(Request.Builder().url("$API/account/personal-email/verify")
+        .header("Accept", "application/json").header("Authorization", "Bearer $token")
+        .post(body).build())
+}
+
+fun setPersonalEmailPassword(token: String, password: String): GoogleAuthResult {
+    val body = JSONObject().put("password", password).put("password_confirmation", password)
+        .toString().toRequestBody("application/json".toMediaType())
+    return call(Request.Builder().url("$API/account/personal-email/password")
+        .header("Accept", "application/json").header("Authorization", "Bearer $token")
+        .post(body).build())
+}
+
+fun personalEmailStatus(token: String): GoogleAuthResult =
+    call(Request.Builder().url("$API/account/personal-email/status")
+        .header("Accept", "application/json").header("Authorization", "Bearer $token")
+        .get().build())
+
 /** Finish the link with the code that arrived at the new address. */
 fun confirmPersonalEmail(
     token: String,
