@@ -59,7 +59,7 @@ internal object MarketplaceApi {
     /**
      * Where to send a GCash payment.
      *
-     * Served from backend config so Ofelia can change the account or the QR
+     * Served from saved admin settings so Ofelia can change the account or the QR
      * without shipping a new app build.
      */
     fun fetchPaymentDetails(token: String): Result<GcashDetails> =
@@ -76,6 +76,32 @@ internal object MarketplaceApi {
                 instructions = str("instructions").orEmpty(),
             )
         }
+
+    fun fetchGcashSettings(token: String): Result<GcashDetails> =
+        get(token, "/admin/settings/gcash") { parseGcashSettings(it.getJSONObject("data")) }
+
+    fun saveGcashSettings(
+        token: String, name: String, number: String, qr: File?, mime: String?, removeQr: Boolean,
+    ): Result<GcashDetails> {
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("account_name", name.trim())
+            .addFormDataPart("account_number", number.trim())
+            .addFormDataPart("remove_qr", if (removeQr) "1" else "0")
+            .apply {
+                if (qr != null && mime != null) {
+                    addFormDataPart("qr_image", qr.name, qr.asRequestBody(mime.toMediaType()))
+                }
+            }.build()
+        val request = Request.Builder().url("$BASE_URL/admin/settings/gcash")
+            .header("Authorization", "Bearer $token").header("Accept", "application/json")
+            .post(body).build()
+        return execute(request) { parseGcashSettings(it.getJSONObject("data")) }
+    }
+
+    private fun parseGcashSettings(json: JSONObject): GcashDetails {
+        fun str(key: String) = json.optString(key).takeIf { it.isNotBlank() && it != "null" }
+        return GcashDetails(str("account_name"), str("account_number"), str("qr_image_url"), "")
+    }
 
     /** Upload a GCash receipt for admin review. There is no live gateway. */
     fun uploadPaymentProof(
@@ -122,6 +148,33 @@ internal object MarketplaceApi {
     /** When the store is open. The meet-up picker is drawn from this. */
     fun fetchStoreHours(token: String): Result<StoreHours> =
         get(token, "/store/hours") { parseStoreHours(it.getJSONObject("data")) }
+
+    /** Admin-only store-hours settings. Public reads still use [/store/hours]. */
+    fun fetchAdminStoreHours(token: String): Result<StoreHours> =
+        get(token, "/admin/settings/store-hours") { parseStoreHours(it.getJSONObject("data")) }
+
+    fun saveStoreHours(
+        token: String,
+        openTime: String,
+        closeTime: String,
+        openDays: Set<Int>,
+        slotMinutes: Int,
+    ): Result<StoreHours> {
+        val body = JSONObject().apply {
+            put("open_time", openTime)
+            put("close_time", closeTime)
+            put("open_days", org.json.JSONArray(openDays.sorted()))
+            put("slot_minutes", slotMinutes)
+        }
+        val request = Request.Builder()
+            .url("$BASE_URL/admin/settings/store-hours")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .put(body.toString().toRequestBody(JSON))
+            .build()
+
+        return execute(request) { parseStoreHours(it.getJSONObject("data")) }
+    }
 
     fun fetchMyTransactions(token: String): Result<List<MarketTransaction>> =
         get(token, "/transactions") { json ->
