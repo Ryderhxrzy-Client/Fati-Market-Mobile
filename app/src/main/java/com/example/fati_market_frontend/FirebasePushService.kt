@@ -45,6 +45,16 @@ private const val REPLY_KEY = "chat_reply"
 private const val AVATAR_SIZE_PX = 256
 private const val MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
+// Registration and logout must finish in order, including a quick account switch.
+internal val pushRegistrationExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+private val pushHttpClient = OkHttpClient()
+private val replyHttpClient = OkHttpClient.Builder()
+    .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+    .readTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+    .writeTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+    .callTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+    .build()
+
 private data class ChatLine(
     val text: String,
     val at: Long,
@@ -64,8 +74,16 @@ fun requestNotificationPermissionAndRegister(context: Context) {
         activity?.requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 2001)
     }
 
+    syncPushRegistration(context)
+}
+
+fun syncPushRegistration(context: Context) {
+    if (context.getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE)
+            .getString("auth_token", "").isNullOrBlank()) return
     FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
         registerFcmToken(context, token)
+    }.addOnFailureListener {
+        Log.w(TAG, "Unable to obtain push token; will retry while the app is active", it)
     }
 }
 
@@ -76,6 +94,11 @@ class FatiFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        Log.i(TAG, "Push received: type=${data["type"]}, foreground=${InAppNotifications.isForeground}")
+        val prefs = getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE)
+        if (prefs.getString("auth_token", "").isNullOrBlank()) return
+        val recipientId = data["recipient_id"]
+        if (recipientId != null && recipientId != prefs.all["user_id"]?.toString()) return
 
         // A system notification while the user is already inside the app just
         // covers the screen they are looking at. Hand it to the in-app banner
@@ -89,7 +112,11 @@ class FatiFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         when (data["type"]) {
-            "chat_message" -> showChatNotification(this, data)
+            "chat_message" -> {
+                if (InAppNotifications.claimChat(data["message_id"]?.toIntOrNull() ?: 0)) {
+                    showChatNotification(this, data)
+                }
+            }
 
             // Order lifecycle: a new order for Admin, and payment verified /
             // declined / ready / completed for the buyer.
@@ -110,11 +137,18 @@ fun registerFcmToken(context: Context, token: String) {
     val authToken = prefs.getString("auth_token", "") ?: ""
     if (authToken.isBlank() || token.isBlank()) return
 
-    Thread {
+    val appContext = context.applicationContext
+    pushRegistrationExecutor.execute {
+        if (prefs.getString("auth_token", "") != authToken) return@execute
+        val devicePrefs = appContext.getSharedPreferences("push_device", Context.MODE_PRIVATE)
+        val deviceId = devicePrefs.getString("installation_id", null)
+            ?: java.util.UUID.randomUUID().toString().also {
+                devicePrefs.edit().putString("installation_id", it).apply()
+            }
         val body = JSONObject().apply {
             put("token", token)
             put("platform", "android")
-            put("device_id", android.os.Build.MODEL)
+            put("device_id", deviceId)
         }.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url("$API_BASE/device-tokens")
@@ -122,8 +156,16 @@ fun registerFcmToken(context: Context, token: String) {
             .header("Accept", "application/json")
             .post(body)
             .build()
-        runCatching { OkHttpClient().newCall(request).execute().close() }
-    }.start()
+        runCatching {
+            pushHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Push registration failed: HTTP ${response.code}; will retry")
+                } else {
+                    Log.i(TAG, "Push registration confirmed for this device")
+                }
+            }
+        }.onFailure { Log.w(TAG, "Push registration failed; will retry", it) }
+    }
 }
 
 /**
@@ -461,27 +503,63 @@ class ChatReplyReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val reply = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(REPLY_KEY)?.toString()?.trim().orEmpty()
         if (reply.isBlank()) return
+        val itemId = intent.getStringExtra("item_id").orEmpty()
+        val receiverId = intent.getStringExtra("receiver_id").orEmpty()
+        val notificationId = "$itemId:$receiverId".hashCode()
+        if (itemId.toIntOrNull() == null || receiverId.toIntOrNull() == null) {
+            finishReply(context, notificationId, false, itemId, receiverId)
+            return
+        }
         val json = JSONObject().apply {
-            put("receiver_id", intent.getStringExtra("receiver_id")?.toIntOrNull() ?: 0)
+            put("receiver_id", receiverId.toInt())
             put("message", reply)
         }
         val pending = goAsync()
-        Thread {
+        Thread({
             try {
-                val sent = apiPostSync(context, "/messages/${intent.getStringExtra("item_id")}", json)
-                val itemId = intent.getStringExtra("item_id").orEmpty()
-                val senderId = intent.getStringExtra("receiver_id").orEmpty()
-                if (sent) {
-                    // Reposting is not needed after a successful send. Canceling
-                    // the card explicitly stops Android's inline-reply spinner.
-                    context.getSystemService(NotificationManager::class.java)
-                        .cancel("$itemId:$senderId".hashCode())
-                }
+                val sent = apiPostSync(context, "/messages/$itemId", json)
+                finishReply(context, notificationId, sent, itemId, receiverId)
             } finally {
                 pending.finish()
             }
-        }.start()
+        }, "FatiChatReply").start()
     }
+}
+
+/** Replacing the notification ends Android's inline-reply spinner on every outcome. */
+private fun finishReply(context: Context, notificationId: Int, sent: Boolean, itemId: String, receiverId: String) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    if (sent) {
+        manager.cancel(notificationId)
+        Log.i(TAG, "Inline chat reply sent")
+        return
+    }
+
+    val openIntent = Intent(context, MainActivity::class.java).apply {
+        action = Intent.ACTION_VIEW
+        putExtra("open_chat", true)
+        putExtra("chat_item_id", itemId)
+        putExtra("chat_user_id", receiverId)
+        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+    }
+    val openPending = PendingIntent.getActivity(
+        context, notificationId, openIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+    manager.notify(
+        notificationId,
+        NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.push_icon)
+            .setContentTitle("Reply wasn't sent")
+            .setContentText("Check your connection, then open the chat to try again.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("Check your connection, then open the chat to try again."))
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(openPending)
+            .build(),
+    )
+    Log.w(TAG, "Inline chat reply failed")
 }
 
 private fun apiPost(context: Context, path: String, json: JSONObject) {
@@ -508,6 +586,11 @@ private fun apiPostSync(context: Context, path: String, json: JSONObject): Boole
         .post(json.toString().toRequestBody("application/json".toMediaType()))
         .build()
     return runCatching {
-        OkHttpClient().newCall(request).execute().use { it.isSuccessful }
-    }.getOrDefault(false)
+        replyHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                Log.w(TAG, "Inline chat reply rejected: HTTP ${response.code}")
+            }
+            response.isSuccessful
+        }
+    }.onFailure { Log.w(TAG, "Inline chat reply request failed", it) }.getOrDefault(false)
 }
