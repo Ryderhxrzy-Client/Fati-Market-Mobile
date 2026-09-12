@@ -53,18 +53,9 @@ fun InAppNotificationHost(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val token = remember {
-        context.getSharedPreferences("fatimarket_prefs", 0).getString("auth_token", "") ?: ""
-    }
 
     var current by remember { mutableStateOf<InAppNotification?>(null) }
     var replying by remember { mutableStateOf(false) }
-
-    // Track foreground state so the messaging service knows to route here.
-    DisposableEffect(Unit) {
-        InAppNotifications.onEnterForeground()
-        onDispose { InAppNotifications.onEnterBackground() }
-    }
 
     LaunchedEffect(Unit) {
         InAppNotifications.events.collect { notification ->
@@ -97,7 +88,8 @@ fun InAppNotificationHost(
             when (val notification = current) {
                 is InAppNotification.Chat -> ChatBanner(
                     notification = notification,
-                    token = token,
+                    token = context.getSharedPreferences("fatimarket_prefs", 0)
+                        .getString("auth_token", "").orEmpty(),
                     replying = replying,
                     onStartReply = { replying = true },
                     onDismiss = { current = null; replying = false },
