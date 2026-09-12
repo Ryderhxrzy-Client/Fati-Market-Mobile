@@ -78,9 +78,9 @@ fun AppNavigation(isDarkMode: Boolean, onThemeToggle: () -> Unit) {
 
                     // Call logout API in background
                     if (token.isNotBlank()) {
-                        Thread {
+                        pushRegistrationExecutor.execute {
                             performLogout(token)
-                        }.start()
+                        }
                     }
 
                     // Clear preferences and navigate to login
@@ -101,9 +101,9 @@ fun AppNavigation(isDarkMode: Boolean, onThemeToggle: () -> Unit) {
 
                     // Call logout API in background
                     if (token.isNotBlank()) {
-                        Thread {
+                        pushRegistrationExecutor.execute {
                             performLogout(token)
-                        }.start()
+                        }
                     }
 
                     // Clear preferences and navigate to login
