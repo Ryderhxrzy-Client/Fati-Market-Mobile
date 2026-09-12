@@ -1,9 +1,9 @@
 package com.fati_market
 
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -27,20 +27,28 @@ object InAppNotifications {
 
     fun onEnterBackground() = foreground.set(false)
 
-    /**
-     * Replay is zero and the buffer drops the oldest: a banner that was never
-     * collected is stale by the time anyone could see it.
-     */
-    private val _events = MutableSharedFlow<InAppNotification>(
-        replay = 0,
-        extraBufferCapacity = 8,
+    // Keep arrivals during activity/Compose startup until the single banner
+    // host is collecting. SharedFlow(replay = 0) loses those arrivals.
+    private val _events = Channel<InAppNotification>(
+        capacity = 8,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
-    val events: SharedFlow<InAppNotification> = _events.asSharedFlow()
+    val events: Flow<InAppNotification> = _events.receiveAsFlow()
+
+    private val deliveredChats = linkedSetOf<Int>()
+
+    @Synchronized
+    fun claimChat(messageId: Int): Boolean {
+        if (messageId <= 0) return true
+        if (!deliveredChats.add(messageId)) return false
+        while (deliveredChats.size > 256) deliveredChats.remove(deliveredChats.first())
+        return true
+    }
 
     fun post(notification: InAppNotification) {
-        _events.tryEmit(notification)
+        if (notification is InAppNotification.Chat && !claimChat(notification.messageId)) return
+        _events.trySend(notification)
     }
 
     /** Build one from an FCM data payload, or null if it is not one we show. */
