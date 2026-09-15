@@ -126,6 +126,7 @@ internal fun AdminCategoriesContent(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                shape = MaterialTheme.shapes.small,
                 ) { Text("Delete") }
             },
             dismissButton = {
@@ -285,6 +286,7 @@ private fun CategoryEditorDialog(
         },
         confirmButton = {
             Button(
+                shape = MaterialTheme.shapes.small,
                 enabled = !saving && name.isNotBlank(),
                 onClick = {
                     scope.launch {
