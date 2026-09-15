@@ -61,6 +61,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -80,7 +90,6 @@ import coil.compose.AsyncImage
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import coil.compose.SubcomposeAsyncImage
-import com.fati_market.ui.theme.DarkGreen
 import com.fati_market.ui.components.Avatar
 import com.fati_market.ui.components.BottomTab
 import com.fati_market.ui.components.ChoiceChip
@@ -182,32 +191,32 @@ import androidx.compose.material.icons.outlined.*
 
 private sealed class DrawerPage(val label: String) {
     object Dashboard         : DrawerPage("Dashboard")
-    object PrivateOffers     : DrawerPage("Private Offers")
-    object AcquiredItems     : DrawerPage("Acquired Items")
-    object PublicListings    : DrawerPage("Public Listings")
-    object ReservedItems     : DrawerPage("Reserved Items")
-    object SoldItems         : DrawerPage("Sold Items")
+    object PrivateOffers     : DrawerPage("Private offers")
+    object AcquiredItems     : DrawerPage("Acquired items")
+    object PublicListings    : DrawerPage("Public listings")
+    object ReservedItems     : DrawerPage("Reserved items")
+    object SoldItems         : DrawerPage("Sold items")
 
-    object PointsGiven       : DrawerPage("Points Given")
-    object PointsReceived    : DrawerPage("Points Received")
-    object CashTransactions  : DrawerPage("Cash Transactions")
+    object PointsGiven       : DrawerPage("Points given")
+    object PointsReceived    : DrawerPage("Points received")
+    object CashTransactions  : DrawerPage("Cash transactions")
     /**
      * Trade stopped being a payment method: what the endpoint behind this
      * returns is orders the buyer's points covered in full.
      */
-    object PointsOnlyOrders  : DrawerPage("Points-Only Orders")
-    object TransactionHistory: DrawerPage("Transaction History")
+    object PointsOnlyOrders  : DrawerPage("Points-only orders")
+    object TransactionHistory: DrawerPage("Transaction history")
     /** Buyer orders, with payment verification and completion. */
-    object ManageOrders      : DrawerPage("Manage Orders")
-    object ProfitSummary     : DrawerPage("Profit Summary")
-    object TotalItemAcquired : DrawerPage("Total Item Acquired")
-    object TotalItemSold     : DrawerPage("Total Item Sold")
-    object TotalProfit       : DrawerPage("Total Profit (from markup)")
-    object MostSoldCategory  : DrawerPage("Most Sold Category")
-    object ActiveUsers       : DrawerPage("Active Users")
+    object ManageOrders      : DrawerPage("Manage orders")
+    object ProfitSummary     : DrawerPage("Profit summary")
+    object TotalItemAcquired : DrawerPage("Items acquired")
+    object TotalItemSold     : DrawerPage("Items sold")
+    object TotalProfit       : DrawerPage("Profit from markup")
+    object MostSoldCategory  : DrawerPage("Most sold category")
+    object ActiveUsers       : DrawerPage("Active users")
 
     object Categories        : DrawerPage("Categories")
-    object ActivityLogs      : DrawerPage("Activity Logs")
+    object ActivityLogs      : DrawerPage("Activity logs")
 }
 
 private enum class AdminTab { HOME, CHAT, USERS, SETTINGS, PROFILE }
@@ -814,6 +823,7 @@ private fun AdminDrawerContent(
             DrawerSectionHeader(Icons.Outlined.ReceiptLong, "Transactions", transactionsExpanded) { transactionsExpanded = !transactionsExpanded }
             AnimatedVisibility(visible = transactionsExpanded) {
                 Column {
+                    // The website's Transactions menu copies this list, word for word.
                     DrawerSubItem("Manage orders",       currentPage == DrawerPage.ManageOrders)       { onPageSelect(DrawerPage.ManageOrders) }
                     DrawerSubItem("Points given",        currentPage == DrawerPage.PointsGiven)        { onPageSelect(DrawerPage.PointsGiven) }
                     DrawerSubItem("Points received",     currentPage == DrawerPage.PointsReceived)     { onPageSelect(DrawerPage.PointsReceived) }
@@ -959,7 +969,7 @@ private fun DrawerPageContent(
             onShowBottomBarChange = onShowBottomBarChange
         )
         DrawerPage.AcquiredItems  -> AdminItemListContent(
-            title                 = "Acquired Items",
+            title                 = "Acquired items",
             status                = "acquired",
             emptyText             = "No acquired items at the moment.",
             showActions           = true,
@@ -969,7 +979,7 @@ private fun DrawerPageContent(
             onShowBottomBarChange = onShowBottomBarChange
         )
         DrawerPage.PublicListings -> AdminItemListContent(
-            title                 = "Public Listings",
+            title                 = "Public listings",
             status                = "public",
             emptyText             = "No public listings at the moment.",
             showActions           = false,
@@ -979,7 +989,7 @@ private fun DrawerPageContent(
             onShowBottomBarChange = onShowBottomBarChange
         )
         DrawerPage.ReservedItems  -> AdminItemListContent(
-            title                 = "Reserved Items",
+            title                 = "Reserved items",
             status                = "reserved",
             emptyText             = "No reserved items at the moment.",
             showActions           = false,
@@ -989,7 +999,7 @@ private fun DrawerPageContent(
             onShowBottomBarChange = onShowBottomBarChange
         )
         DrawerPage.SoldItems      -> AdminItemListContent(
-            title                 = "Sold Items",
+            title                 = "Sold items",
             status                = "sold",
             emptyText             = "No sold items at the moment.",
             showActions           = false,
@@ -999,18 +1009,20 @@ private fun DrawerPageContent(
             onShowBottomBarChange = onShowBottomBarChange
         )
 
-        DrawerPage.PointsGiven -> PointsTransactionContent(title = "Points Given", endpoint = "/api/points/given", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
-        DrawerPage.PointsReceived -> PointsTransactionContent(title = "Points Received", endpoint = "/api/points/received", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
-        DrawerPage.CashTransactions -> TransactionsContent(title = "Cash Transactions", endpoint = "/api/admin/transactions/cash", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
-        DrawerPage.PointsOnlyOrders -> TransactionsContent(title = "Points-Only Orders", endpoint = "/api/admin/transactions/trade", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
-        DrawerPage.TransactionHistory -> TransactionsContent(title = "Transaction History", endpoint = "/api/admin/transactions", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        DrawerPage.PointsGiven -> PointsTransactionContent(title = "Points given", endpoint = "/api/points/given", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        DrawerPage.PointsReceived -> PointsTransactionContent(title = "Points received", endpoint = "/api/points/received", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        DrawerPage.CashTransactions -> TransactionsContent(title = "Cash transactions", endpoint = "/api/admin/transactions/cash", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        DrawerPage.PointsOnlyOrders -> TransactionsContent(title = "Points-only orders", endpoint = "/api/admin/transactions/trade", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        DrawerPage.TransactionHistory -> TransactionsContent(title = "Transaction history", endpoint = "/api/admin/transactions", onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.ManageOrders -> AdminTransactionsContent(
             onMenuClick = onMenuClick,
             onOpenChat = { onGoToChat() }
         )
         DrawerPage.ProfitSummary -> ProfitSummaryContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
-        DrawerPage.TotalItemAcquired -> SalesReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
-        DrawerPage.TotalItemSold -> SalesReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        // Both read the inventory itself, the way the website's reports do: only
+        // items in that status, with the figures that matter for it.
+        DrawerPage.TotalItemAcquired -> ItemsReportContent(title = "Items acquired", status = "acquired", onMenuClick = onMenuClick)
+        DrawerPage.TotalItemSold -> ItemsReportContent(title = "Items sold", status = "sold", onMenuClick = onMenuClick)
         DrawerPage.TotalProfit -> ProfitReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.MostSoldCategory -> CategoryReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.ActiveUsers -> UserReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
@@ -1030,15 +1042,11 @@ private fun DrawerPageContent(
         else -> Column(modifier = Modifier.fillMaxSize()) {
             AdminPageHeader(title = page.label, onMenuClick = onMenuClick)
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.Construction, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                        modifier = Modifier.size(72.dp))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(page.label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Coming soon", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                EmptyState(
+                    icon = Icons.Filled.Construction,
+                    title = page.label,
+                    message = "Coming soon",
+                )
             }
         }
     }
@@ -1530,7 +1538,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                                 "${currentPhotoIndex + 1} / ${item.photos.size}",
                                 modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                 color      = Color.White,
-                                fontSize   = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -1622,7 +1630,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     // Title
-                    Text(item.title, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    Text(item.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall)
 
                     // Status + price row
                     Row(
@@ -1637,7 +1645,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                             Text(
                                 item.status.replaceFirstChar { it.uppercaseChar() },
                                 modifier   = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                fontSize   = 13.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color      = statusColor
                             )
@@ -1649,7 +1657,7 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                             Text(
                                 if (item.publicPrice != null) item.displayPrice else item.displayAskingPrice,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize   = 20.sp,
+                                style = MaterialTheme.typography.headlineSmall,
                                 color      = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -1671,9 +1679,9 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                                 tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                         }
                         Column {
-                            Text("Seller", fontSize = 11.sp,
+                            Text("Seller", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(item.sellerEmail, fontSize = 14.sp,
+                            Text(item.sellerEmail, style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium)
                         }
                     }
@@ -1682,10 +1690,10 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
 
                     // Description
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Description", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        Text("Description", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             letterSpacing = 0.5.sp)
-                        Text(item.description, fontSize = 14.sp, lineHeight = 22.sp)
+                        Text(item.description, style = MaterialTheme.typography.bodyMedium)
                     }
 
                     // Markup (public price minus acquisition price)
@@ -1704,9 +1712,9 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                                     tint = LocalMarketAccents.current.info, modifier = Modifier.size(20.dp))
                             }
                             Column {
-                                Text("Markup", fontSize = 11.sp,
+                                Text("Markup", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(Money.format(item.markup), fontSize = 14.sp,
+                                Text(Money.format(item.markup), style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold, color = LocalMarketAccents.current.info)
                             }
                         }
@@ -1729,9 +1737,9 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                                     modifier = Modifier.size(18.dp))
                             }
                             Column {
-                                Text("Listed on", fontSize = 11.sp,
+                                Text("Listed on", style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(formatDate(item.createdAt), fontSize = 14.sp,
+                                Text(formatDate(item.createdAt), style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium)
                             }
                         }
@@ -1808,18 +1816,22 @@ private fun AdminPrivateOfferCard(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "Confirm you have paid ${Money.format(payable)} in cash to ${item.sellerEmail}.",
-                        fontSize = 14.sp
+                        style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
                         "This records the seller payout only. It does not give the seller any points.",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    actionError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                    actionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
             },
             confirmButton = {
-                Button(
+                PrimaryButton(
+                    text = "Mark as Paid",
+                    compact = true,
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
                     onClick = {
                         scope.launch {
                             isWorking = true
@@ -1837,15 +1849,8 @@ private fun AdminPrivateOfferCard(
                             }
                         }
                     },
-                    enabled = !isWorking,
-                    colors = ButtonDefaults.buttonColors(containerColor = LocalMarketAccents.current.info)
-                ) {
-                    if (isWorking) {
-                        CircularProgressIndicator(Modifier.size(18.dp), Color.White, 2.dp)
-                    } else {
-                        Text("Mark as Paid", color = Color.White)
-                    }
-                }
+                    loading = isWorking,
+                )
             },
             dismissButton = {
                 TextButton(onClick = { showPayoutDialog = false }, enabled = !isWorking) { Text("Cancel") }
@@ -1868,7 +1873,7 @@ private fun AdminPrivateOfferCard(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "Send a message to ${item.sellerEmail}",
-                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.bodySmall,
                         color    = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (chatSent) {
@@ -1882,20 +1887,20 @@ private fun AdminPrivateOfferCard(
                             Text(
                                 "Message sent successfully!",
                                 color      = MaterialTheme.colorScheme.primary,
-                                fontSize   = 14.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign  = TextAlign.Center
                             )
                             Text(
                                 "Would you like to go to the chat?",
-                                fontSize  = 12.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 color     = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                         }
                     } else {
                         chatError?.let {
-                            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
                         OutlinedTextField(
                             value         = chatText,
@@ -1916,22 +1921,22 @@ private fun AdminPrivateOfferCard(
                         }) {
                             Text("Close")
                         }
-                        Button(
+                        PrimaryButton(
+                            text = "Go to Chat",
+                            icon = Icons.Filled.Chat,
+                            compact = true,
                             onClick = {
                                 showChatDialog = false; chatText = ""; chatSent = false
                                 onGoToChat()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                        ) {
-                            Icon(Icons.Filled.Chat, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Go to Chat", color = Color.White, fontWeight = FontWeight.SemiBold)
-                        }
+                        )
                     }
                 } else {
-                    Button(
+                    PrimaryButton(
+                        text = "Send",
+                        compact = true,
                         onClick = {
-                            if (chatText.isBlank()) { chatError = "Please enter a message."; return@Button }
+                            if (chatText.isBlank()) { chatError = "Please enter a message."; return@PrimaryButton }
                             scope.launch {
                                 isSendingChat = true
                                 val ok = withContext(Dispatchers.IO) {
@@ -1941,16 +1946,8 @@ private fun AdminPrivateOfferCard(
                                 if (ok) chatSent = true else chatError = "Failed to send. Please try again."
                             }
                         },
-                        enabled = !isSendingChat,
-                        colors  = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                    ) {
-                        if (isSendingChat) {
-                            CircularProgressIndicator(color = Color.White,
-                                modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        } else {
-                            Text("Send", color = Color.White, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
+                        loading = isSendingChat,
+                    )
                 }
             },
             dismissButton = if (!chatSent) {
@@ -2538,7 +2535,22 @@ data class Conversation(
     val lastMessageAt: String,
     val messageCount: Int,
     val unreadCount: Int = 0,
-    val lastMessageSenderId: Int = 0
+    val lastMessageSenderId: Int = 0,
+    /** This person's own name for the thread; blank keeps the item's title. */
+    val customName: String = "",
+    val isPinned: Boolean = false,
+    val isArchived: Boolean = false,
+) {
+    val displayTitle: String get() = customName.ifBlank { itemTitle }
+}
+
+/** The line a reply answers - who said it and what, drawn above the bubble. */
+internal data class ReplyPreview(
+    val messageId: Int,
+    val senderId: Int,
+    val senderName: String,
+    val text: String,
+    val kind: String = "text",
 )
 
 internal data class ChatMessage(
@@ -2582,6 +2594,9 @@ internal data class ChatMessage(
      */
     val paymentStatusAt: String? = null,
     val orderStatusAt: String? = null,
+
+    /** The line this one answers, drawn as a quote above the bubble. */
+    val replyTo: ReplyPreview? = null,
 ) {
     val isOrderCard: Boolean get() = kind != "text" && order != null
 
@@ -2642,7 +2657,10 @@ private fun fetchConversations(token: String): List<Conversation> {
                     messageCount     = obj.optInt("message_count"),
                     unreadCount      = obj.optInt("unread_count", 0),
                     lastMessageSenderId = obj.optInt("last_message_sender_id").takeIf { it != 0 }
-                                        ?: obj.optInt("sender_id", 0)
+                                        ?: obj.optInt("sender_id", 0),
+                    customName       = obj.optString("custom_name").takeIf { it != "null" }.orEmpty(),
+                    isPinned         = obj.optBoolean("is_pinned", false),
+                    isArchived       = obj.optBoolean("is_archived", false),
                 ))
             }
             // Keep each unique user+item pair as its own conversation
@@ -2722,17 +2740,33 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
                 paymentStatusAt        = obj.optString("payment_status_at")
                                             .takeIf { it.isNotBlank() && it != "null" },
                 orderStatusAt          = obj.optString("order_status_at")
-                                            .takeIf { it.isNotBlank() && it != "null" }
+                                            .takeIf { it.isNotBlank() && it != "null" },
+                replyTo                = obj.optJSONObject("reply_to")?.let { quote ->
+                    ReplyPreview(
+                        messageId  = quote.optInt("message_id"),
+                        senderId   = quote.optInt("sender_id"),
+                        senderName = quote.optString("sender_name").trim(),
+                        text       = quote.optString("message"),
+                        kind       = quote.optString("kind").ifBlank { "text" },
+                    )
+                },
             ))
         }
         return list
     }
 }
 
-private fun sendMessage(token: String, itemId: Int, receiverId: Int, message: String): Boolean {
+private fun sendMessage(
+    token: String,
+    itemId: Int,
+    receiverId: Int,
+    message: String,
+    replyToMessageId: Int? = null,
+): Boolean {
     val json = JSONObject().apply {
         put("receiver_id", receiverId)
         put("message", message)
+        replyToMessageId?.let { put("reply_to_message_id", it) }
     }.toString()
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/messages/$itemId")
@@ -2744,6 +2778,48 @@ private fun sendMessage(token: String, itemId: Int, receiverId: Int, message: St
         adminHttpClient.newCall(request).execute().use { it.isSuccessful }
     } catch (_: Exception) { false }
 }
+
+/**
+ * Name, pin or archive one thread - for this person only. Fields left null
+ * are not touched; an empty name clears the custom one.
+ */
+private fun updateConversationSettings(
+    token: String,
+    itemId: Int,
+    otherUserId: Int,
+    customName: String? = null,
+    isPinned: Boolean? = null,
+    isArchived: Boolean? = null,
+): Boolean {
+    val json = JSONObject().apply {
+        customName?.let { put("custom_name", it) }
+        isPinned?.let { put("is_pinned", it) }
+        isArchived?.let { put("is_archived", it) }
+    }.toString()
+    val request = Request.Builder()
+        .url("https://fati-api.alertaraqc.com/api/conversations/$itemId/$otherUserId")
+        .header("Authorization", "Bearer $token")
+        .header("Accept", "application/json")
+        .patch(json.toRequestBody("application/json".toMediaType()))
+        .build()
+    return try {
+        adminHttpClient.newCall(request).execute().use { it.isSuccessful }
+    } catch (_: Exception) { false }
+}
+
+/** "Delete for me": hides the thread's history for this person only. */
+private fun clearConversation(token: String, itemId: Int, otherUserId: Int): Boolean {
+    val request = Request.Builder()
+        .url("https://fati-api.alertaraqc.com/api/conversations/$itemId/$otherUserId")
+        .header("Authorization", "Bearer $token")
+        .header("Accept", "application/json")
+        .delete()
+        .build()
+    return try {
+        adminHttpClient.newCall(request).execute().use { it.isSuccessful }
+    } catch (_: Exception) { false }
+}
+
 
 private fun sendPointsToUser(token: String, userId: Int, points: Int, reason: String, itemId: Int = 0): Pair<Boolean, String?> {
     val json = JSONObject().apply {
@@ -2935,10 +3011,44 @@ fun AdminChatContent(
     var isLoading     by remember { mutableStateOf(true) }
     var loadError     by remember { mutableStateOf(false) }
     var searchQuery   by remember { mutableStateOf("") }
-    // 0 = All, 1 = Unread
-    var filterTab     by remember { mutableStateOf(0) }
+    // "all", "unread", one of the item stages, or "archived" - the website's shelves.
+    var listFilter    by remember { mutableStateOf("all") }
+    val scope         = rememberCoroutineScope()
 
-    val filteredConversations = remember(conversations, searchQuery, filterTab) {
+    // Long-press on a row: pin, rename, archive, delete.
+    var actionTarget  by remember { mutableStateOf<Conversation?>(null) }
+    var renameTarget  by remember { mutableStateOf<Conversation?>(null) }
+    var deleteTarget  by remember { mutableStateOf<Conversation?>(null) }
+
+    fun replaceConversation(updated: Conversation) {
+        conversations = conversations.map {
+            if (it.otherUserId == updated.otherUserId && it.itemId == updated.itemId) updated else it
+        }
+    }
+
+    // Optimistic: the row moves at once, and only moves back if the server refused.
+    fun changeSetting(conv: Conversation, name: String? = null, pinned: Boolean? = null, archived: Boolean? = null) {
+        val updated = conv.copy(
+            customName = name ?: conv.customName,
+            isPinned = pinned ?: (if (archived == true) false else conv.isPinned),
+            isArchived = archived ?: conv.isArchived,
+        )
+        replaceConversation(updated)
+        if (name != null && name != conv.customName) ThreadEvents.record(context, conv, name)
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                updateConversationSettings(token, conv.itemId, conv.otherUserId, name, pinned, archived)
+            }
+            if (!ok) replaceConversation(conv)
+        }
+    }
+
+    fun removeConversation(conv: Conversation) {
+        conversations = conversations.filterNot { it.otherUserId == conv.otherUserId && it.itemId == conv.itemId }
+        scope.launch { withContext(Dispatchers.IO) { clearConversation(token, conv.itemId, conv.otherUserId) } }
+    }
+
+    val filteredConversations = remember(conversations, searchQuery, listFilter) {
         var list = if (searchQuery.isBlank()) conversations
         else {
             val q = searchQuery.trim().lowercase()
@@ -2949,8 +3059,15 @@ fun AdminChatContent(
                         c.latestMessage.lowercase().contains(q)
             }
         }
-        if (filterTab == 1) list = list.filter { it.unreadCount > 0 }
-        list
+        list = when (listFilter) {
+            "unread" -> list.filter { it.unreadCount > 0 && !it.isArchived }
+            "archived" -> list.filter { it.isArchived }
+            "all" -> list.filter { !it.isArchived }
+            // An item stage, in the words the row's badge uses.
+            else -> list.filter { !it.isArchived && conversationStage(it) == listFilter }
+        }
+        // Pinned first; the server orders the rest by recency.
+        list.sortedByDescending { it.isPinned }
     }
 
     // When entering a chat: mark messages as read + zero the badge locally.
@@ -2971,7 +3088,8 @@ fun AdminChatContent(
         while (true) {
             try {
                 val result = withContext(Dispatchers.IO) { fetchConversations(token) }
-                conversations = result
+                // Only redraw the list when something actually changed.
+                if (result != conversations) conversations = result
                 loadError = false
             } catch (_: Exception) {
                 if (conversations.isEmpty()) loadError = true
@@ -2980,6 +3098,31 @@ fun AdminChatContent(
             }
             delay(5000) // Poll every 5 seconds
         }
+    }
+
+    actionTarget?.let { conv ->
+        ConversationActionsSheet(
+            conversation = conv,
+            onDismiss = { actionTarget = null },
+            onRename = { actionTarget = null; renameTarget = conv },
+            onTogglePin = { actionTarget = null; changeSetting(conv, pinned = !conv.isPinned) },
+            onToggleArchive = { actionTarget = null; changeSetting(conv, archived = !conv.isArchived) },
+            onDelete = { actionTarget = null; deleteTarget = conv },
+        )
+    }
+    renameTarget?.let { conv ->
+        RenameConversationDialog(
+            conversation = conv,
+            onDismiss = { renameTarget = null },
+            onSave = { name -> renameTarget = null; changeSetting(conv, name = name) },
+        )
+    }
+    deleteTarget?.let { conv ->
+        DeleteConversationDialog(
+            conversation = conv,
+            onDismiss = { deleteTarget = null },
+            onConfirm = { deleteTarget = null; removeConversation(conv) },
+        )
     }
 
     // FIXED: Properly structured AnimatedContent
@@ -3004,7 +3147,9 @@ fun AdminChatContent(
                 token         = token,
                 currentUserId = currentUserId,
                 onBack        = { onSelectConversation(null) },
-                isAdmin       = isAdmin
+                isAdmin       = isAdmin,
+                onConversationChanged = { updated -> replaceConversation(updated) },
+                onConversationDeleted = { removed -> removeConversation(removed); onSelectConversation(null) },
             )
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -3036,12 +3181,23 @@ fun AdminChatContent(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = Spacing.screen)
                         .padding(bottom = Spacing.sm),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                 ) {
-                    ChoiceChip(label = "All", selected = filterTab == 0, onClick = { filterTab = 0 })
-                    ChoiceChip(label = "Unread", selected = filterTab == 1, onClick = { filterTab = 1 }, count = unreadTotal)
+                    ChoiceChip(label = "All", selected = listFilter == "all", onClick = { listFilter = "all" })
+                    ChoiceChip(label = "Unread", selected = listFilter == "unread", onClick = { listFilter = "unread" }, count = unreadTotal)
+                    listOf(
+                        "negotiating" to "Negotiating",
+                        "available" to "Available",
+                        "reserved" to "Reserved",
+                        "sold" to "Sold",
+                        "rejected" to "Rejected",
+                    ).forEach { (stage, label) ->
+                        ChoiceChip(label = label, selected = listFilter == stage, onClick = { listFilter = stage })
+                    }
+                    ChoiceChip(label = "Archived", selected = listFilter == "archived", onClick = { listFilter = "archived" })
                 }
 
                 when {
@@ -3059,12 +3215,16 @@ fun AdminChatContent(
                             icon = Icons.Outlined.ChatBubbleOutline,
                             title = when {
                                 searchQuery.isNotEmpty() -> "No results"
-                                filterTab == 1           -> "All caught up"
+                                listFilter == "unread"   -> "All caught up"
+                                listFilter == "archived" -> "Nothing archived"
+                                listFilter != "all"      -> "No $listFilter items"
                                 else                     -> "No conversations yet"
                             },
                             message = when {
                                 searchQuery.isNotEmpty() -> "Nothing matches \"$searchQuery\"."
-                                filterTab == 1           -> "You have read every message."
+                                listFilter == "unread"   -> "You have read every message."
+                                listFilter == "archived" -> "Long-press a conversation to archive it."
+                                listFilter != "all"      -> "No conversation is about an item in that stage right now."
                                 isAdmin                  -> "Chats open when a student offers an item or asks about a listing."
                                 else                     -> "Ask about an item on the marketplace, or offer one to Ofelia's Store, and the chat appears here."
                             },
@@ -3074,8 +3234,35 @@ fun AdminChatContent(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = Spacing.lg),
                     ) {
-                        items(filteredConversations, key = { "${it.otherUserId}_${it.itemId}" }) { conv ->
-                            ConversationItem(conv, { onSelectConversation(conv) }, isAdmin = isAdmin, currentUserId = currentUserId)
+                        // Pinned threads on their own shelf, the way the website lists them.
+                        val pinnedRows = filteredConversations.filter { it.isPinned }
+                        val otherRows = filteredConversations.filter { !it.isPinned }
+
+                        if (pinnedRows.isNotEmpty()) {
+                            item(key = "shelf_pinned") { ListShelfLabel("Pinned") }
+                            items(pinnedRows, key = { "${it.otherUserId}_${it.itemId}" }) { conv ->
+                                ConversationItem(
+                                    conv,
+                                    { onSelectConversation(conv) },
+                                    isAdmin = isAdmin,
+                                    currentUserId = currentUserId,
+                                    onLongClick = { actionTarget = conv },
+                                    onMore = { actionTarget = conv },
+                                )
+                            }
+                            if (otherRows.isNotEmpty()) {
+                                item(key = "shelf_rest") { ListShelfLabel(if (listFilter == "archived") "Archived" else "Recent") }
+                            }
+                        }
+                        items(otherRows, key = { "${it.otherUserId}_${it.itemId}" }) { conv ->
+                            ConversationItem(
+                                conv,
+                                { onSelectConversation(conv) },
+                                isAdmin = isAdmin,
+                                currentUserId = currentUserId,
+                                onLongClick = { actionTarget = conv },
+                                onMore = { actionTarget = conv },
+                            )
                         }
                     }
                 }
@@ -3084,15 +3271,24 @@ fun AdminChatContent(
     } // end AnimatedContent
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ConversationItem(conversation: Conversation, onClick: () -> Unit, isAdmin: Boolean = true, currentUserId: Int = 0) {
+private fun ConversationItem(
+    conversation: Conversation,
+    onClick: () -> Unit,
+    isAdmin: Boolean = true,
+    currentUserId: Int = 0,
+    onLongClick: () -> Unit = {},
+    /** The three-dot button: the same sheet the long-press opens. */
+    onMore: () -> Unit = {},
+) {
     val hasUnread = conversation.unreadCount > 0
     val accents = LocalMarketAccents.current
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .background(
                 if (hasUnread) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
                 else Color.Transparent
@@ -3146,8 +3342,16 @@ private fun ConversationItem(conversation: Conversation, onClick: () -> Unit, is
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
+                if (conversation.isPinned) {
+                    Icon(
+                        Icons.Filled.PushPin,
+                        contentDescription = "Pinned",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
                 Text(
-                    conversation.itemTitle,
+                    conversation.displayTitle,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -3162,6 +3366,14 @@ private fun ConversationItem(conversation: Conversation, onClick: () -> Unit, is
                     color = if (hasUnread) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                IconButton(onClick = onMore, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = "Conversation options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
 
             // Row 2: sender name + status badge
@@ -3277,8 +3489,20 @@ private fun ChatDetailContent(
     token: String,
     currentUserId: Int,
     onBack: () -> Unit,
-    isAdmin: Boolean = true
+    isAdmin: Boolean = true,
+    /** The list keeps a copy of this thread; tell it when its name or pin changes here. */
+    onConversationChanged: (Conversation) -> Unit = {},
+    onConversationDeleted: (Conversation) -> Unit = {},
 ) {
+    // The thread as this screen last changed it - the list's copy catches up.
+    var thread                 by remember(conversation) { mutableStateOf(conversation) }
+    val eventsContext          = LocalContext.current
+    // What happened to the thread itself - renames - kept on this phone.
+    var threadEvents           by remember(conversation) { mutableStateOf(ThreadEvents.load(eventsContext, conversation)) }
+    var replyingTo             by remember { mutableStateOf<ChatMessage?>(null) }
+    var showThreadMenu         by remember { mutableStateOf(false) }
+    var renameOpen             by remember { mutableStateOf(false) }
+    var deleteOpen             by remember { mutableStateOf(false) }
     var messages               by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var isLoading              by remember { mutableStateOf(true) }
     var isInitialLoad          by remember { mutableStateOf(true) }  // Track initial load separately
@@ -3477,7 +3701,9 @@ private fun ChatDetailContent(
                     fetchMessages(token, conversation.itemId, conversation.otherUserId)
                 }
                 Log.d("ChatDetail", "Fetched ${fetched.size} messages")
-                messages = fetched.distinctBy { it.messageId }
+                val distinct = fetched.distinctBy { it.messageId }
+                // Only redraw the thread when something actually changed.
+                if (distinct != messages) messages = distinct
             } catch (e: Exception) {
                 fetchError = true
                 fetchErrorMsg = e.message ?: "Unknown error"
@@ -3508,6 +3734,8 @@ private fun ChatDetailContent(
             ?: messages.firstOrNull { it.senderId != currentUserId }?.senderId?.takeIf { it != 0 }
             ?: return  // still unknown — don't send a broken request
 
+        val quoted = replyingTo
+        replyingTo  = null
         messageText = ""
         isSending   = true
         val nowStr = java.text.SimpleDateFormat(
@@ -3524,13 +3752,22 @@ private fun ChatDetailContent(
             receiverName           = "${conversation.firstName} ${conversation.lastName}",
             receiverProfilePicture = conversation.profilePicture,
             message                = text,
-            sentAt                 = nowStr
+            sentAt                 = nowStr,
+            replyTo                = quoted?.let {
+                ReplyPreview(
+                    messageId  = it.messageId,
+                    senderId   = it.senderId,
+                    senderName = if (it.senderId == currentUserId) "You" else it.senderName,
+                    text       = it.previewText(),
+                    kind       = it.kind,
+                )
+            },
         )
         messages = messages + optimistic
         scope.launch {
             // reverseLayout=true keeps newest at index 0 (bottom) — no manual scroll needed
             withContext(Dispatchers.IO) {
-                sendMessage(token, conversation.itemId, receiverId, text)
+                sendMessage(token, conversation.itemId, receiverId, text, quoted?.messageId?.takeIf { it > 0 })
             }
             isSending = false
         }
@@ -3582,6 +3819,43 @@ private fun ChatDetailContent(
     // Back press: close emoji picker first, then go back to conversation list
     BackHandler { onBack() }
     BackHandler(enabled = showEmojiPicker) { showEmojiPicker = false }
+    BackHandler(enabled = replyingTo != null && !showEmojiPicker) { replyingTo = null }
+
+    // Housekeeping from the thread's own menu, mirrored to the list.
+    fun changeThread(name: String? = null, pinned: Boolean? = null, archived: Boolean? = null) {
+        val before = thread
+        val updated = before.copy(
+            customName = name ?: before.customName,
+            isPinned = pinned ?: (if (archived == true) false else before.isPinned),
+            isArchived = archived ?: before.isArchived,
+        )
+        thread = updated
+        onConversationChanged(updated)
+        if (name != null && name != before.customName) {
+            threadEvents = ThreadEvents.record(eventsContext, before, name)
+        }
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                updateConversationSettings(token, before.itemId, before.otherUserId, name, pinned, archived)
+            }
+            if (!ok) { thread = before; onConversationChanged(before) }
+        }
+    }
+
+    if (renameOpen) {
+        RenameConversationDialog(
+            conversation = thread,
+            onDismiss = { renameOpen = false },
+            onSave = { name -> renameOpen = false; changeThread(name = name) },
+        )
+    }
+    if (deleteOpen) {
+        DeleteConversationDialog(
+            conversation = thread,
+            onDismiss = { deleteOpen = false },
+            onConfirm = { deleteOpen = false; onConversationDeleted(thread) },
+        )
+    }
     BackHandler(enabled = showItemPreview && !showEmojiPicker) { showItemPreview = false }
 
     if (studentViewItem) {
@@ -3701,18 +3975,51 @@ private fun ChatDetailContent(
                     )
                     Spacer(Modifier.width(Spacing.md))
                     Column(modifier = Modifier.weight(1f)) {
+                        val personName = "${conversation.firstName} ${conversation.lastName}".trim()
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            if (thread.isPinned) {
+                                Icon(Icons.Filled.PushPin, "Pinned", tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(14.dp))
+                            }
+                            Text(
+                                thread.customName.ifBlank { personName },
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         Text(
-                            "${conversation.firstName} ${conversation.lastName}",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            conversation.itemTitle,
+                            if (thread.customName.isBlank()) conversation.itemTitle else "$personName · ${conversation.itemTitle}",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.8f),
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
+                    }
+                    Box {
+                        IconButton(onClick = { showThreadMenu = true }) {
+                            Icon(Icons.Filled.MoreVert, "Conversation options", tint = Color.White)
+                        }
+                        DropdownMenu(expanded = showThreadMenu, onDismissRequest = { showThreadMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (thread.isPinned) "Unpin" else "Pin to top") },
+                                leadingIcon = { Icon(Icons.Outlined.PushPin, null) },
+                                onClick = { showThreadMenu = false; changeThread(pinned = !thread.isPinned) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Rename conversation") },
+                                leadingIcon = { Icon(Icons.Outlined.DriveFileRenameOutline, null) },
+                                onClick = { showThreadMenu = false; renameOpen = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (thread.isArchived) "Unarchive" else "Archive") },
+                                leadingIcon = { Icon(if (thread.isArchived) Icons.Outlined.Unarchive else Icons.Outlined.Archive, null) },
+                                onClick = { showThreadMenu = false; changeThread(archived = !thread.isArchived) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete conversation", color = MaterialTheme.colorScheme.error) },
+                                leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null, tint = MaterialTheme.colorScheme.error) },
+                                onClick = { showThreadMenu = false; deleteOpen = true },
+                            )
+                        }
                     }
                 }
                 // ── Order banner ──────────────────────────────────────────────
@@ -3777,7 +4084,7 @@ private fun ChatDetailContent(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 item.title,
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White,
                                 maxLines = 1,
@@ -3820,13 +4127,13 @@ private fun ChatDetailContent(
                                     priceLabel?.let {
                                         Text(
                                             it,
-                                            fontSize = 11.sp,
+                                            style = MaterialTheme.typography.labelSmall,
                                             color = Color.White.copy(alpha = 0.6f)
                                         )
                                     }
                                     Text(
                                         Money.format(priceToShow),
-                                        fontSize = 11.sp,
+                                        style = MaterialTheme.typography.labelSmall,
                                         color = Color.White.copy(alpha = 0.85f),
                                         fontWeight = FontWeight.Medium
                                     )
@@ -3837,8 +4144,8 @@ private fun ChatDetailContent(
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
                                     color = when {
-                                        offerAccepted -> Color(0xFF2E7D32).copy(alpha = 0.55f)
-                                        isPrivate -> Color(0xFFFF8F00).copy(alpha = 0.30f)
+                                        offerAccepted -> LocalMarketAccents.current.success.copy(alpha = 0.55f)
+                                        isPrivate -> LocalMarketAccents.current.warning.copy(alpha = 0.30f)
                                         else -> Color.White.copy(alpha = 0.20f)
                                     }
                                 ) {
@@ -3848,7 +4155,7 @@ private fun ChatDetailContent(
                                             isPrivate -> "Negotiating"
                                             else -> item.status.replaceFirstChar { it.uppercaseChar() }
                                         },
-                                        fontSize   = 9.sp,
+                                        style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color      = Color.White,
                                         modifier   = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -3878,7 +4185,7 @@ private fun ChatDetailContent(
                                 ) {
                                     Icon(Icons.Filled.Edit, null, modifier = Modifier.size(14.dp))
                                     Spacer(Modifier.width(4.dp))
-                                    Text("Edit", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                                    Text("Edit", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = Color.White)
                                 }
                             }
 
@@ -3893,7 +4200,7 @@ private fun ChatDetailContent(
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                 modifier = Modifier.height(28.dp)
                             ) {
-                                Text("View Item", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color.White)
+                                Text("View Item", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, color = Color.White)
                             }
                         }
                     }
@@ -3907,10 +4214,9 @@ private fun ChatDetailContent(
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.background)
             ) {
+                    val threadRows = remember(messages, threadEvents) { buildThreadRows(messages, threadEvents) }
                     when {
-                        isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        }
+                        isLoading -> LoadingState()
                         fetchError -> ErrorState(
                             title = "Could not load messages",
                             message = "Check your connection and try again.",
@@ -3937,8 +4243,15 @@ private fun ChatDetailContent(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // Pass reversed list so newest message is at index 0 (bottom)
-                            items(messages.asReversed(), key = { it.messageId }) { msg ->
-                                ChatBubble(msg = msg, isMe = msg.senderId == currentUserId)
+                            items(threadRows.asReversed(), key = { it.key }) { row ->
+                                when (row) {
+                                    is ThreadRow.Line -> ChatBubble(
+                                        msg = row.msg,
+                                        isMe = row.msg.senderId == currentUserId,
+                                        onReply = { replyingTo = it },
+                                    )
+                                    is ThreadRow.System -> ThreadSystemLine(row.event)
+                                }
                             }
                         }
                     }
@@ -3973,14 +4286,14 @@ private fun ChatDetailContent(
                     //     Spacer(Modifier.width(5.dp))
                     //     Text(
                     //         statusLabel,
-                    //         fontSize = 11.sp,
+                    //         style = MaterialTheme.typography.labelSmall,
                     //         color = dotColor,
                     //         fontWeight = FontWeight.Medium
                     //     )
                     //     if (pusherDebugLog.isNotEmpty()) {
                     //         Text(
                     //             "  •  $pusherDebugLog",
-                    //             fontSize = 10.sp,
+                    //             style = MaterialTheme.typography.labelSmall,
                     //             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                     //             maxLines = 1,
                     //             overflow = TextOverflow.Ellipsis,
@@ -3998,6 +4311,10 @@ private fun ChatDetailContent(
                     // published item belongs to the store, and its lifecycle
                     // (reserve on checkout, sold on completion) is the
                     // server's to run. The student has no say past turnover.
+
+                    replyingTo?.let { target ->
+                        ReplyComposerBar(target = target, currentUserId = currentUserId, onDismiss = { replyingTo = null })
+                    }
 
                     Row(
                         modifier = Modifier
@@ -4115,7 +4432,7 @@ private fun ChatDetailContent(
                         )
 
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Text("Payment Method:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                            Text("Payment Method:", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
                             Spacer(Modifier.height(6.dp))
                             Box(modifier = Modifier.fillMaxWidth()) {
                                 OutlinedButton(
@@ -4145,15 +4462,12 @@ private fun ChatDetailContent(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        markItemAction(showConfirmDialog!!)
-                    },
-                    enabled = !isProcessing,
-                    colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                ) {
-                    Text(if (isProcessing) "Processing..." else "Confirm", color = Color.White)
-                }
+                PrimaryButton(
+                    text = "Confirm",
+                    compact = true,
+                    loading = isProcessing,
+                    onClick = { markItemAction(showConfirmDialog!!) },
+                )
             },
             dismissButton = {
                 TextButton(
@@ -4173,12 +4487,7 @@ private fun ChatDetailContent(
             title = { Text("Status Update") },
             text = { Text(confirmMessage) },
             confirmButton = {
-                Button(
-                    onClick = { confirmMessage = "" },
-                    colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                ) {
-                    Text("OK", color = Color.White)
-                }
+                PrimaryButton(text = "OK", compact = true, onClick = { confirmMessage = "" })
             }
         )
     }
@@ -4218,7 +4527,7 @@ private fun EmojiPickerPanel(onEmojiClick: (String) -> Unit) {
                     text = {
                         Text(
                             label.replaceFirstChar { it.uppercase() },
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             maxLines = 1
                         )
                     }
@@ -4241,7 +4550,7 @@ private fun EmojiPickerPanel(onEmojiClick: (String) -> Unit) {
                     if (char.isNotEmpty()) {
                         Text(
                             text = char,
-                            fontSize = 24.sp,
+                            style = MaterialTheme.typography.headlineMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier
                                 .aspectRatio(1f)
@@ -4295,7 +4604,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                                 Text(
                                     "${currentImageIndex + 1} / ${item.photos.size}",
                                     color = Color.White,
-                                    fontSize = 11.sp,
+                                    style = MaterialTheme.typography.labelSmall,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                 )
                             }
@@ -4348,7 +4657,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(item.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    Text(item.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineMedium)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -4356,13 +4665,13 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                         Icon(Icons.Filled.MonetizationOn, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         Text(
                             Money.format(item.publicPrice ?: item.askingPrice),
-                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 20.sp
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.headlineSmall
                         )
                     }
                     if (item.publicPrice != null && item.rewardPoints > 0) {
                         Text(
                             LoyaltyRules.rewardLabel(item.rewardPoints),
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -4375,7 +4684,7 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                         Text(
                             item.status.replaceFirstChar { it.uppercaseChar() },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                            fontSize = 12.sp,
+                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = statusColor
                         )
@@ -4388,12 +4697,203 @@ private fun ChatItemDetailPage(item: ChatItem, onBack: () -> Unit) {
                         Icon(Icons.Filled.Person, null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp))
-                        Text(item.sellerEmail, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(item.sellerEmail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (item.description.isNotBlank()) {
                         HorizontalDivider()
-                        Text("Description", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                        Text(item.description, fontSize = 14.sp, lineHeight = 22.sp)
+                        Text("Description", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+                        Text(item.description, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The item's words and shelf: name, description, category. Shared by both
+ * edit pages so a listing can be corrected from the chat or the inventory
+ * alike - the same fields the website's editor offers.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ItemDetailsEditor(
+    token: String,
+    title: String,
+    onTitleChange: (String) -> Unit,
+    description: String,
+    onDescriptionChange: (String) -> Unit,
+    categoryId: Int,
+    onCategoryChange: (Int) -> Unit,
+) {
+    var categories by remember { mutableStateOf<List<MarketCategory>>(emptyList()) }
+    var menuOpen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        when (val result = withContext(Dispatchers.IO) { MarketplaceApi.fetchCategories(token) }) {
+            is MarketplaceApi.Result.Ok -> categories = result.value
+            is MarketplaceApi.Result.Failure -> Unit
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+        MarketTextField(
+            value = title,
+            onValueChange = { if (it.length <= 255) onTitleChange(it) },
+            label = "Name",
+        )
+        MarketTextField(
+            value = description,
+            onValueChange = { if (it.length <= 1000) onDescriptionChange(it) },
+            label = "Description",
+            singleLine = false,
+            minLines = 2,
+            maxLines = 5,
+        )
+        Column {
+            Text("Category", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { menuOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Text(
+                        categories.firstOrNull { it.categoryId == categoryId }?.name
+                            ?: if (categories.isEmpty()) "Loading categories…" else "Keep current category",
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(Icons.Filled.ArrowDropDown, null)
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, modifier = Modifier.fillMaxWidth(0.9f)) {
+                    DropdownMenuItem(text = { Text("Keep current category") }, onClick = { onCategoryChange(0); menuOpen = false })
+                    categories.forEach { category ->
+                        DropdownMenuItem(
+                            text = { Text(category.name, fontWeight = if (category.categoryId == categoryId) FontWeight.Bold else FontWeight.Normal) },
+                            onClick = { onCategoryChange(category.categoryId); menuOpen = false },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * "Items acquired" and "Items sold", read from the inventory itself - only
+ * the items in that status, with the figures the website's report shows.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ItemsReportContent(title: String, status: String, onMenuClick: () -> Unit) {
+    val context = LocalContext.current
+    val token = remember { context.getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE).getString("auth_token", "") ?: "" }
+    var items by remember { mutableStateOf<List<Item>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var reload by remember { mutableStateOf(0) }
+    val accents = LocalMarketAccents.current
+    val sold = status == "sold"
+
+    LaunchedEffect(reload) {
+        error = null
+        when (val result = withContext(Dispatchers.IO) { MarketplaceApi.fetchAdminItems(token, status) }) {
+            is MarketplaceApi.Result.Ok -> items = result.value.filter { it.status.equals(status, true) }
+            is MarketplaceApi.Result.Failure -> error = result.message
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        AdminPageHeader(
+            title = title,
+            subtitle = if (sold) "Everything that has left the store, with its price and markup"
+                       else "Every item the store has taken in and what it agreed to pay",
+            onMenuClick = onMenuClick,
+        )
+
+        val rows = items
+        when {
+            error != null -> ErrorState(message = error!!, onRetry = { reload++ })
+            rows == null -> LoadingState()
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = Spacing.screen, vertical = Spacing.lg),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md),
+            ) {
+                item(key = "summary") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                        StatTile(
+                            label = if (sold) "Total items sold" else "Total items acquired",
+                            value = "${rows.size}",
+                            icon = if (sold) Icons.Filled.DoneAll else Icons.Filled.Inventory,
+                            tint = if (sold) accents.success else accents.info,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (sold) {
+                            val markup = rows.sumOf { Money.parse(it.markup)?.toDouble() ?: 0.0 }
+                            StatTile(
+                                label = "Profit from markup",
+                                value = Money.format(String.format(java.util.Locale.US, "%.2f", markup)),
+                                icon = Icons.Filled.Stars,
+                                tint = accents.reward,
+                                modifier = Modifier.weight(1f),
+                            )
+                        } else {
+                            val unpaid = rows.count { !it.sellerIsPaid }
+                            StatTile(
+                                label = "Sellers unpaid",
+                                value = "$unpaid",
+                                icon = Icons.Filled.Payments,
+                                tint = if (unpaid > 0) accents.warning else accents.success,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+                if (rows.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyState(
+                            icon = if (sold) Icons.Filled.DoneAll else Icons.Filled.Inventory,
+                            title = if (sold) "Nothing sold yet" else "Nothing acquired yet",
+                            message = if (sold) "Items appear here once an order for them is completed."
+                                      else "Items appear here once their turnover is verified.",
+                        )
+                    }
+                }
+                items(rows, key = { it.itemId }) { row ->
+                    MarketCard(contentPadding = PaddingValues(Spacing.md)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier.size(52.dp).clip(MaterialTheme.shapes.small).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (row.photos.isNotEmpty()) {
+                                    AsyncImage(model = row.photos.first(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                } else {
+                                    Icon(Icons.Outlined.Image, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(row.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(row.sellerEmail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            if (!sold) {
+                                StatusPill(
+                                    label = if (row.sellerIsPaid) "Paid" else "Unpaid",
+                                    tone = if (row.sellerIsPaid) StatusTone.Success else StatusTone.Warning,
+                                )
+                            }
+                        }
+                        SoftDivider()
+                        if (sold) {
+                            SummaryRow("Sold for", Money.format(row.publicPrice))
+                            SummaryRow("Acquisition", Money.format(row.acquisitionPrice))
+                            SummaryRow("Markup", Money.format(row.markup), valueColor = accents.success)
+                        } else {
+                            SummaryRow("Acquisition price", Money.format(row.acquisitionPrice))
+                            SummaryRow("Acquired", row.acquiredAt?.let { formatDate(it) } ?: "—")
+                        }
                     }
                 }
             }
@@ -4412,6 +4912,10 @@ private fun EditItemPage(
     val scope = rememberCoroutineScope()
     // The listing's photos, kept current by the photo editor below.
     var photos by remember { mutableStateOf(item.photos) }
+    // The words and the shelf: editable here, like on the website.
+    var editTitle by remember { mutableStateOf(item.title) }
+    var editDescription by remember { mutableStateOf(item.description) }
+    var editCategoryId by remember { mutableStateOf(0) }
 
     // Status dropdown
     var expanded by remember { mutableStateOf(false) }
@@ -4459,10 +4963,19 @@ private fun EditItemPage(
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(item.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    ItemDetailsEditor(
+                        token = token,
+                        title = editTitle,
+                        onTitleChange = { editTitle = it },
+                        description = editDescription,
+                        onDescriptionChange = { editDescription = it },
+                        categoryId = editCategoryId,
+                        onCategoryChange = { editCategoryId = it },
+                    )
+                    HorizontalDivider()
 
-                    // Ofelia's own photos, while the listing is still off the catalog.
-                    if (item.status.lowercase() in listOf("pending", "private", "acquired")) {
+                    // Ofelia's own photos. Editable until the item is sold or rejected.
+                    if (item.status.lowercase() !in listOf("sold", "rejected")) {
                         AdminItemPhotoEditor(
                             itemId = item.itemId,
                             token = token,
@@ -4472,14 +4985,14 @@ private fun EditItemPage(
                     }
 
                     // Seller asking price - read-only reference
-                    Text("Seller Asking Price", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    Text("Seller Asking Price", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = MaterialTheme.shapes.small
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -4490,7 +5003,7 @@ private fun EditItemPage(
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 Money.format(item.askingPrice),
-                                fontSize = 16.sp,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -4498,7 +5011,7 @@ private fun EditItemPage(
                     }
 
                     // Status field (dropdown)
-                    Text("Status", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                     ExposedDropdownMenuBox(
@@ -4546,7 +5059,7 @@ private fun EditItemPage(
                     }
 
                     // Public selling price, with the reward the buyer will earn.
-                    Text("Public Selling Price (${Money.PESO})", fontSize = 12.sp,
+                    Text("Public Selling Price (${Money.PESO})", style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
@@ -4577,7 +5090,7 @@ private fun EditItemPage(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
                             ),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = MaterialTheme.shapes.small
                         ) {
                             Column(
                                 modifier = Modifier.padding(14.dp),
@@ -4587,11 +5100,11 @@ private fun EditItemPage(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Buyer earns", fontSize = 13.sp,
+                                    Text("Buyer earns", style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text(
                                         "$rewardPreview point${if (rewardPreview == 1) "" else "s"}",
-                                        fontSize = 14.sp,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -4601,9 +5114,9 @@ private fun EditItemPage(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Text("Acquisition price", fontSize = 13.sp,
+                                        Text("Acquisition price", style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(Money.format(acquired), fontSize = 13.sp)
+                                        Text(Money.format(acquired), style = MaterialTheme.typography.bodySmall)
                                     }
                                     val priced = Money.parse(Money.normalizeInput(editPublicPrice))
                                     val acq = Money.parse(acquired)
@@ -4612,11 +5125,11 @@ private fun EditItemPage(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            Text("Expected profit", fontSize = 13.sp,
+                                            Text("Expected profit", style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Text(
                                                 Money.format(priced.subtract(acq).toPlainString()),
-                                                fontSize = 14.sp,
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = LocalMarketAccents.current.info
                                             )
@@ -4626,7 +5139,7 @@ private fun EditItemPage(
                                 if (!turnoverVerifiedRef) {
                                     Text(
                                         "This item cannot be published until it has been received and verified.",
-                                        fontSize = 12.sp,
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = LocalMarketAccents.current.warning
                                     )
                                 }
@@ -4638,7 +5151,7 @@ private fun EditItemPage(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             ),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = MaterialTheme.shapes.small
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -4650,7 +5163,7 @@ private fun EditItemPage(
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     Money.format(item.publicPrice),
-                                    fontSize = 16.sp,
+                                    style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -4665,12 +5178,12 @@ private fun EditItemPage(
                         Icon(Icons.Filled.Person, null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp))
-                        Text(item.sellerEmail, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(item.sellerEmail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (item.description.isNotBlank()) {
                         HorizontalDivider()
-                        Text("Description", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                        Text(item.description, fontSize = 14.sp, lineHeight = 22.sp)
+                        Text("Description", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+                        Text(item.description, style = MaterialTheme.typography.bodyMedium)
                     }
 
                     HorizontalDivider()
@@ -4690,26 +5203,18 @@ private fun EditItemPage(
                             title = { Text("Success", fontWeight = FontWeight.Bold) },
                             text = { Text("Item has been updated successfully.") },
                             confirmButton = {
-                                Button(
+                                PrimaryButton(
+                                    text = "Back",
+                                    compact = true,
                                     onClick = {
                                         showSuccessDialog = false
                                         savedChatItem?.let { onItemUpdated(it) }
                                         onBack()
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = DarkGreen),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("Back", color = Color.White)
-                                }
+                                )
                             },
                             dismissButton = {
-                                OutlinedButton(
-                                    onClick = { showSuccessDialog = false },
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Text("Close", color = MaterialTheme.colorScheme.primary)
-                                }
+                                SecondaryButton(text = "Close", compact = true, onClick = { showSuccessDialog = false })
                             }
                         )
                     }
@@ -4729,27 +5234,27 @@ private fun EditItemPage(
                             title = { Text("Update Failed", fontWeight = FontWeight.Bold) },
                             text = { Text(dialogErrorMsg) },
                             confirmButton = {
-                                Button(
+                                PrimaryButton(
+                                    text = "Close",
+                                    compact = true,
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError,
                                     onClick = { showErrorDialog = false },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.error
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("Close", color = Color.White)
-                                }
+                                )
                             }
                         )
                     }
 
                     // Save button
-                    Button(
+                    PrimaryButton(
+                        text = "Save Changes",
+                        icon = Icons.Filled.Save,
                         onClick = {
                             saveError = null
                             if (editStatus.isBlank()) {
                                 dialogErrorMsg = "Status cannot be empty."
                                 showErrorDialog = true
-                                return@Button
+                                return@PrimaryButton
                             }
                             // Publishing needs a real peso price, and the server
                             // additionally refuses if turnover is unverified.
@@ -4757,12 +5262,12 @@ private fun EditItemPage(
                             if (canEditPrice && editPublicPrice.isNotBlank() && normalizedPrice == null) {
                                 dialogErrorMsg = "Enter a valid selling price, e.g. 250 or 249.50."
                                 showErrorDialog = true
-                                return@Button
+                                return@PrimaryButton
                             }
                             if (editStatus.lowercase() == "public" && normalizedPrice == null) {
                                 dialogErrorMsg = "A public selling price is required before publishing."
                                 showErrorDialog = true
-                                return@Button
+                                return@PrimaryButton
                             }
                             scope.launch {
                                 isSaving = true
@@ -4771,13 +5276,18 @@ private fun EditItemPage(
                                         token,
                                         item.itemId,
                                         status = editStatus,
-                                        publicPrice = normalizedPrice
+                                        publicPrice = normalizedPrice,
+                                        title = editTitle.trim().takeIf { it.isNotBlank() && it != item.title },
+                                        description = editDescription.trim().takeIf { it != item.description },
+                                        categoryId = editCategoryId.takeIf { it > 0 },
                                     )
                                 }
                                 isSaving = false
                                 if (ok) {
                                     saveSuccess = true
                                     savedChatItem = item.copy(
+                                        title = editTitle.trim().ifBlank { item.title },
+                                        description = editDescription.trim(),
                                         status = editStatus,
                                         publicPrice = normalizedPrice ?: item.publicPrice,
                                         rewardPoints = LoyaltyRules.rewardPointsFor(
@@ -4794,22 +5304,9 @@ private fun EditItemPage(
                             }
                         },
                         enabled = !isSaving && !saveSuccess,
+                        loading = isSaving,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                    ) {
-                        if (isSaving) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Filled.Save, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Save Changes", fontWeight = FontWeight.SemiBold, color = Color.White)
-                        }
-                    }
+                    )
 
                     Spacer(Modifier.height(16.dp))
                 }
@@ -4829,6 +5326,10 @@ private fun EditItemPageForList(
     val scope = rememberCoroutineScope()
     // The listing's photos, kept current by the photo editor below.
     var photos by remember { mutableStateOf(item.photos) }
+    // The words and the shelf: editable here, like on the website.
+    var editTitle by remember { mutableStateOf(item.title) }
+    var editDescription by remember { mutableStateOf(item.description) }
+    var editCategoryId by remember { mutableStateOf(0) }
 
     // Status dropdown
     var expanded by remember { mutableStateOf(false) }
@@ -4877,10 +5378,19 @@ private fun EditItemPageForList(
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(item.title, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    ItemDetailsEditor(
+                        token = token,
+                        title = editTitle,
+                        onTitleChange = { editTitle = it },
+                        description = editDescription,
+                        onDescriptionChange = { editDescription = it },
+                        categoryId = editCategoryId,
+                        onCategoryChange = { editCategoryId = it },
+                    )
+                    HorizontalDivider()
 
-                    // Ofelia's own photos, while the listing is still off the catalog.
-                    if (item.status.lowercase() in listOf("pending", "private", "acquired")) {
+                    // Ofelia's own photos. Editable until the item is sold or rejected.
+                    if (item.status.lowercase() !in listOf("sold", "rejected")) {
                         AdminItemPhotoEditor(
                             itemId = item.itemId,
                             token = token,
@@ -4892,14 +5402,14 @@ private fun EditItemPageForList(
                     // Seller asking price - read-only reference, hidden once the
                     // item is on the public catalog and the selling price rules.
                     if (editStatus.lowercase() != "public") {
-                        Text("Seller Asking Price", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        Text("Seller Asking Price", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             ),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = MaterialTheme.shapes.small
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -4910,7 +5420,7 @@ private fun EditItemPageForList(
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     item.displayAskingPrice,
-                                    fontSize = 16.sp,
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -4919,7 +5429,7 @@ private fun EditItemPageForList(
                     }
 
                     // Status field (dropdown)
-                    Text("Status", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    Text("Status", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     
                     ExposedDropdownMenuBox(
@@ -4968,7 +5478,7 @@ private fun EditItemPageForList(
 
                     // Public selling price. Reward points are derived from it by
                     // the server; what is shown here is a preview only.
-                    Text("Public Selling Price (${Money.PESO})", fontSize = 12.sp,
+                    Text("Public Selling Price (${Money.PESO})", style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
 
@@ -4997,7 +5507,7 @@ private fun EditItemPageForList(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
                             ),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = MaterialTheme.shapes.small
                         ) {
                             Column(
                                 modifier = Modifier.padding(14.dp),
@@ -5007,11 +5517,11 @@ private fun EditItemPageForList(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Buyer earns", fontSize = 13.sp,
+                                    Text("Buyer earns", style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Text(
                                         "$rewardPreview point${if (rewardPreview == 1) "" else "s"}",
-                                        fontSize = 14.sp,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -5021,9 +5531,9 @@ private fun EditItemPageForList(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Text("Acquisition price", fontSize = 13.sp,
+                                        Text("Acquisition price", style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(Money.format(acquired), fontSize = 13.sp)
+                                        Text(Money.format(acquired), style = MaterialTheme.typography.bodySmall)
                                     }
                                     val priced = Money.parse(Money.normalizeInput(editPublicPrice))
                                     val acq = Money.parse(acquired)
@@ -5032,11 +5542,11 @@ private fun EditItemPageForList(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
-                                            Text("Expected profit", fontSize = 13.sp,
+                                            Text("Expected profit", style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             Text(
                                                 Money.format(priced.subtract(acq).toPlainString()),
-                                                fontSize = 14.sp,
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = LocalMarketAccents.current.info
                                             )
@@ -5046,7 +5556,7 @@ private fun EditItemPageForList(
                                 if (!turnoverVerifiedRef) {
                                     Text(
                                         "This item cannot be published until it has been received and verified.",
-                                        fontSize = 12.sp,
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = LocalMarketAccents.current.warning
                                     )
                                 }
@@ -5058,7 +5568,7 @@ private fun EditItemPageForList(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             ),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = MaterialTheme.shapes.small
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -5070,7 +5580,7 @@ private fun EditItemPageForList(
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     text = item.publicPrice?.let { Money.format(it) } ?: "Not set",
-                                    fontSize = 16.sp,
+                                    style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -5086,13 +5596,13 @@ private fun EditItemPageForList(
                         Icon(Icons.Filled.Person, null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp))
-                        Text(item.sellerEmail, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(item.sellerEmail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     
                     if (item.description.isNotBlank()) {
                         HorizontalDivider()
-                        Text("Description", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                        Text(item.description, fontSize = 14.sp, lineHeight = 22.sp)
+                        Text("Description", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+                        Text(item.description, style = MaterialTheme.typography.bodyMedium)
                     }
 
                     HorizontalDivider()
@@ -5112,26 +5622,18 @@ private fun EditItemPageForList(
                             title = { Text("Success", fontWeight = FontWeight.Bold) },
                             text = { Text("Item has been updated successfully.") },
                             confirmButton = {
-                                Button(
+                                PrimaryButton(
+                                    text = "Back",
+                                    compact = true,
                                     onClick = {
                                         showSuccessDialog = false
                                         savedChatItem?.let { onItemUpdated(it) }
                                         onBack()
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = DarkGreen),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("Back", color = Color.White)
-                                }
+                                )
                             },
                             dismissButton = {
-                                OutlinedButton(
-                                    onClick = { showSuccessDialog = false },
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Text("Close", color = MaterialTheme.colorScheme.primary)
-                                }
+                                SecondaryButton(text = "Close", compact = true, onClick = { showSuccessDialog = false })
                             }
                         )
                     }
@@ -5151,27 +5653,27 @@ private fun EditItemPageForList(
                             title = { Text("Update Failed", fontWeight = FontWeight.Bold) },
                             text = { Text(dialogErrorMsg) },
                             confirmButton = {
-                                Button(
+                                PrimaryButton(
+                                    text = "Close",
+                                    compact = true,
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError,
                                     onClick = { showErrorDialog = false },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.error
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("Close", color = Color.White)
-                                }
+                                )
                             }
                         )
                     }
 
                     // Save button
-                    Button(
+                    PrimaryButton(
+                        text = "Save Changes",
+                        icon = Icons.Filled.Save,
                         onClick = {
                             saveError = null
                             if (editStatus.isBlank()) {
                                 dialogErrorMsg = "Status cannot be empty."
                                 showErrorDialog = true
-                                return@Button
+                                return@PrimaryButton
                             }
                             // Publishing needs a real peso price, and the server
                             // additionally refuses if turnover is unverified.
@@ -5179,12 +5681,12 @@ private fun EditItemPageForList(
                             if (canEditPrice && editPublicPrice.isNotBlank() && normalizedPrice == null) {
                                 dialogErrorMsg = "Enter a valid selling price, e.g. 250 or 249.50."
                                 showErrorDialog = true
-                                return@Button
+                                return@PrimaryButton
                             }
                             if (editStatus.lowercase() == "public" && normalizedPrice == null) {
                                 dialogErrorMsg = "A public selling price is required before publishing."
                                 showErrorDialog = true
-                                return@Button
+                                return@PrimaryButton
                             }
                             scope.launch {
                                 isSaving = true
@@ -5193,7 +5695,10 @@ private fun EditItemPageForList(
                                         token,
                                         item.itemId,
                                         status = editStatus,
-                                        publicPrice = normalizedPrice
+                                        publicPrice = normalizedPrice,
+                                        title = editTitle.trim().takeIf { it.isNotBlank() && it != item.title },
+                                        description = editDescription.trim().takeIf { it != item.description },
+                                        categoryId = editCategoryId.takeIf { it > 0 },
                                     )
                                 }
                                 isSaving = false
@@ -5201,8 +5706,8 @@ private fun EditItemPageForList(
                                     saveSuccess = true
                                     savedChatItem = ChatItem(
                                         itemId = item.itemId,
-                                        title = item.title,
-                                        description = item.description,
+                                        title = editTitle.trim().ifBlank { item.title },
+                                        description = editDescription.trim(),
                                         askingPrice = item.sellerAskingPrice,
                                         acquisitionPrice = item.acquisitionPrice,
                                         publicPrice = normalizedPrice ?: item.publicPrice,
@@ -5225,22 +5730,9 @@ private fun EditItemPageForList(
                             }
                         },
                         enabled = !isSaving && !saveSuccess,
+                        loading = isSaving,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)
-                    ) {
-                        if (isSaving) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Filled.Save, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Save Changes", fontWeight = FontWeight.SemiBold, color = Color.White)
-                        }
-                    }
+                    )
 
                     Spacer(Modifier.height(16.dp))
                 }
@@ -5249,8 +5741,25 @@ private fun EditItemPageForList(
     }
 }
 
+/** What a quote or a reply strip shows for a line: its text, or what kind of card it is. */
+private fun ChatMessage.previewText(): String = when {
+    isOrderCard -> "Order card"
+    isItemCard -> "Item offer"
+    isAcquiredCard -> "Item received"
+    else -> message
+}
+
+/**
+ * One line of the thread.
+ *
+ * Swipe a text bubble towards the middle of the screen - or long-press it -
+ * to answer it, the way Messenger does: the bubble follows the finger, a
+ * reply arrow grows behind it, and past the threshold the composer picks the
+ * line up. A reply carries the quoted line above its own text.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatBubble(msg: ChatMessage, isMe: Boolean) {
+private fun ChatBubble(msg: ChatMessage, isMe: Boolean, onReply: ((ChatMessage) -> Unit)? = null) {
     // An order is a card, not a sentence: the item, its photo, what is owed,
     // how it is being paid and whether that has happened yet.
     if (msg.isOrderCard) {
@@ -5272,57 +5781,421 @@ private fun ChatBubble(msg: ChatMessage, isMe: Boolean) {
         return
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        if (!isMe) {
-            Avatar(
-                url = msg.senderProfilePicture,
-                initial = msg.senderName.firstOrNull()?.toString() ?: "?",
-                size = 30.dp,
-            )
-            Spacer(Modifier.width(Spacing.sm))
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val thresholdPx = with(density) { 64.dp.toPx() }
+    val maxPx = with(density) { 96.dp.toPx() }
+    var dragX by remember(msg.messageId) { mutableStateOf(0f) }
+    var armed by remember(msg.messageId) { mutableStateOf(false) }
+    val shownX by animateFloatAsState(targetValue = dragX, label = "swipeReply")
+    val progress = (abs(shownX) / thresholdPx).coerceIn(0f, 1f)
+    // Mine sit on the right and swipe left; theirs sit on the left and swipe right.
+    val towardsMiddle = if (isMe) -1f else 1f
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        if (onReply != null && progress > 0.05f) {
+            Box(
+                modifier = Modifier
+                    .align(if (isMe) Alignment.CenterEnd else Alignment.CenterStart)
+                    .padding(horizontal = 8.dp)
+                    .size(30.dp)
+                    .graphicsLayer {
+                        alpha = progress
+                        scaleX = 0.6f + 0.4f * progress
+                        scaleY = scaleX
+                    }
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Reply,
+                    contentDescription = "Reply",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
 
-        // Message content
-        Column(
-            modifier = Modifier.widthIn(max = 280.dp),
-            horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
-        ) {
-            Surface(
-                shape = RoundedCornerShape(
-                    topStart = 18.dp,
-                    topEnd = 18.dp,
-                    bottomStart = if (isMe) 18.dp else 4.dp,
-                    bottomEnd = if (isMe) 4.dp else 18.dp
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(shownX.roundToInt(), 0) }
+                .then(
+                    if (onReply == null) Modifier else Modifier.pointerInput(msg.messageId) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (armed) onReply(msg)
+                                dragX = 0f
+                                armed = false
+                            },
+                            onDragCancel = {
+                                dragX = 0f
+                                armed = false
+                            },
+                        ) { change, delta ->
+                            val next = dragX + delta
+                            val clamped = if (towardsMiddle > 0) next.coerceIn(0f, maxPx) else next.coerceIn(-maxPx, 0f)
+                            if (clamped != dragX) change.consume()
+                            dragX = clamped
+                            val past = abs(dragX) >= thresholdPx
+                            if (past && !armed) {
+                                armed = true
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            } else if (!past) {
+                                armed = false
+                            }
+                        }
+                    }
                 ),
-                color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                shadowElevation = if (isMe) Elevation.flat else Elevation.card,
+            horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            if (!isMe) {
+                Avatar(
+                    url = msg.senderProfilePicture,
+                    initial = msg.senderName.firstOrNull()?.toString() ?: "?",
+                    size = 30.dp,
+                )
+                Spacer(Modifier.width(Spacing.sm))
+            }
+
+            Column(
+                modifier = Modifier.widthIn(max = 280.dp),
+                horizontalAlignment = if (isMe) Alignment.End else Alignment.Start
             ) {
+                Surface(
+                    shape = RoundedCornerShape(
+                        topStart = 18.dp,
+                        topEnd = 18.dp,
+                        bottomStart = if (isMe) 18.dp else 4.dp,
+                        bottomEnd = if (isMe) 4.dp else 18.dp
+                    ),
+                    color = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    shadowElevation = if (isMe) Elevation.flat else Elevation.card,
+                    modifier = if (onReply == null) Modifier else Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onReply(msg)
+                        },
+                    ),
+                ) {
+                    Column {
+                        msg.replyTo?.let { QuotedLine(quote = it, onPrimary = isMe) }
+                        Text(
+                            msg.message,
+                            color = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        )
+                    }
+                }
+
                 Text(
-                    msg.message,
-                    color = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    timeAgo(msg.sentAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(
+                        top = 3.dp,
+                        start = if (isMe) 0.dp else 4.dp,
+                        end = if (isMe) 4.dp else 0.dp
+                    )
                 )
             }
 
-            // Timestamp
+            if (isMe) Spacer(Modifier.width(Spacing.xs))
+        }
+    }
+}
+
+/** The quoted line inside a reply bubble: a coloured bar, who said it, and what. */
+@Composable
+private fun QuotedLine(quote: ReplyPreview, onPrimary: Boolean) {
+    val bar = if (onPrimary) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.primary
+    val fill = if (onPrimary) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+    val ink = if (onPrimary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+
+    Row(
+        modifier = Modifier
+            .padding(start = 8.dp, end = 8.dp, top = 8.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(fill)
+            .height(IntrinsicSize.Min),
+    ) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(bar))
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
             Text(
-                timeAgo(msg.sentAt),
+                quote.senderName.ifBlank { "Message" },
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.padding(
-                    top = 3.dp,
-                    start = if (isMe) 0.dp else 4.dp,
-                    end = if (isMe) 4.dp else 0.dp
-                )
+                fontWeight = FontWeight.SemiBold,
+                color = ink.copy(alpha = 0.92f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                quote.text.ifBlank { quote.kind.replace('_', ' ').replaceFirstChar { it.uppercaseChar() } },
+                style = MaterialTheme.typography.bodySmall,
+                color = ink.copy(alpha = 0.8f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+}
 
-        if (isMe) Spacer(Modifier.width(Spacing.xs))
+/** The strip above the composer while a reply is being written. */
+@Composable
+private fun ReplyComposerBar(target: ChatMessage, currentUserId: Int, onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(36.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.primary)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Replying to " + (if (target.senderId == currentUserId) "yourself" else target.senderName.ifBlank { "message" }),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                target.previewText(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(Icons.Filled.Close, contentDescription = "Cancel reply", modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/** Long-press on a conversation: pin, rename, archive, delete - for this person only. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConversationActionsSheet(
+    conversation: Conversation,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    onTogglePin: () -> Unit,
+    onToggleArchive: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(bottom = Spacing.xl)) {
+            Column(modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm)) {
+                Text(conversation.displayTitle, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "with ${conversation.firstName} ${conversation.lastName}".trim(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            SettingsRow(
+                icon = Icons.Outlined.PushPin,
+                title = if (conversation.isPinned) "Unpin" else "Pin to top",
+                subtitle = if (conversation.isPinned) "Back to its place by date" else "Keeps it at the top of the list",
+                onClick = onTogglePin,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.DriveFileRenameOutline,
+                title = "Rename conversation",
+                subtitle = conversation.customName.ifBlank { "Named after the item: ${conversation.itemTitle}" },
+                onClick = onRename,
+            )
+            SettingsRow(
+                icon = if (conversation.isArchived) Icons.Outlined.Unarchive else Icons.Outlined.Archive,
+                title = if (conversation.isArchived) "Unarchive" else "Archive",
+                subtitle = if (conversation.isArchived) "Back to the inbox" else "Out of the way until someone writes",
+                onClick = onToggleArchive,
+            )
+            SettingsRow(
+                icon = Icons.Outlined.DeleteOutline,
+                title = "Delete conversation",
+                subtitle = "Clears it for you only",
+                tint = MaterialTheme.colorScheme.error,
+                titleColor = MaterialTheme.colorScheme.error,
+                onClick = onDelete,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RenameConversationDialog(conversation: Conversation, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf(conversation.customName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename conversation") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Text(
+                    "Only you see this name. Leave it blank to use the item's title again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                MarketTextField(
+                    value = name,
+                    onValueChange = { if (it.length <= 80) name = it },
+                    label = "Name",
+                    placeholder = conversation.itemTitle,
+                )
+            }
+        },
+        confirmButton = {
+            PrimaryButton(text = "Save", compact = true, onClick = { onSave(name.trim()) })
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun DeleteConversationDialog(conversation: Conversation, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.DeleteOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(30.dp)) },
+        title = { Text("Delete this conversation?") },
+        text = {
+            Text(
+                "\"${conversation.displayTitle}\" is cleared from your list. ${conversation.firstName.ifBlank { "The other person" }} keeps their copy, and the chat comes back here if either of you writes again.",
+            )
+        },
+        confirmButton = {
+            PrimaryButton(
+                text = "Delete",
+                compact = true,
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+                onClick = onConfirm,
+            )
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** The item's stage behind a conversation, in the words the filter chips use. */
+private fun conversationStage(conversation: Conversation): String = when (conversation.itemStatus.lowercase()) {
+    "pending", "private" -> "negotiating"
+    "public" -> "available"
+    "reserved" -> "reserved"
+    "sold" -> "sold"
+    "rejected" -> "rejected"
+    else -> ""
+}
+
+/** "Pinned" / "Recent" above a shelf of the conversation list. */
+@Composable
+private fun ListShelfLabel(text: String) {
+    Overline(
+        text,
+        modifier = Modifier.padding(start = Spacing.screen, end = Spacing.screen, top = Spacing.md, bottom = Spacing.xs),
+    )
+}
+
+/** Something that happened to the thread itself: a rename, and when. */
+internal data class ThreadEvent(val name: String, val at: Long)
+
+/**
+ * Renames are this person's own, so the thread keeps them itself, on this
+ * phone: each is drawn in the middle of the conversation after whatever
+ * line was last when it happened.
+ */
+internal object ThreadEvents {
+    private fun key(conv: Conversation) = "thread_events_${conv.itemId}_${conv.otherUserId}"
+
+    fun load(context: Context, conv: Conversation): List<ThreadEvent> {
+        val raw = context.getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE).getString(key(conv), null)
+            ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                ThreadEvent(o.optString("name"), o.optLong("at"))
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    fun record(context: Context, conv: Conversation, name: String): List<ThreadEvent> {
+        val events = (load(context, conv) + ThreadEvent(name, System.currentTimeMillis())).takeLast(30)
+        val arr = JSONArray()
+        events.forEach { arr.put(JSONObject().put("name", it.name).put("at", it.at)) }
+        context.getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE)
+            .edit().putString(key(conv), arr.toString()).apply()
+        return events
+    }
+}
+
+/** One row of the thread: a message, or a line about the thread itself. */
+internal sealed class ThreadRow {
+    abstract val key: String
+
+    data class Line(val msg: ChatMessage) : ThreadRow() {
+        override val key: String get() = "m${msg.messageId}"
+    }
+
+    data class System(val event: ThreadEvent, val index: Int) : ThreadRow() {
+        override val key: String get() = "e$index"
+    }
+}
+
+/** Messages in order, with each event slotted after the last line older than it. */
+internal fun buildThreadRows(messages: List<ChatMessage>, events: List<ThreadEvent>): List<ThreadRow> {
+    if (events.isEmpty()) return messages.map { ThreadRow.Line(it) }
+
+    val times = messages.map { Dates.parse(it.sentAt)?.toEpochMilli() ?: Long.MAX_VALUE }
+    val placed = events.sortedBy { it.at }.mapIndexed { index, event ->
+        val position = times.count { it <= event.at }
+        position to ThreadRow.System(event, index)
+    }
+
+    return buildList {
+        for (position in 0..messages.size) {
+            placed.filter { it.first == position }.forEach { add(it.second) }
+            if (position < messages.size) add(ThreadRow.Line(messages[position]))
+        }
+    }
+}
+
+/** The centred line for a rename, the way Messenger notes a changed name. */
+@Composable
+private fun ThreadSystemLine(event: ThreadEvent) {
+    val text = if (event.name.isBlank()) "You removed the conversation name"
+    else "You renamed the conversation to “${event.name}”"
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.xs),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.DriveFileRenameOutline,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(Spacing.xs))
+        Text(
+            text + " · " + timeAgo(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(event.at))),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -5614,7 +6487,7 @@ private fun StudentDetailDialog(
                 Text(
                     "Pinch to zoom",
                     color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp)
                 )
             }
@@ -5987,9 +6860,9 @@ private fun InfoRow(
         Icon(icon, null, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
             modifier = Modifier.size(16.dp).padding(top = 1.dp))
         Spacer(modifier = Modifier.width(8.dp))
-        Text("$label:", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Text("$label:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Medium, modifier = Modifier.width(110.dp))
-        Text(value, fontSize = 13.sp,
+        Text(value, style = MaterialTheme.typography.bodySmall,
             color = if (valueColor == Color.Unspecified) MaterialTheme.colorScheme.onSurface else valueColor,
             modifier = Modifier.weight(1f))
     }
@@ -6020,6 +6893,7 @@ fun AdminSettingsContent(
             verticalArrangement = Arrangement.spacedBy(Spacing.xl),
         ) {
             AppearanceGroup(isDarkMode = isDarkMode, onThemeToggle = onThemeToggle)
+            StoreLocationGroup()
             AboutGroup(role = role)
         }
     }
@@ -6422,6 +7296,21 @@ fun AdminProfileContent(
                 }
             }
 
+            // ── Store location ───────────────────────────────────────────
+
+            // Both roles: a buyer needs to know where to go, and the admin sees
+
+            // exactly what the buyer is shown.
+
+            StoreLocationGroup(
+
+                subtitle = if (isAdmin) "What students see for meet-ups and pickups"
+
+                           else "Meet-ups and walk-in pickups happen here",
+
+            )
+
+
             // ── Account ───────────────────────────────────────────────────
             SettingsGroup(title = "Account") {
                 InfoRowItem(Icons.Outlined.Person, "Full name", fullName)
@@ -6701,7 +7590,15 @@ private fun updateItemStatus(token: String, itemId: Int, status: String): Pair<B
  * acquisition price, so a refusal here surfaces the server's own explanation
  * rather than being second-guessed locally.
  */
-internal fun updateAdminItem(token: String, itemId: Int, status: String? = null, publicPrice: String? = null): Pair<Boolean, String> {
+internal fun updateAdminItem(
+    token: String,
+    itemId: Int,
+    status: String? = null,
+    publicPrice: String? = null,
+    title: String? = null,
+    description: String? = null,
+    categoryId: Int? = null,
+): Pair<Boolean, String> {
     val body = MultipartBody.Builder()
         .setType(MultipartBody.FORM)
         .addFormDataPart("_method", "PUT")
@@ -6709,6 +7606,9 @@ internal fun updateAdminItem(token: String, itemId: Int, status: String? = null,
     if (status != null) {
         body.addFormDataPart("status", status)
     }
+    title?.let { body.addFormDataPart("title", it) }
+    description?.let { body.addFormDataPart("description", it) }
+    categoryId?.takeIf { it > 0 }?.let { body.addFormDataPart("category_id", it.toString()) }
     if (publicPrice != null) {
         body.addFormDataPart("public_price", publicPrice)
     }
@@ -6846,35 +7746,16 @@ private fun PointsTransactionContent(
             AdminPageHeader(title = title, onMenuClick = onMenuClick)
 
             when {
-                isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-                errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.ErrorOutline, null,
-                            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { isInitialLoad = true; isLoading = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                            Text("Retry", color = Color.White)
-                        }
-                    }
-                }
-                transactions.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Filled.Inventory2, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                        Text("No transactions found.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                isLoading -> LoadingState()
+                errorMessage.isNotEmpty() -> ErrorState(
+                    message = errorMessage,
+                    onRetry = { isInitialLoad = true; isLoading = true },
+                )
+                transactions.isEmpty() -> EmptyState(
+                    icon = Icons.Filled.Inventory2,
+                    title = "No transactions found",
+                    message = "There is nothing to show here yet.",
+                )
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -6890,11 +7771,12 @@ private fun PointsTransactionContent(
 
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            shape = MaterialTheme.shapes.medium,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                         ) {
                             Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                                Text(email, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(email, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                                 Text(
                                     "${if (pointsChange > 0) "+" else ""}${pointsChange} pts • $reason",
                                     style = MaterialTheme.typography.bodySmall,
@@ -7032,35 +7914,16 @@ private fun TransactionsContent(
             AdminPageHeader(title = title, onMenuClick = onMenuClick)
 
             when {
-                isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-                errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.ErrorOutline, null,
-                            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { isInitialLoad = true; isLoading = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                            Text("Retry", color = Color.White)
-                        }
-                    }
-                }
-                transactions.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Filled.Inventory2, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                        Text("No transactions found.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                isLoading -> LoadingState()
+                errorMessage.isNotEmpty() -> ErrorState(
+                    message = errorMessage,
+                    onRetry = { isInitialLoad = true; isLoading = true },
+                )
+                transactions.isEmpty() -> EmptyState(
+                    icon = Icons.Filled.Inventory2,
+                    title = "No transactions found",
+                    message = "There is nothing to show here yet.",
+                )
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -7101,11 +7964,12 @@ private fun TransactionsContent(
 
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            shape = MaterialTheme.shapes.medium,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                         ) {
                             Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                                Text(itemTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(itemTitle, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                                 Spacer(Modifier.height(8.dp))
                                 Text("Buyer: $buyerEmail", style = MaterialTheme.typography.bodySmall)
                                 Text("Seller: $sellerName", style = MaterialTheme.typography.bodySmall)
@@ -7260,35 +8124,16 @@ private fun ProfitSummaryContent(
             AdminPageHeader(title = "Profit Summary", onMenuClick = onMenuClick)
 
             when {
-                isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-                errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.ErrorOutline, null,
-                            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { isInitialLoad = true; isLoading = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                            Text("Retry", color = Color.White)
-                        }
-                    }
-                }
-                profitData.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Filled.Inventory2, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                        Text("No profit data available.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                isLoading -> LoadingState()
+                errorMessage.isNotEmpty() -> ErrorState(
+                    message = errorMessage,
+                    onRetry = { isInitialLoad = true; isLoading = true },
+                )
+                profitData.isEmpty() -> EmptyState(
+                    icon = Icons.Filled.Inventory2,
+                    title = "No profit data available",
+                    message = "There is nothing to show here yet.",
+                )
                 else -> Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -7471,35 +8316,16 @@ private fun SalesReportContent(
             AdminPageHeader(title = "Sales Report", onMenuClick = onMenuClick)
 
             when {
-                isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-                errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.ErrorOutline, null,
-                            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { isInitialLoad = true; isLoading = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                            Text("Retry", color = Color.White)
-                        }
-                    }
-                }
-                salesData.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Filled.Inventory2, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                        Text("No sales data found.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                isLoading -> LoadingState()
+                errorMessage.isNotEmpty() -> ErrorState(
+                    message = errorMessage,
+                    onRetry = { isInitialLoad = true; isLoading = true },
+                )
+                salesData.isEmpty() -> EmptyState(
+                    icon = Icons.Filled.Inventory2,
+                    title = "No sales data found",
+                    message = "There is nothing to show here yet.",
+                )
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -7513,11 +8339,12 @@ private fun SalesReportContent(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                                    Text("Sales Summary", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("Sales Summary", style = MaterialTheme.typography.titleMedium)
                                     Spacer(Modifier.height(8.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -7565,11 +8392,12 @@ private fun SalesReportContent(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                                    Text(itemTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(itemTitle, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                                     Spacer(Modifier.height(8.dp))
                                     Text("Buyer: $buyerEmail", style = MaterialTheme.typography.bodySmall)
                                     Text("Seller: $sellerEmail", style = MaterialTheme.typography.bodySmall)
@@ -7709,35 +8537,16 @@ private fun ProfitReportContent(
             AdminPageHeader(title = "Profit Report", onMenuClick = onMenuClick)
 
             when {
-                isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-                errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.ErrorOutline, null,
-                            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { isInitialLoad = true; isLoading = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                            Text("Retry", color = Color.White)
-                        }
-                    }
-                }
-                Money.parse(totalMarkupProfit)?.signum() == 0 && profitByMonth.isEmpty() && topProfitableItems.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Filled.Inventory2, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                        Text("No profit data found.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                isLoading -> LoadingState()
+                errorMessage.isNotEmpty() -> ErrorState(
+                    message = errorMessage,
+                    onRetry = { isInitialLoad = true; isLoading = true },
+                )
+                Money.parse(totalMarkupProfit)?.signum() == 0 && profitByMonth.isEmpty() && topProfitableItems.isEmpty() -> EmptyState(
+                    icon = Icons.Filled.Inventory2,
+                    title = "No profit data found",
+                    message = "There is nothing to show here yet.",
+                )
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -7746,8 +8555,9 @@ private fun ProfitReportContent(
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            shape = MaterialTheme.shapes.medium,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                         ) {
                             Column(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -7761,7 +8571,7 @@ private fun ProfitReportContent(
 
                     if (profitByMonth.isNotEmpty()) {
                         item {
-                            Text("Profit by Month", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text("Profit by Month", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
                         }
                         items(profitByMonth.size) { index ->
                             val month = profitByMonth[index]
@@ -7769,8 +8579,9 @@ private fun ProfitReportContent(
                             val profit = month["profit"] as? Int ?: 0
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -7786,7 +8597,7 @@ private fun ProfitReportContent(
 
                     if (topProfitableItems.isNotEmpty()) {
                         item {
-                            Text("Top Profitable Items", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text("Top Profitable Items", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
                         }
                         items(topProfitableItems.size) { index ->
                             val item = topProfitableItems[index]
@@ -7796,8 +8607,9 @@ private fun ProfitReportContent(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                                     Text(title, fontWeight = FontWeight.Bold)
@@ -7924,35 +8736,16 @@ private fun CategoryReportContent(
             AdminPageHeader(title = "Category Sales Report", onMenuClick = onMenuClick)
 
             when {
-                isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-                errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.ErrorOutline, null,
-                            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { isInitialLoad = true; isLoading = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                            Text("Retry", color = Color.White)
-                        }
-                    }
-                }
-                mostSoldCategory.isEmpty() && categorySales.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Filled.Inventory2, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                        Text("No category data found.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                isLoading -> LoadingState()
+                errorMessage.isNotEmpty() -> ErrorState(
+                    message = errorMessage,
+                    onRetry = { isInitialLoad = true; isLoading = true },
+                )
+                mostSoldCategory.isEmpty() && categorySales.isEmpty() -> EmptyState(
+                    icon = Icons.Filled.Inventory2,
+                    title = "No category data found",
+                    message = "There is nothing to show here yet.",
+                )
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -7962,8 +8755,8 @@ private fun CategoryReportContent(
                         item {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                shape = MaterialTheme.shapes.medium,
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                                 colors = CardDefaults.cardColors(containerColor = LocalMarketAccents.current.success.copy(alpha = 0.1f))
                             ) {
                                 Column(
@@ -7980,7 +8773,7 @@ private fun CategoryReportContent(
 
                     if (categorySales.isNotEmpty()) {
                         item {
-                            Text("All Categories", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text("All Categories", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
                         }
                         items(categorySales.size) { index ->
                             val category = categorySales[index]
@@ -7996,8 +8789,9 @@ private fun CategoryReportContent(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                                     Row(
@@ -8162,35 +8956,16 @@ private fun UserReportContent(
             AdminPageHeader(title = "User Report", onMenuClick = onMenuClick)
 
             when {
-                isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-                errorMessage.isNotEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 24.dp)
-                    ) {
-                        Icon(Icons.Filled.ErrorOutline, null,
-                            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(48.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
-                        Button(onClick = { isInitialLoad = true; isLoading = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkGreen)) {
-                            Text("Retry", color = Color.White)
-                        }
-                    }
-                }
-                activeUsers == 0 && totalStudents == 0 && topBuyers.isEmpty() && topSellers.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Filled.Inventory2, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(64.dp))
-                        Text("No user data available.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                isLoading -> LoadingState()
+                errorMessage.isNotEmpty() -> ErrorState(
+                    message = errorMessage,
+                    onRetry = { isInitialLoad = true; isLoading = true },
+                )
+                activeUsers == 0 && totalStudents == 0 && topBuyers.isEmpty() && topSellers.isEmpty() -> EmptyState(
+                    icon = Icons.Filled.Inventory2,
+                    title = "No user data available",
+                    message = "There is nothing to show here yet.",
+                )
                 else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -8263,7 +9038,7 @@ private fun UserReportContent(
 
                     if (topBuyers.isNotEmpty()) {
                         item {
-                            Text("Top Buyers", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text("Top Buyers", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
                         }
                         items(topBuyers.size) { index ->
                             val buyer = topBuyers[index]
@@ -8273,11 +9048,12 @@ private fun UserReportContent(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                                    Text(email, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text(email, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                                     Spacer(Modifier.height(4.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -8302,7 +9078,7 @@ private fun UserReportContent(
 
                     if (topSellers.isNotEmpty()) {
                         item {
-                            Text("Top Sellers", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text("Top Sellers", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
                         }
                         items(topSellers.size) { index ->
                             val seller = topSellers[index]
@@ -8312,11 +9088,12 @@ private fun UserReportContent(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                                    Text(email, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text(email, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                                     Spacer(Modifier.height(4.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -8341,7 +9118,7 @@ private fun UserReportContent(
 
                     if (userActivityByMonth.isNotEmpty()) {
                         item {
-                            Text("User Activity by Month", fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 4.dp))
+                            Text("User Activity by Month", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 4.dp))
                         }
                         items(userActivityByMonth.size) { index ->
                             val activity = userActivityByMonth[index]
@@ -8350,11 +9127,12 @@ private fun UserReportContent(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                shape = MaterialTheme.shapes.medium,
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.card),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                                    Text(month, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text(month, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
                                     Spacer(Modifier.height(4.dp))
                                     Text(
                                         "$count active users",
