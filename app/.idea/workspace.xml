@@ -4,7 +4,21 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d44e2027-b2cd-4250-890b-92fc890c3e22" name="Changes" comment="" />
+    <list default="true" id="d44e2027-b2cd-4250-890b-92fc890c3e22" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/../.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/gradle.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/gradle.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/google-services.json" beforeDir="false" afterPath="$PROJECT_DIR$/google-services.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/AdminConsoleScreens.kt" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/AdminConsoleScreens.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/AdminDashboard.kt" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/AdminDashboard.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/AdminGcashSettingsDialog.kt" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/AdminGcashSettingsDialog.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/AdminStoreHoursSettingsDialog.kt" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/AdminStoreHoursSettingsDialog.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/PersonalEmailDialog.kt" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/PersonalEmailDialog.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/PersonalEmailPasswordDialog.kt" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/PersonalEmailPasswordDialog.kt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/StoreHoursInfoDialog.kt" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/com/example/fati_market_frontend/StoreHoursInfoDialog.kt" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -21,21 +35,21 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "Ryderhxrzy"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Ryderhxrzy&quot;
   }
-}]]></component>
+}</component>
   <component name="GithubPullRequestsUISettings"><![CDATA[{
   "selectedUrlAndAccountId": {
-    "url": "https://github.com/Ryderhxrzy-Client/Fati-Market-Frontend.git",
+    "url": "https://github.com/Ryderhxrzy-Client/Fati-Market-Mobile",
     "accountId": "7b6a6a33-895b-4cf8-8df8-bb1ba35c4d26"
   }
 }]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 1
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1
+}</component>
   <component name="ProjectId" id="3AevA4X9sqo3QReym1NLGbTn9OU" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -54,7 +68,7 @@
     "cidr.known.project.marker": "true",
     "git-widget-placeholder": "main",
     "kotlin-language-version-configured": "true",
-    "last_opened_file_path": "C:/Users/jhayr/OneDrive/Ryderhxrzy-Client/FatiMarketFrontendMobile/app"
+    "last_opened_file_path": "C:/Users/jhayr/OneDrive/Documents/Mobile/Fati-Market-Mobile/app"
   }
 }]]></component>
   <component name="TaskManager">
