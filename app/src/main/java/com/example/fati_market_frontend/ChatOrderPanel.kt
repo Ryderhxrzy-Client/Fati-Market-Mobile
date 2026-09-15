@@ -271,64 +271,30 @@ internal fun ChatOrderPanel(
                 // Admin: the decisions the server still allows, plus the two
                 // things worth a glance - who is buying, and their receipt.
                 if (!current.isTerminal) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                        // Two different approvals: a GCash payment that has
-                        // landed, or a cash order that is only being accepted.
-                        // The server offers exactly one of them.
-                        if (current.canDo("verify_payment")) {
-                            PrimaryButton(
-                                text = "Approve",
-                                onClick = { pendingAction = "verify_payment" },
-                                modifier = Modifier.weight(1f),
-                                containerColor = accents.success,
-                                compact = true,
-                            )
-                        }
+                    // Two different approvals: a GCash payment that has
+                    // landed, or a cash order that is only being accepted.
+                    // The server offers exactly one of them.
+                    val approve = when {
+                        current.canDo("verify_payment") -> "verify_payment"
+                        current.canDo("approve_order") -> "approve_order"
+                        else -> null
+                    }
+                    val decline = when {
+                        current.canDo("reject_payment") -> "reject_payment"
+                        current.canDo("cancel") -> "cancel"
+                        else -> null
+                    }
 
-                        if (current.canDo("approve_order")) {
-                            PrimaryButton(
-                                text = "Approve",
-                                onClick = { pendingAction = "approve_order" },
-                                modifier = Modifier.weight(1f),
-                                containerColor = accents.success,
-                                compact = true,
-                            )
-                        }
-
-                        if (current.canDo("mark_ready_for_pickup")) {
-                            SecondaryButton(
-                                text = "Ready",
-                                onClick = { pendingAction = "mark_ready_for_pickup" },
-                                modifier = Modifier.weight(1f),
-                                compact = true,
-                            )
-                        }
-
-                        if (current.canDo("complete")) {
-                            PrimaryButton(
-                                text = "Complete",
-                                onClick = { pendingAction = "complete" },
-                                modifier = Modifier.weight(1f),
-                                containerColor = accents.success,
-                                compact = true,
-                            )
-                        }
-
-                        val declineAction = when {
-                            current.canDo("reject_payment") -> "reject_payment"
-                            current.canDo("cancel") -> "cancel"
-                            else -> null
-                        }
-
-                        declineAction?.let { action ->
-                            SecondaryButton(
-                                text = "Decline",
-                                onClick = { pendingAction = action },
-                                modifier = Modifier.weight(1f),
-                                contentColor = MaterialTheme.colorScheme.error,
-                                compact = true,
-                            )
-                        }
+                    if (approve != null || decline != null ||
+                        current.canDo("mark_ready_for_pickup") || current.canDo("complete")
+                    ) {
+                        OrderActionButtons(
+                            order = current,
+                            approve = approve,
+                            decline = decline,
+                            compact = true,
+                            onAction = { pendingAction = it },
+                        )
                     }
                 }
 
