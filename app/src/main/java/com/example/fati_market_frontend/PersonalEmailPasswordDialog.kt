@@ -60,7 +60,7 @@ internal fun PersonalEmailPasswordDialog(
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
-            confirmButton = { Button(enabled = !saving && password.length >= 8 && password == confirmation, onClick = {
+            confirmButton = { Button(shape = MaterialTheme.shapes.small, enabled = !saving && password.length >= 8 && password == confirmation, onClick = {
                 scope.launch {
                     saving = true
                     val result = withContext(Dispatchers.IO) { setPersonalEmailPassword(token, password) }
