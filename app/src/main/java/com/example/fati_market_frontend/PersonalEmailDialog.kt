@@ -204,6 +204,7 @@ internal fun PersonalEmailDialog(
         },
         confirmButton = {
             Button(
+                shape = MaterialTheme.shapes.small,
                 enabled = !working && if (codeSent) {
                     codeVerified && password.length >= 8 && password == passwordConfirmation
                 } else {
