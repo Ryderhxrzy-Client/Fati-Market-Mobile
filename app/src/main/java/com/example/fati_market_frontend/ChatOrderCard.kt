@@ -281,6 +281,13 @@ internal fun ChatOrderCard(msg: ChatMessage, isMe: Boolean) {
                     PickupQrButton(order = order, modifier = Modifier.fillMaxWidth())
                 }
 
+                // Where to go, on the same live card, once the order is one
+                // to collect: the store's pin, with directions a tap away.
+                if (carriesActions && order.isCollectable()) {
+                    SoftDivider()
+                    PickupLocationCard(showMap = !isAdmin)
+                }
+
                 if (isAdmin && carriesActions) {
                     OrderCardActions(order) { pendingAction = it }
                 }
@@ -1095,49 +1102,74 @@ private fun OrderCardActions(order: MarketTransaction, onAction: (String) -> Uni
     }
 
     SoftDivider()
+    OrderActionButtons(order = order, approve = approve, decline = decline, compact = false, onAction = onAction)
+}
 
-    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        approve?.let { action ->
+/**
+ * The admin's decisions on an order, laid out so every label is readable:
+ * the one main next step on its own full-width line, and whatever else is
+ * still allowed on a row beneath it. Shared by the card in the thread and
+ * the strip pinned above it.
+ */
+@Composable
+internal fun OrderActionButtons(
+    order: MarketTransaction,
+    approve: String?,
+    decline: String?,
+    compact: Boolean,
+    onAction: (String) -> Unit,
+) {
+    val accents = LocalMarketAccents.current
+
+    // Approving comes first while it is open; after that, completing is the
+    // handover itself. Staging ("ready for pickup") is never the main step.
+    val main = approve ?: (if (order.canDo("complete")) "complete" else null)
+
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        main?.let { action ->
             PrimaryButton(
-                text = "Approve",
+                text = if (action == "complete") "Complete handover" else "Approve order",
                 onClick = { onAction(action) },
-                modifier = Modifier.weight(1f),
-                icon = Icons.Filled.Check,
+                modifier = Modifier.fillMaxWidth(),
+                icon = if (action == "complete") Icons.Filled.DoneAll else Icons.Filled.Check,
                 containerColor = accents.success,
+                compact = compact,
             )
         }
 
-        decline?.let { action ->
-            SecondaryButton(
-                text = "Decline",
-                onClick = { onAction(action) },
-                modifier = Modifier.weight(1f),
-                contentColor = MaterialTheme.colorScheme.error,
-            )
+        val secondary = buildList {
+            if (order.canDo("mark_ready_for_pickup")) add("mark_ready_for_pickup")
+            if (order.canDo("complete") && main != "complete") add("complete")
+            decline?.let { add(it) }
         }
-    }
 
-    // Once the money is settled these two are the whole handover, so they
-    // always sit together: stage it, then hand it over.
-    if (order.canDo("mark_ready_for_pickup") || order.canDo("complete")) {
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            if (order.canDo("mark_ready_for_pickup")) {
-                SecondaryButton(
-                    text = "Ready for pickup",
-                    onClick = { onAction("mark_ready_for_pickup") },
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Filled.Inventory,
-                )
-            }
-
-            if (order.canDo("complete")) {
-                PrimaryButton(
-                    text = "Complete",
-                    onClick = { onAction("complete") },
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Filled.DoneAll,
-                    containerColor = accents.success,
-                )
+        if (secondary.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                secondary.forEach { action ->
+                    when (action) {
+                        "mark_ready_for_pickup" -> SecondaryButton(
+                            text = "Ready for pickup",
+                            onClick = { onAction(action) },
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Filled.Inventory,
+                            compact = compact,
+                        )
+                        "complete" -> SecondaryButton(
+                            text = "Complete",
+                            onClick = { onAction(action) },
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Filled.DoneAll,
+                            compact = compact,
+                        )
+                        else -> SecondaryButton(
+                            text = "Decline",
+                            onClick = { onAction(action) },
+                            modifier = Modifier.weight(1f),
+                            contentColor = MaterialTheme.colorScheme.error,
+                            compact = compact,
+                        )
+                    }
+                }
             }
         }
     }
