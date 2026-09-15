@@ -1,6 +1,14 @@
 package com.fati_market.auth
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
+import java.io.IOException
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -9,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -57,10 +66,14 @@ private val googleHttpClient: OkHttpClient = OkHttpClient.Builder()
  * still sees their accounts - filtering to previously authorised ones shows an
  * empty sheet on a first run, which reads as "Google is broken".
  *
- * Returns null when the person backs out of the sheet; throws when Google
- * itself failed, so the screen can tell those two apart.
+ * Returns null when the person backs out of the sheet - that is a choice, not
+ * a failure. Throws [GoogleSignInFailure], already worded for the screen, for
+ * everything else: the phone being offline, Play services unable to list any
+ * account, an unreadable token.
  */
 suspend fun requestGoogleIdToken(context: Context): String? {
+    if (!isOnline(context)) throw GoogleSignInFailure(OFFLINE_MESSAGE)
+
     val option = GetGoogleIdOption.Builder()
         .setFilterByAuthorizedAccounts(false)
         .setServerClientId(GOOGLE_WEB_CLIENT_ID)
@@ -70,12 +83,58 @@ suspend fun requestGoogleIdToken(context: Context): String? {
         .addCredentialOption(option)
         .build()
 
-    val response = CredentialManager.create(context).getCredential(context, request)
-    val credential = response.credential
+    // The "Sign in with Google" chooser: the flow a tapped button is meant to
+    // open, and the one that still works when the bottom sheet above has no
+    // account to suggest - which Play services reports as "no credentials".
+    val chooser = GetCredentialRequest.Builder()
+        .addCredentialOption(GetSignInWithGoogleOption.Builder(GOOGLE_WEB_CLIENT_ID).build())
+        .build()
 
-    return runCatching {
-        GoogleIdTokenCredential.createFrom(credential.data).idToken
-    }.getOrNull()
+    val manager = CredentialManager.create(context)
+
+    for ((attempt, current) in listOf(request, chooser).withIndex()) {
+        try {
+            val response = manager.getCredential(context, current)
+
+            return try {
+                GoogleIdTokenCredential.createFrom(response.credential.data).idToken
+            } catch (e: GoogleIdTokenParsingException) {
+                throw GoogleSignInFailure(describeGoogleSignInFailure(e), e)
+            }
+        } catch (e: GetCredentialCancellationException) {
+            return null
+        } catch (e: NoCredentialException) {
+            // The sheet had nothing to offer: try the full chooser before
+            // giving up. If that has nothing either, the build's signing key
+            // is almost certainly not registered - say so, with the key.
+            if (attempt == 0) continue
+            throw GoogleSignInFailure(noGoogleAccountMessage(appSigningSha1(context)), e)
+        } catch (e: GetCredentialException) {
+            throw GoogleSignInFailure(describeGoogleSignInFailure(e), e)
+        }
+    }
+
+    return null
+}
+
+/**
+ * The SHA-1 of the certificate this APK is signed with - the fingerprint the
+ * Google Cloud project must list for Google sign-in to offer any account.
+ */
+fun appSigningSha1(context: Context): String? = runCatching {
+    val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+    val signature = info.signingInfo?.apkContentsSigners?.firstOrNull() ?: return null
+    val digest = java.security.MessageDigest.getInstance("SHA-1").digest(signature.toByteArray())
+    digest.joinToString(":") { "%02X".format(it) }
+}.getOrNull()
+
+/** Whether the phone currently has a validated route to the internet. */
+private fun isOnline(context: Context): Boolean {
+    val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+    val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
+
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+        capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 }
 
 /**
@@ -221,8 +280,11 @@ private fun call(request: Request): GoogleAuthResult =
                 code = response.code,
             )
         }
+    } catch (e: IOException) {
+        // Weak Wi-Fi is the common case here: say so, not "timeout".
+        GoogleAuthResult(false, describeNetworkFailure(e), null)
     } catch (e: Exception) {
-        GoogleAuthResult(false, e.message ?: "Network error", null)
+        GoogleAuthResult(false, describeRequestFailure(e), null)
     }
 
 /**
