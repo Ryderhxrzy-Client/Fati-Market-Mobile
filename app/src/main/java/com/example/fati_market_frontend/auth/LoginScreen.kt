@@ -155,7 +155,7 @@ fun LoginScreen(navController: NavController) {
                     }
                 }
             } catch (e: Exception) {
-                errorMessage = "Login failed: ${e.message}"
+                errorMessage = describeRequestFailure(e)
             } finally {
                 isLoading = false
             }
@@ -279,7 +279,7 @@ fun LoginScreen(navController: NavController) {
                                 else -> errorMessage = result.message
                             }
                         } catch (e: Exception) {
-                            errorMessage = "Google sign-in failed: ${e.message}"
+                            errorMessage = describeGoogleSignInFailure(e)
                         } finally {
                             isLoading = false
                         }

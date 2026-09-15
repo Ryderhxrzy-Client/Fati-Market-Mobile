@@ -137,7 +137,7 @@ fun SignUpScreen(navController: NavController) {
                             errorMessage = result.message
                         }
                     } catch (e: Exception) {
-                        errorMessage = "Google sign-up failed: ${e.message}"
+                        errorMessage = describeGoogleSignInFailure(e)
                     } finally {
                         isLoading = false
                     }
