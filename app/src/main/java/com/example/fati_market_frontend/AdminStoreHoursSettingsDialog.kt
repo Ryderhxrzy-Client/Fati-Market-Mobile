@@ -1,17 +1,58 @@
 package com.fati_market
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.NightsStay
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.fati_market.ui.components.ChoiceChip
+import com.fati_market.ui.components.ErrorState
+import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.LoadingState
 import com.fati_market.ui.components.MarketPageTopBar
+import com.fati_market.ui.components.MarketTextField
+import com.fati_market.ui.components.PrimaryButton
+import com.fati_market.ui.components.RowDivider
+import com.fati_market.ui.components.SettingsGroup
+import com.fati_market.ui.components.SettingsRow
+import com.fati_market.ui.components.StatusTone
+import com.fati_market.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -59,97 +100,145 @@ internal fun AdminStoreHoursSettingsDialog(onDismiss: () -> Unit) {
         loading = false
     }
 
+    fun save() {
+        val minutes = slotMinutes.toIntOrNull()
+        error = when {
+            !openTime.isBefore(closeTime) -> "Closing time must be after opening time."
+            openDays.isEmpty() -> "Choose at least one open day."
+            minutes == null || minutes !in 5..240 -> "Slot length must be from 5 to 240 minutes."
+            else -> null
+        }
+        if (error != null) return
+        saving = true
+        success = false
+        scope.launch {
+            try {
+                when (val result = withContext(Dispatchers.IO) {
+                    MarketplaceApi.saveStoreHours(token, openTime.toString(), closeTime.toString(), openDays, minutes!!)
+                }) {
+                    is MarketplaceApi.Result.Ok -> {
+                        openTime = result.value.openTime
+                        closeTime = result.value.closeTime
+                        openDays = result.value.openDays
+                        slotMinutes = result.value.slotMinutes.toString()
+                        success = true
+                    }
+                    is MarketplaceApi.Result.Failure -> error = result.message
+                }
+            } finally { saving = false }
+        }
+    }
+
     if (editingOpen) StoreTimePicker("Opening time", openTime, { editingOpen = false }) { openTime = it; success = false }
     if (editingClose) StoreTimePicker("Closing time", closeTime, { editingClose = false }) { closeTime = it; success = false }
 
-    Dialog(onDismissRequest = { if (!saving) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    Dialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column {
                 MarketPageTopBar(title = "Store hours & booking slots", onBack = { if (!saving) onDismiss() })
-                Column(
-                    Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text("These hours are shown to student sellers and used to validate every meet-up booking. ENV values are only used until you save here.")
-                    if (loading) CircularProgressIndicator()
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    if (!loading && !loaded) Button(onClick = { reload++ }) { Text("Retry") }
-                    if (success) Text("Store hours saved.", color = MaterialTheme.colorScheme.primary)
 
-                    if (loaded) {
-                        TimeSettingButton("Opening time", openTime, !saving) { editingOpen = true }
-                        TimeSettingButton("Closing time", closeTime, !saving) { editingClose = true }
-                        Text("Open days", style = MaterialTheme.typography.titleSmall)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            (1..7).forEach { day ->
-                                val label = DayOfWeek.of(day).getDisplayName(TextStyle.SHORT, Locale.getDefault())
-                                FilterChip(
-                                    selected = day in openDays,
-                                    onClick = {
-                                        openDays = if (day in openDays) openDays - day else openDays + day
-                                        success = false
-                                    },
-                                    enabled = !saving,
-                                    label = { Text(label) },
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .navigationBarsPadding()
+                        .padding(horizontal = Spacing.screen, vertical = Spacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xl),
+                ) {
+                    InfoBanner(
+                        text = "Shown to student sellers and used to validate every meet-up booking. " +
+                            "The server's defaults apply only until you save here.",
+                        icon = Icons.Outlined.Info,
+                    )
+
+                    when {
+                        loading -> LoadingState(
+                            modifier = Modifier.fillMaxWidth().height(140.dp),
+                            message = "Loading store hours…",
+                        )
+                        !loaded -> ErrorState(
+                            title = "Store hours unavailable",
+                            message = error ?: "Could not load the store hours.",
+                            onRetry = { reload++ },
+                            modifier = Modifier.fillMaxWidth().height(280.dp),
+                        )
+                        else -> {
+                            if (success) {
+                                InfoBanner(
+                                    text = "Store hours saved.",
+                                    tone = StatusTone.Success,
+                                    icon = Icons.Filled.CheckCircle,
                                 )
                             }
-                        }
-                        OutlinedTextField(
-                            value = slotMinutes,
-                            onValueChange = { slotMinutes = it.filter(Char::isDigit); success = false },
-                            label = { Text("Booking slot length (minutes)") },
-                            supportingText = { Text("5 to 240 minutes. A booking must finish before closing time.") },
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            enabled = !saving,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Button(
-                            enabled = !saving,
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                val minutes = slotMinutes.toIntOrNull()
-                                error = when {
-                                    !openTime.isBefore(closeTime) -> "Closing time must be after opening time."
-                                    openDays.isEmpty() -> "Choose at least one open day."
-                                    minutes == null || minutes !in 5..240 -> "Slot length must be from 5 to 240 minutes."
-                                    else -> null
-                                }
-                                if (error == null) {
-                                    saving = true
-                                    success = false
-                                    scope.launch {
-                                        try {
-                                            when (val result = withContext(Dispatchers.IO) {
-                                                MarketplaceApi.saveStoreHours(token, openTime.toString(), closeTime.toString(), openDays, minutes!!)
-                                            }) {
-                                                is MarketplaceApi.Result.Ok -> {
-                                                    openTime = result.value.openTime
-                                                    closeTime = result.value.closeTime
-                                                    openDays = result.value.openDays
-                                                    slotMinutes = result.value.slotMinutes.toString()
-                                                    success = true
+                            error?.let {
+                                InfoBanner(text = it, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
+                            }
+
+                            SettingsGroup(title = "Opening times") {
+                                SettingsRow(
+                                    icon = Icons.Outlined.WbSunny,
+                                    title = "Opening time",
+                                    subtitle = openTime.format(ADMIN_TIME_FORMAT),
+                                    onClick = if (saving) null else ({ editingOpen = true }),
+                                )
+                                RowDivider()
+                                SettingsRow(
+                                    icon = Icons.Outlined.NightsStay,
+                                    title = "Closing time",
+                                    subtitle = closeTime.format(ADMIN_TIME_FORMAT),
+                                    onClick = if (saving) null else ({ editingClose = true }),
+                                )
+                            }
+
+                            SettingsGroup(title = "Open days") {
+                                FlowRow(
+                                    modifier = Modifier.padding(Spacing.lg),
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                                ) {
+                                    (1..7).forEach { day ->
+                                        ChoiceChip(
+                                            label = DayOfWeek.of(day).getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                                            selected = day in openDays,
+                                            onClick = {
+                                                if (!saving) {
+                                                    openDays = if (day in openDays) openDays - day else openDays + day
+                                                    success = false
                                                 }
-                                                is MarketplaceApi.Result.Failure -> error = result.message
-                                            }
-                                        } finally { saving = false }
+                                            },
+                                        )
                                     }
                                 }
-                            },
-                        ) { Text(if (saving) "Saving..." else "Save store hours") }
+                            }
+
+                            SettingsGroup(title = "Booking slots") {
+                                Column(modifier = Modifier.padding(Spacing.lg)) {
+                                    MarketTextField(
+                                        value = slotMinutes,
+                                        onValueChange = { slotMinutes = it.filter(Char::isDigit); success = false },
+                                        label = "Slot length (minutes)",
+                                        supportingText = "5 to 240 minutes. A booking must finish before closing time.",
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        enabled = !saving,
+                                    )
+                                }
+                            }
+
+                            PrimaryButton(
+                                text = "Save store hours",
+                                loading = saving,
+                                onClick = { save() },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
+
+                    Spacer(Modifier.height(Spacing.sm))
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun TimeSettingButton(label: String, value: LocalTime, enabled: Boolean, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth()) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
-            Text(value.format(ADMIN_TIME_FORMAT), style = MaterialTheme.typography.titleMedium)
         }
     }
 }
