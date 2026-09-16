@@ -65,7 +65,7 @@ object InAppNotifications {
 
         // Item events share the order banner shape: a headline and a body.
         "order_placed", "payment_proof_submitted", "order_update",
-        "item_update", "meetup_reminder" -> InAppNotification.Order(
+        "item_update" /* , "meetup_reminder" - BOOKING/SCHEDULE DISABLED */ -> InAppNotification.Order(
             transactionId = data["transaction_id"]?.toIntOrNull() ?: 0,
             itemId = data["item_id"]?.toIntOrNull() ?: 0,
             title = data["title"].orEmpty().ifBlank { "Order update" },
