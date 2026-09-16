@@ -326,22 +326,25 @@ internal fun ItemOfferCard(msg: ChatMessage, isMe: Boolean) {
     var offerAction by remember { mutableStateOf<String?>(null) }
     var confirmAcquire by remember { mutableStateOf(false) }
     var acquireError by remember { mutableStateOf<String?>(null) }
-    var scheduling by remember { mutableStateOf(false) }
+    // BOOKING/SCHEDULE DISABLED - no longer required
+    // var scheduling by remember { mutableStateOf(false) }
 
-    fun pickSchedule() {
-        scheduling = true
-    }
+    // BOOKING/SCHEDULE DISABLED - no longer required
+    // fun pickSchedule() {
+        // scheduling = true
+    // }
 
-    if (scheduling) {
-        MeetupScheduleDialog(
-            itemId = listing.itemId,
-            token = token,
-            current = listing.meetupSchedule,
-            onDismiss = { scheduling = false },
-            // The chat's poll repaints the card with the new time.
-            onSaved = { scheduling = false },
-        )
-    }
+    // BOOKING/SCHEDULE DISABLED - no longer required
+    // if (scheduling) {
+        // MeetupScheduleDialog(
+            // itemId = listing.itemId,
+            // token = token,
+            // current = listing.meetupSchedule,
+            // onDismiss = { scheduling = false },
+            // // The chat's poll repaints the card with the new time.
+            // onSaved = { scheduling = false },
+        // )
+    // }
 
     if (showItem) {
         ChatItemPreviewDialog(
@@ -471,9 +474,10 @@ internal fun ItemOfferCard(msg: ChatMessage, isMe: Boolean) {
                         )
                     }
 
-                    listing.meetupSchedule?.let { schedule ->
-                        Dates.short(schedule)?.let { SummaryRow("Meet-up", it) }
-                    }
+                    // BOOKING/SCHEDULE DISABLED - no longer required
+                    // listing.meetupSchedule?.let { schedule ->
+                        // Dates.short(schedule)?.let { SummaryRow("Meet-up", it) }
+                    // }
 
                     ItemStatusPill(listing.status, offerAccepted = listing.offerAccepted)
 
@@ -508,12 +512,13 @@ internal fun ItemOfferCard(msg: ChatMessage, isMe: Boolean) {
                             // this with photographs; this button is the
                             // manual twin, like Complete has on an order.
                             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                                SecondaryButton(
-                                    text = if (listing.meetupSchedule == null) "Set schedule" else "Change schedule",
-                                    onClick = { pickSchedule() },
-                                    modifier = Modifier.weight(1f),
-                                    icon = Icons.Filled.Event,
-                                )
+                                // BOOKING/SCHEDULE DISABLED - no longer required
+                                // SecondaryButton(
+                                    // text = if (listing.meetupSchedule == null) "Set schedule" else "Change schedule",
+                                    // onClick = { pickSchedule() },
+                                    // modifier = Modifier.weight(1f),
+                                    // icon = Icons.Filled.Event,
+                                // )
 
                                 PrimaryButton(
                                     text = "Mark acquired",
@@ -818,7 +823,8 @@ internal fun ItemOfferPanel(
     var refreshKey by remember(itemId) { mutableStateOf(0) }
     var offerAction by remember { mutableStateOf<String?>(null) }
     var confirmAcquire by remember { mutableStateOf(false) }
-    var scheduling by remember { mutableStateOf(false) }
+    // BOOKING/SCHEDULE DISABLED - no longer required
+    // var scheduling by remember { mutableStateOf(false) }
 
     LaunchedEffect(itemId, refreshKey) {
         if (itemId <= 0) return@LaunchedEffect
@@ -854,15 +860,16 @@ internal fun ItemOfferPanel(
         )
     }
 
-    if (scheduling) {
-        MeetupScheduleDialog(
-            itemId = item.itemId,
-            token = token,
-            current = item.meetupSchedule,
-            onDismiss = { scheduling = false },
-            onSaved = { scheduling = false; refreshKey++ },
-        )
-    }
+    // BOOKING/SCHEDULE DISABLED - no longer required
+    // if (scheduling) {
+        // MeetupScheduleDialog(
+            // itemId = item.itemId,
+            // token = token,
+            // current = item.meetupSchedule,
+            // onDismiss = { scheduling = false },
+            // onSaved = { scheduling = false; refreshKey++ },
+        // )
+    // }
 
     if (confirmAcquire) {
         AcquireOfferDialog(
@@ -904,12 +911,13 @@ internal fun ItemOfferPanel(
                 }
 
                 isAdmin -> {
-                    SecondaryButton(
-                        text = if (item.meetupSchedule == null) "Set schedule" else "Change schedule",
-                        onClick = { scheduling = true },
-                        modifier = Modifier.weight(1f),
-                        compact = true,
-                    )
+                    // BOOKING/SCHEDULE DISABLED - no longer required
+                    // SecondaryButton(
+                        // text = if (item.meetupSchedule == null) "Set schedule" else "Change schedule",
+                        // onClick = { scheduling = true },
+                        // modifier = Modifier.weight(1f),
+                        // compact = true,
+                    // )
                     PrimaryButton(
                         text = "Mark acquired",
                         onClick = { confirmAcquire = true },
