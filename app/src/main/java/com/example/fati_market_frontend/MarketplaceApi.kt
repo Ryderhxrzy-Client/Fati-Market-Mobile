@@ -264,10 +264,11 @@ internal object MarketplaceApi {
             put("acquisition_price", price)
         }) { parseItem(it.getJSONObject("data")) }
 
-    fun setMeetupSchedule(token: String, itemId: Int, schedule: String?): Result<Item> =
-        post(token, "/admin/items/$itemId/meetup", JSONObject().apply {
-            put("meetup_schedule", schedule ?: JSONObject.NULL)
-        }) { parseItem(it.getJSONObject("data")) }
+    // BOOKING/SCHEDULE DISABLED - no longer required
+    // fun setMeetupSchedule(token: String, itemId: Int, schedule: String?): Result<Item> =
+        // post(token, "/admin/items/$itemId/meetup", JSONObject().apply {
+            // put("meetup_schedule", schedule ?: JSONObject.NULL)
+        // }) { parseItem(it.getJSONObject("data")) }
 
     /**
      * Record that the item was physically received and verified. This is what
