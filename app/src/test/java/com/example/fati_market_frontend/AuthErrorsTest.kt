@@ -6,15 +6,19 @@ import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
 import androidx.credentials.exceptions.NoCredentialException
+import com.fati_market.auth.GOOGLE_REAUTH_MESSAGE
 import com.fati_market.auth.GoogleSignInFailure
 import com.fati_market.auth.NO_GOOGLE_ACCOUNT_MESSAGE
 import com.fati_market.auth.OFFLINE_MESSAGE
+import com.fati_market.auth.describeCancelledSignIn
 import com.fati_market.auth.describeGoogleSignInFailure
+import com.fati_market.auth.describeLegacyStatus
 import com.fati_market.auth.describeNetworkFailure
 import com.fati_market.auth.describeRequestFailure
 import com.fati_market.auth.noGoogleAccountMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
@@ -71,6 +75,61 @@ class AuthErrorsTest {
         val message = describeNetworkFailure(IOException("unexpected end of stream"))
 
         assertTrue(message.startsWith("Network error: unexpected end of stream"))
+    }
+
+    /**
+     * The bug: Play services answers "[16] Account reauth failed." as a
+     * *cancellation*, so a phone whose stored credential had gone stale was
+     * treated exactly like a student closing the sheet - nothing was said, and
+     * nothing was retried. That is the failure the legacy chooser survives, so
+     * it has to be recognisable.
+     */
+    @Test
+    fun `a cancellation carrying a status code is a failure, not a dismissal`() {
+        val message = describeCancelledSignIn("[16] Account reauth failed.")
+
+        assertEquals(GOOGLE_REAUTH_MESSAGE, message)
+        assertFalse(message!!.contains("[16]"))
+    }
+
+    @Test
+    fun `a genuine dismissal stays quiet`() {
+        assertNull(describeCancelledSignIn("activity is cancelled by the user."))
+        assertNull(describeCancelledSignIn(null))
+        assertNull(describeCancelledSignIn(""))
+    }
+
+    @Test
+    fun `a stale account is marked for the legacy chooser, a cancellation is not`() {
+        assertTrue(GoogleSignInFailure("stale", retryWithLegacy = true).retryWithLegacy)
+        assertFalse(GoogleSignInFailure(OFFLINE_MESSAGE).retryWithLegacy)
+    }
+
+    @Test
+    fun `a developer error names the fingerprint that has to be registered`() {
+        val message = describeCancelledSignIn("[10] Developer console is not set up correctly.", "AB:CD:EF")
+
+        assertTrue(message!!.contains("AB:CD:EF"))
+        assertTrue(message.contains("com.fati_market"))
+    }
+
+    @Test
+    fun `an unrecognised status code keeps the detail Google gave`() {
+        val message = describeCancelledSignIn("[8] Unknown internal error.")
+
+        assertTrue(message!!.contains("Unknown internal error."))
+        assertFalse(message.contains("[8]"))
+    }
+
+    @Test
+    fun `the legacy chooser's own codes get the same words`() {
+        // SIGN_IN_FAILED is where a stale account lands in the legacy API.
+        assertEquals(GOOGLE_REAUTH_MESSAGE, describeLegacyStatus(12500))
+        assertEquals(GOOGLE_REAUTH_MESSAGE, describeLegacyStatus(4))
+        assertTrue(describeLegacyStatus(7).contains("internet connection"))
+        assertTrue(describeLegacyStatus(10, "AB:CD:EF").contains("AB:CD:EF"))
+        assertTrue(describeLegacyStatus(12502).contains("already in progress"))
+        assertTrue(describeLegacyStatus(999).contains("code 999"))
     }
 
     @Test

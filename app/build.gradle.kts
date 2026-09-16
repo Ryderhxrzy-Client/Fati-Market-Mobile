@@ -91,6 +91,14 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
+    // The legacy chooser, kept as the fallback behind Credential Manager.
+    // Credential Manager gives up on a phone whose stored Google credential has
+    // gone stale - "[16] Account reauth failed" - because it cannot run the
+    // recovery Play services offers. This one does, which is the whole reason
+    // it is still here. Both mint the token for the same web client ID, so the
+    // server cannot tell which of the two produced it.
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
+
     // Walk-in pickup QR: core renders the buyer's code as a bitmap, and the
     // embedded scanner gives Admin the camera screen that reads it.
     implementation("com.google.zxing:core:3.5.3")

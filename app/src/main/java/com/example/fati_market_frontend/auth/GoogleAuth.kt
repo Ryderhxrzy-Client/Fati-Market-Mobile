@@ -1,9 +1,17 @@
 package com.fati_market.auth
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.util.Log
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
+import com.google.android.gms.common.api.ApiException
+import kotlinx.coroutines.CompletableDeferred
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
@@ -50,6 +58,8 @@ const val GOOGLE_WEB_CLIENT_ID = "314372663644-hftntsft9bf2kfnft6dflc77gt4pefro.
 
 /** Whether the build has been given a client ID to sign in with. */
 val googleSignInConfigured: Boolean get() = GOOGLE_WEB_CLIENT_ID.isNotBlank()
+
+private const val TAG = "FatiGoogleAuth"
 
 private const val API = "https://fati-api.alertaraqc.com/api"
 
@@ -102,19 +112,176 @@ suspend fun requestGoogleIdToken(context: Context): String? {
                 throw GoogleSignInFailure(describeGoogleSignInFailure(e), e)
             }
         } catch (e: GetCredentialCancellationException) {
-            return null
+            Log.w(TAG, "attempt $attempt cancelled: ${e.type} / ${e.message}", e)
+
+            // Play services reports several real failures as a cancellation,
+            // with the status code in the message. "[16] Account reauth
+            // failed." is the one that matters: the phone's stored credential
+            // has gone stale, and Credential Manager has no way to run the
+            // recovery Play services is offering. The legacy chooser does, so
+            // this is handed on rather than swallowed.
+            val failure = describeCancelledSignIn(e.message, appSigningSha1(context))
+                ?: return null
+
+            if (attempt == 0) continue
+            throw GoogleSignInFailure(failure, e, retryWithLegacy = true)
         } catch (e: NoCredentialException) {
+            Log.w(TAG, "attempt $attempt no-credential: ${e.type} / ${e.message}", e)
             // The sheet had nothing to offer: try the full chooser before
             // giving up. If that has nothing either, the build's signing key
             // is almost certainly not registered - say so, with the key.
             if (attempt == 0) continue
-            throw GoogleSignInFailure(noGoogleAccountMessage(appSigningSha1(context)), e)
+            throw GoogleSignInFailure(
+                noGoogleAccountMessage(appSigningSha1(context)),
+                e,
+                retryWithLegacy = true,
+            )
         } catch (e: GetCredentialException) {
-            throw GoogleSignInFailure(describeGoogleSignInFailure(e), e)
+            Log.e(TAG, "attempt $attempt failed: ${e.type} / ${e.message}", e)
+            throw GoogleSignInFailure(describeGoogleSignInFailure(e), e, retryWithLegacy = true)
         }
     }
 
     return null
+}
+
+// ── The legacy chooser, behind Credential Manager ────────────────────────────
+
+/**
+ * "Continue with Google" as one awaitable call, with the fallback built in.
+ *
+ * Credential Manager stays the default: it is the API Google supports, and on
+ * a healthy phone it is the whole story. It has one gap this app kept falling
+ * into - when the phone's stored Google credential has gone stale, Play
+ * services answers "[16] Account reauth failed" and stops, because Credential
+ * Manager cannot launch the recovery that Play services is, in the same
+ * breath, offering ("GetToken failed with status code and recovery intent").
+ *
+ * The legacy chooser runs that recovery, which is why a sign-in that dies here
+ * still succeeds there. So it is tried second rather than not at all.
+ *
+ * Both mint the token for [GOOGLE_WEB_CLIENT_ID], so the `aud` the server
+ * checks is identical and the backend needs to know nothing about any of this.
+ *
+ * Returns null when the person backs out of either chooser.
+ */
+@androidx.compose.runtime.Composable
+fun rememberGoogleIdTokenRequest(): GoogleIdTokenRequest {
+    val pending = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<CompletableDeferred<String?>?>(null)
+    }
+
+    // Read once, here, because the result callback has no Context of its own -
+    // and a DEVELOPER_ERROR is useless without naming the key it refused.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val signingSha1 = androidx.compose.runtime.remember(context) { appSigningSha1(context) }
+
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val waiting = pending.value ?: return@rememberLauncherForActivityResult
+        pending.value = null
+
+        try {
+            waiting.complete(legacyIdTokenFrom(result.data, signingSha1))
+        } catch (e: Throwable) {
+            waiting.completeExceptionally(e)
+        }
+    }
+
+    return androidx.compose.runtime.remember(launcher) {
+        GoogleIdTokenRequest(pending) { launcher.launch(it) }
+    }
+}
+
+/**
+ * The two choosers behind one `invoke`, so a screen awaits it like any other
+ * suspending call: `requestIdToken(context)`.
+ */
+class GoogleIdTokenRequest internal constructor(
+    private val pending: androidx.compose.runtime.MutableState<CompletableDeferred<String?>?>,
+    private val launch: (Intent) -> Unit,
+) {
+    suspend operator fun invoke(context: Context): String? =
+        try {
+            requestGoogleIdToken(context)
+        } catch (primary: GoogleSignInFailure) {
+            if (!primary.retryWithLegacy) throw primary
+
+            Log.w(TAG, "credential manager failed, falling back to the legacy chooser", primary)
+            awaitLegacyChooser(context, primary)
+        }
+
+    private suspend fun awaitLegacyChooser(context: Context, primary: GoogleSignInFailure): String? {
+        val deferred = CompletableDeferred<String?>()
+        pending.value = deferred
+
+        try {
+            startLegacySignIn(context, launch)
+        } catch (e: Throwable) {
+            pending.value = null
+            // The fallback could not even start, so the first failure is the
+            // one worth showing - this one is an implementation detail.
+            Log.e(TAG, "legacy chooser could not be started", e)
+            throw primary
+        }
+
+        return deferred.await()
+    }
+}
+
+/**
+ * The legacy client, asked for an ID token minted for the same web client.
+ *
+ * `requestEmail` costs nothing and makes the chooser show addresses, which is
+ * what a student is picking between.
+ */
+private fun legacyGoogleSignInClient(context: Context): GoogleSignInClient =
+    GoogleSignIn.getClient(
+        context,
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(GOOGLE_WEB_CLIENT_ID)
+            .requestEmail()
+            .build(),
+    )
+
+/**
+ * Open the legacy chooser.
+ *
+ * Signed out first, deliberately: the client otherwise reuses the last account
+ * silently, and the cached account is exactly the one that just failed. The
+ * launch is chained onto that so the two cannot race.
+ */
+private fun startLegacySignIn(context: Context, launch: (Intent) -> Unit) {
+    val client = legacyGoogleSignInClient(context)
+
+    client.signOut().addOnCompleteListener {
+        launch(client.signInIntent)
+    }
+}
+
+/**
+ * The ID token out of what the chooser handed back.
+ *
+ * Null means the person closed it. Anything else that went wrong is raised
+ * already worded, the same as the Credential Manager path.
+ */
+private fun legacyIdTokenFrom(data: Intent?, signingSha1: String?): String? {
+    if (data == null) return null
+
+    return try {
+        val account = GoogleSignIn.getSignedInAccountFromIntent(data)
+            .getResult(ApiException::class.java)
+
+        account.idToken ?: throw GoogleSignInFailure(
+            "Google signed in but returned no token this app could use. Please try again.",
+        )
+    } catch (e: ApiException) {
+        Log.w(TAG, "legacy chooser failed: ${e.statusCode} / ${e.message}", e)
+
+        if (e.statusCode == GoogleSignInStatusCodes.SIGN_IN_CANCELLED) null
+        else throw GoogleSignInFailure(describeLegacyStatus(e.statusCode, signingSha1), e)
+    }
 }
 
 /**

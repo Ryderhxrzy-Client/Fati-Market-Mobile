@@ -33,6 +33,9 @@ import kotlinx.coroutines.withContext
 fun SignUpScreen(navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Credential Manager, with the legacy chooser behind it. Held here rather
+    // than called inline because the fallback launches an activity for result.
+    val requestIdToken = rememberGoogleIdTokenRequest()
 
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -117,7 +120,7 @@ fun SignUpScreen(navController: NavController) {
                     isLoading = true
 
                     try {
-                        val idToken = requestGoogleIdToken(context)
+                        val idToken = requestIdToken(context)
 
                         if (idToken == null) {
                             isLoading = false

@@ -68,6 +68,9 @@ fun LoginScreen(navController: NavController) {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Credential Manager, with the legacy chooser behind it. Held here rather
+    // than called inline because the fallback launches an activity for result.
+    val requestIdToken = rememberGoogleIdTokenRequest()
     val focusManager = LocalFocusManager.current
 
     fun goToDashboard() {
@@ -252,7 +255,7 @@ fun LoginScreen(navController: NavController) {
                         isLoading = true
 
                         try {
-                            val idToken = requestGoogleIdToken(context)
+                            val idToken = requestIdToken(context)
 
                             if (idToken == null) {
                                 // They backed out of the sheet, which is
