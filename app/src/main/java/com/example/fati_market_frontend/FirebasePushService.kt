@@ -126,8 +126,9 @@ class FatiFirebaseMessagingService : FirebaseMessagingService() {
             // Listing lifecycle: offer accepted / declined / scheduled, and
             // the 6h / 1h / 30m meet-up reminders. Same channel - these are
             // the seller's equivalent of an order update.
-            "item_update",
-            "meetup_reminder" -> showOrderNotification(this, data)
+            "item_update" -> showOrderNotification(this, data)
+            // BOOKING/SCHEDULE DISABLED - no longer required
+            // "meetup_reminder" -> showOrderNotification(this, data)
         }
     }
 }
