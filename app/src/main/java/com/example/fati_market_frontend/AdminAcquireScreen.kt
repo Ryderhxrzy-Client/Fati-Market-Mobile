@@ -715,9 +715,10 @@ private fun AcquireItemSummary(item: Item) {
         SummaryRow("Asking price", Money.format(item.sellerAskingPrice))
         SummaryRow("Agreed price", Money.format(item.acquisitionPrice), emphasized = true)
 
-        item.meetupSchedule?.let { schedule ->
-            Dates.short(schedule)?.let { SummaryRow("Meet-up", it) }
-        }
+        // BOOKING/SCHEDULE DISABLED - no longer required
+        // item.meetupSchedule?.let { schedule ->
+            // Dates.short(schedule)?.let { SummaryRow("Meet-up", it) }
+        // }
 
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             ItemStatusPill(item.status, offerAccepted = item.offerAccepted)
