@@ -1354,11 +1354,12 @@ private fun PrivateItemCard(item: Item, token: String, onEdit: () -> Unit, onDel
                         title = "Offer accepted - ${Money.format(item.acquisitionPrice)}",
                         text  = buildString {
                             append("Bring the item to Ofelia's Store and show your QR code. ")
-                            append(
-                                item.meetupSchedule?.let { Dates.short(it) }
-                                    ?.let { "Meet-up: $it." }
-                                    ?: "Ofelia will message you the meet-up schedule."
-                            )
+                            // BOOKING/SCHEDULE DISABLED - no longer required
+                            // append(
+                                // item.meetupSchedule?.let { Dates.short(it) }
+                                    // ?.let { "Meet-up: $it." }
+                                    // ?: "Ofelia will message you the meet-up schedule."
+                            // )
                         },
                         tone  = StatusTone.Success,
                         icon  = Icons.Filled.CheckCircle
