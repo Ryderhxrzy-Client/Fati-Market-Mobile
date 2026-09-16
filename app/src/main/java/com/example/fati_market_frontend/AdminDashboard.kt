@@ -2351,10 +2351,11 @@ private fun AdminHomeContent(
                 }
             }
 
-            // ── Meet-ups ──────────────────────────────────────────────────
-            // Who is coming in with an item, and when - booked from the offer
-            // chats, rescheduled from here.
-            AdminMeetupsCard(token = token)
+            // BOOKING/SCHEDULE DISABLED - no longer required
+            // // ── Meet-ups ──────────────────────────────────────────────────
+            // // Who is coming in with an item, and when - booked from the offer
+            // // chats, rescheduled from here.
+            // AdminMeetupsCard(token = token)
 
             // ── Overview ──────────────────────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
