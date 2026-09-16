@@ -46,7 +46,7 @@ class InAppNotificationsTest {
 
     @Test
     fun allBackendOrderAndItemEventsProduceBanners() {
-        for (type in listOf("order_placed", "payment_proof_submitted", "order_update", "item_update", "meetup_reminder")) {
+        for (type in listOf("order_placed", "payment_proof_submitted", "order_update", "item_update" /* , "meetup_reminder" - BOOKING/SCHEDULE DISABLED */)) {
             val notification = InAppNotifications.fromPush(mapOf(
                 "type" to type, "title" to "Update", "body" to "Details",
             )) as InAppNotification.Order
