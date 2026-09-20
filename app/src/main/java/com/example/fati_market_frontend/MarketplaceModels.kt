@@ -69,6 +69,15 @@ internal data class Item(
      * reserved item reads as "someone else is checking out" to everyone else.
      */
     val reservedByMe: Boolean = false,
+
+    /**
+     * The order that sold this item, on an admin payload.
+     *
+     * The item row knows what the store paid and what it asked for; what was
+     * actually handed over - the method, the amount, the points spent and the
+     * points earned back - belongs to the order.
+     */
+    val sale: ItemSale? = null,
 ) {
     /** Admin has agreed a price - the moment the offer counts as accepted. */
     val offerAccepted: Boolean get() = acquisitionPrice != null
@@ -97,6 +106,47 @@ internal data class Item(
  * `markup_points` are read only as a last resort, and are interpreted as pesos
  * because the migration converted them to peso values.
  */
+/** The sale that ended a listing, as the admin payload carries it. */
+internal data class ItemSale(
+    val transactionId: Int,
+    val receiptNo: String,
+    val buyerId: Int,
+    val buyerName: String,
+    val buyerEmail: String,
+    val paymentMethod: String,
+    val paymentStatus: String,
+    val subtotal: String?,
+    val amountDue: String?,
+    val pointsUsed: Int,
+    val pointsDiscountAmount: String?,
+    /** What the buyer earned back, credited when the order was completed. */
+    val rewardPointsEarned: Int,
+    val completedAt: String?,
+)
+
+private fun parseItemSale(obj: JSONObject?): ItemSale? {
+    if (obj == null) return null
+
+    fun text(key: String): String =
+        if (obj.isNull(key)) "" else obj.optString(key)
+
+    return ItemSale(
+        transactionId = obj.optInt("transaction_id"),
+        receiptNo = text("receipt_no"),
+        buyerId = obj.optInt("buyer_id"),
+        buyerName = text("buyer_name"),
+        buyerEmail = text("buyer_email"),
+        paymentMethod = text("payment_method"),
+        paymentStatus = text("payment_status"),
+        subtotal = text("subtotal").takeIf { it.isNotBlank() },
+        amountDue = text("amount_due").takeIf { it.isNotBlank() },
+        pointsUsed = obj.optInt("points_used"),
+        pointsDiscountAmount = text("points_discount_amount").takeIf { it.isNotBlank() },
+        rewardPointsEarned = obj.optInt("reward_points_earned"),
+        completedAt = text("completed_at").takeIf { it.isNotBlank() },
+    )
+}
+
 internal fun parseItem(raw: JSONObject): Item {
     val obj = raw.optJSONObject("item") ?: raw
 
@@ -128,6 +178,8 @@ internal fun parseItem(raw: JSONObject): Item {
         status = str("status") ?: "",
         photos = photos,
         createdAt = obj.optString("created_at"),
+
+        sale = parseItemSale(obj.optJSONObject("sale") ?: raw.optJSONObject("sale")),
 
         sellerAskingPrice = str("seller_asking_price") ?: legacyAsking,
         acquisitionPrice = str("acquisition_price"),
@@ -425,12 +477,30 @@ internal fun parseCategory(obj: JSONObject): MarketCategory = MarketCategory(
     itemCount = obj.optInt("item_count", 0),
 )
 
+/** Somebody named in a line of the feed: who they are, and their face. */
+internal data class ActivityPerson(
+    val userId: Int = 0,
+    val name: String = "",
+    val photo: String = "",
+    val role: String = "",
+    val email: String = "",
+) {
+    val initial: String get() = name.trim().take(1).uppercase().ifBlank { "?" }
+}
+
+/** One labelled fact behind a line, shown when the line is opened. */
+internal data class ActivityDetail(val label: String, val value: String)
+
 /**
  * One line of the store's history.
  *
  * Assembled by the server from rows that already record these moments - an
  * item's acquisition, an order's completion, a ledger entry - rather than from
  * an audit table, so the feed reaches back to the store's first day.
+ *
+ * Each line names the person it belongs to rather than only describing them,
+ * so the feed can show the student's own face on their registration and the
+ * admin's on a handover, instead of the same icon on every row.
  */
 internal data class ActivityEntry(
     val action: String,
@@ -439,13 +509,50 @@ internal data class ActivityEntry(
     val resourceType: String,
     val resourceId: Int,
     val timestamp: String,
+    /** Who did it. */
+    val actor: ActivityPerson = ActivityPerson(),
+    /** The other person in the event, where there is one. */
+    val subject: ActivityPerson? = null,
+    val details: List<ActivityDetail> = emptyList(),
 )
 
-internal fun parseActivity(obj: JSONObject): ActivityEntry = ActivityEntry(
-    action = obj.optString("action"),
-    user = obj.optString("user"),
-    description = obj.optString("description"),
-    resourceType = obj.optString("resource_type"),
-    resourceId = obj.optInt("resource_id"),
-    timestamp = obj.optString("timestamp"),
-)
+private fun parseActivityPerson(obj: JSONObject?): ActivityPerson? {
+    if (obj == null) return null
+
+    return ActivityPerson(
+        userId = obj.optInt("user_id"),
+        name = obj.optString("name"),
+        photo = if (obj.isNull("photo")) "" else obj.optString("photo"),
+        role = if (obj.isNull("role")) "" else obj.optString("role"),
+        email = if (obj.isNull("email")) "" else obj.optString("email"),
+    )
+}
+
+internal fun parseActivity(obj: JSONObject): ActivityEntry {
+    val name = obj.optString("user")
+
+    val details = obj.optJSONArray("details").let { arr ->
+        (0 until (arr?.length() ?: 0)).mapNotNull { index ->
+            val detail = arr!!.optJSONObject(index) ?: return@mapNotNull null
+            ActivityDetail(detail.optString("label"), detail.optString("value"))
+        }
+    }
+
+    return ActivityEntry(
+        action = obj.optString("action"),
+        user = name,
+        description = obj.optString("description"),
+        resourceType = obj.optString("resource_type"),
+        resourceId = obj.optInt("resource_id"),
+        timestamp = obj.optString("timestamp"),
+        actor = ActivityPerson(
+            userId = obj.optInt("user_id"),
+            name = name,
+            photo = if (obj.isNull("user_photo")) "" else obj.optString("user_photo"),
+            role = if (obj.isNull("user_role")) "" else obj.optString("user_role"),
+            email = if (obj.isNull("user_email")) "" else obj.optString("user_email"),
+        ),
+        subject = parseActivityPerson(obj.optJSONObject("subject")),
+        details = details,
+    )
+}
