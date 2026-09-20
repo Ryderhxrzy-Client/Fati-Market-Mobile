@@ -339,7 +339,6 @@ internal fun AdminActivityContent(
     onShowBottomBarChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val accents = LocalMarketAccents.current
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
     val token = remember { prefs.getString("auth_token", "") ?: "" }
 
@@ -348,6 +347,14 @@ internal fun AdminActivityContent(
     var error by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var filter by remember { mutableStateOf<String?>(null) }
+
+    // The line being read. A row used to be a sentence and nothing else, so
+    // there was no way to see what it was actually about.
+    var opened by remember { mutableStateOf<ActivityEntry?>(null) }
+
+    opened?.let { entry ->
+        ActivityDetailDialog(entry = entry, onDismiss = { opened = null })
+    }
 
     LaunchedEffect(refreshKey) {
         loading = true
@@ -425,36 +432,7 @@ internal fun AdminActivityContent(
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 items(visible) { entry ->
-                    val (icon, tint) = when (entry.action) {
-                        "create" -> Icons.Filled.AddCircleOutline to accents.info
-                        "purchase" -> Icons.Filled.ShoppingCart to accents.success
-                        "delete" -> Icons.Filled.Cancel to MaterialTheme.colorScheme.error
-                        else -> Icons.Filled.EditNote to accents.reward
-                    }
-
-                    MarketCard {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(icon, null, tint = tint, modifier = Modifier.size(24.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(entry.description, style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    entry.user +
-                                        (Dates.short(entry.timestamp)?.let { " · $it" } ?: ""),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-
-                            StatusPill(
-                                label = entry.resourceType.replaceFirstChar { it.uppercaseChar() },
-                                tone = StatusTone.Neutral,
-                            )
-                        }
-                    }
+                    ActivityRow(entry = entry, onClick = { opened = entry })
                 }
             }
         }
