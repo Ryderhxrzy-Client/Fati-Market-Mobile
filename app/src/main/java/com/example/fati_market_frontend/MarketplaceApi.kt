@@ -401,6 +401,22 @@ internal object MarketplaceApi {
     }
 
     /** Remove one photo. The server refuses to remove the last one. */
+    /**
+     * Delete an offer outright. Admin only, and the server refuses once the
+     * store has taken the item in - a listing it holds is inventory and
+     * history, and one with an order against it can never go.
+     */
+    fun deleteAdminItem(token: String, itemId: Int): Result<Int> {
+        val request = Request.Builder()
+            .url("$BASE_URL/admin/items/$itemId")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .delete()
+            .build()
+
+        return execute(request) { itemId }
+    }
+
     fun deleteItemPhoto(token: String, itemId: Int, photoId: Int): Result<List<ItemPhoto>> {
         val request = Request.Builder()
             .url("$BASE_URL/admin/items/$itemId/photos/$photoId")
