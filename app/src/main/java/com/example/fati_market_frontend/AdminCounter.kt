@@ -26,10 +26,32 @@ object AdminCounter {
         private set
 
     fun open(code: String) {
-        openCode = code
+        openCode = normalize(code)
     }
 
     fun close() {
         openCode = null
     }
+
+    /**
+     * The code inside whatever was scanned.
+     *
+     * The website console draws its counter handoff as a link -
+     * https://.../turnover/FMITEM1.7.a1b2... - so that any phone's own camera
+     * can open the turnover page in a browser. Scanning that same square with
+     * this app should not be the one way that fails: the link carries a code
+     * this app already knows, so it is lifted out and the native turnover
+     * screen opens instead of a browser tab.
+     *
+     * Anything without a code in it is passed through untouched, and the
+     * screen it lands on says what it makes of it.
+     */
+    internal fun normalize(scanned: String): String {
+        val text = scanned.trim()
+
+        return EMBEDDED_CODE.find(text)?.value ?: text
+    }
+
+    /** An item turnover code or an order pickup code, wherever it sits. */
+    private val EMBEDDED_CODE = Regex("""FM(?:ITEM1|QR1)\.\d+\.[A-Za-z0-9]+""")
 }
