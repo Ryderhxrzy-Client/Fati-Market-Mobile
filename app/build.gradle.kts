@@ -105,6 +105,11 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.pusher:pusher-java-client:2.4.4")
     testImplementation(libs.junit)
+
+    // The JVM unit tests parse real API payloads. Android's own org.json is a
+    // stub that throws outside a device, so the real implementation stands in
+    // for it here - the same classes, running on the desktop JVM.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
