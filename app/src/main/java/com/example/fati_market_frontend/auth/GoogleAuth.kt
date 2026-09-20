@@ -600,6 +600,41 @@ fun setPersonalEmailPassword(token: String, password: String): GoogleAuthResult 
         .post(body).build())
 }
 
+/**
+ * Change the password of the account you are signed in as.
+ *
+ * Different from [setPersonalEmailPassword], which only ever applied to the
+ * recovery address and never asked for the password being replaced. This is
+ * the ordinary one: prove you know the current password, choose a new one,
+ * and every other device is signed out.
+ */
+fun changeAccountPassword(token: String, currentPassword: String, newPassword: String): GoogleAuthResult {
+    val payload = JSONObject()
+        .put("password", newPassword)
+        .put("password_confirmation", newPassword)
+
+    // An account that has never had a usable password - a Google sign-in - is
+    // setting one rather than changing it, and has nothing to prove.
+    if (currentPassword.isNotBlank()) {
+        payload.put("current_password", currentPassword)
+    }
+
+    val body = payload.toString().toRequestBody("application/json".toMediaType())
+
+    return call(
+        Request.Builder().url("$API/account/password")
+            .header("Accept", "application/json")
+            .header("Authorization", "Bearer $token")
+            .post(body).build()
+    )
+}
+
+/** Whether this account already has a password, so the dialog knows what to ask for. */
+fun accountPasswordStatus(token: String): GoogleAuthResult =
+    call(Request.Builder().url("$API/account/password")
+        .header("Accept", "application/json").header("Authorization", "Bearer $token")
+        .get().build())
+
 fun personalEmailStatus(token: String): GoogleAuthResult =
     call(Request.Builder().url("$API/account/personal-email/status")
         .header("Accept", "application/json").header("Authorization", "Bearer $token")
