@@ -47,7 +47,20 @@ import kotlinx.coroutines.withContext
  * here and settling it on the orders screen are the same act.
  */
 @Composable
-internal fun ChatOrderCard(msg: ChatMessage, isMe: Boolean) {
+internal fun ChatOrderCard(
+    msg: ChatMessage,
+    isMe: Boolean,
+    /**
+     * Whether this is the newest order card in the thread.
+     *
+     * The pickup code and the store's pin used to hang off "does this card
+     * carry admin decisions", which is true of an order being placed and of a
+     * receipt being sent - and false of the update that says the order is
+     * ready. So the buyer was shown the way to the store while they still
+     * owed for it, and shown nothing the moment it was theirs to collect.
+     */
+    isLiveOrderCard: Boolean = false,
+) {
     val order = msg.order ?: return
     val context = LocalContext.current
     val accents = LocalMarketAccents.current
@@ -276,16 +289,18 @@ internal fun ChatOrderCard(msg: ChatMessage, isMe: Boolean) {
                 // counter, so the code sits on the card that told them so -
                 // on the one card carrying the decisions, not repeated down
                 // the whole thread.
-                if (!isAdmin && carriesActions && order.isCollectable()) {
+                val carriesPickup = carriesActions || isLiveOrderCard
+
+                if (!isAdmin && carriesPickup && order.isCollectable()) {
                     SoftDivider()
                     PickupQrButton(order = order, modifier = Modifier.fillMaxWidth())
                 }
 
                 // Where to go, on the same live card, once the order is one
                 // to collect: the store's pin, with directions a tap away.
-                if (carriesActions && order.isCollectable()) {
+                if (carriesPickup && order.isCollectable()) {
                     SoftDivider()
-                    PickupLocationCard(showMap = !isAdmin)
+                    PickupLocationRow()
                 }
 
                 if (isAdmin && carriesActions) {
