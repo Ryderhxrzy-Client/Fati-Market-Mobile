@@ -211,9 +211,9 @@ private sealed class DrawerPage(val label: String) {
     object ProfitSummary     : DrawerPage("Profit summary")
     object TotalItemAcquired : DrawerPage("Items acquired")
     object TotalItemSold     : DrawerPage("Items sold")
-    object TotalProfit       : DrawerPage("Profit from markup")
+    // object TotalProfit       : DrawerPage("Profit from markup")
     object MostSoldCategory  : DrawerPage("Most sold category")
-    object ActiveUsers       : DrawerPage("Active users")
+    // object ActiveUsers       : DrawerPage("Active users")
 
     object Categories        : DrawerPage("Categories")
     object ActivityLogs      : DrawerPage("Activity logs")
@@ -727,8 +727,7 @@ private fun AdminDrawerContent(
             is DrawerPage.TransactionHistory, is DrawerPage.ProfitSummary,
             is DrawerPage.ManageOrders -> transactionsExpanded = true
             is DrawerPage.TotalItemAcquired, is DrawerPage.TotalItemSold,
-            is DrawerPage.TotalProfit, is DrawerPage.MostSoldCategory,
-            is DrawerPage.ActiveUsers -> reportsExpanded = true
+            is DrawerPage.MostSoldCategory -> reportsExpanded = true
 
             else -> {}
         }
@@ -839,9 +838,9 @@ private fun AdminDrawerContent(
                 Column {
                     DrawerSubItem("Items acquired",       currentPage == DrawerPage.TotalItemAcquired) { onPageSelect(DrawerPage.TotalItemAcquired) }
                     DrawerSubItem("Items sold",           currentPage == DrawerPage.TotalItemSold)     { onPageSelect(DrawerPage.TotalItemSold) }
-                    DrawerSubItem("Profit from markup",   currentPage == DrawerPage.TotalProfit)       { onPageSelect(DrawerPage.TotalProfit) }
+                    // DrawerSubItem("Profit from markup",   currentPage == DrawerPage.TotalProfit)       { onPageSelect(DrawerPage.TotalProfit) }
                     DrawerSubItem("Most sold category",   currentPage == DrawerPage.MostSoldCategory)  { onPageSelect(DrawerPage.MostSoldCategory) }
-                    DrawerSubItem("Active users",         currentPage == DrawerPage.ActiveUsers)       { onPageSelect(DrawerPage.ActiveUsers) }
+                    // DrawerSubItem("Active users",         currentPage == DrawerPage.ActiveUsers)       { onPageSelect(DrawerPage.ActiveUsers) }
                 }
             }
 
@@ -1023,9 +1022,9 @@ private fun DrawerPageContent(
         // items in that status, with the figures that matter for it.
         DrawerPage.TotalItemAcquired -> ItemsReportContent(title = "Items acquired", status = "acquired", onMenuClick = onMenuClick)
         DrawerPage.TotalItemSold -> ItemsReportContent(title = "Items sold", status = "sold", onMenuClick = onMenuClick)
-        DrawerPage.TotalProfit -> ProfitReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        // DrawerPage.TotalProfit -> ProfitReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
         DrawerPage.MostSoldCategory -> CategoryReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
-        DrawerPage.ActiveUsers -> UserReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
+        // DrawerPage.ActiveUsers -> UserReportContent(onMenuClick = onMenuClick, onGoToChat = onGoToChat, onNavigateToPage = onNavigateToPage, onShowBottomBarChange = onShowBottomBarChange)
 
         // Both of these used to fall through to "Coming soon" - there was no
         // API behind either of them until now.
@@ -1090,6 +1089,9 @@ private fun AdminPrivateOffersContent(
     var isLoading    by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var editingItem  by remember { mutableStateOf<Item?>(null) }
+    // Tapping an offer opens it in full, the way every other inventory
+    // screen opens its rows.
+    var selectedItem by remember { mutableStateOf<Item?>(null) }
 
     fun loadItems() {
         scope.launch {
@@ -1112,10 +1114,19 @@ private fun AdminPrivateOffersContent(
     }
 
     // Pass editing state up to hide bottom bar in AdminDashboard
-    val showBar = remember(editingItem) { editingItem == null }
+    val showBar = remember(editingItem, selectedItem) { editingItem == null && selectedItem == null }
     LaunchedEffect(showBar) {
         onShowBottomBarChange(showBar)
     }
+
+    // Back closes the open item first, then the editor.
+    BackHandler(enabled = selectedItem != null) { selectedItem = null }
+
+    if (selectedItem != null) {
+        AdminItemDetailPage(item = selectedItem!!, onBack = { selectedItem = null })
+        return
+    }
+
     CompositionLocalProvider(
         LocalProvidesBottomBar provides showBar
     ) {
@@ -1201,7 +1212,8 @@ private fun AdminPrivateOffersContent(
                                     },
                                     onGoToChat    = onGoToChat,
                                     onEditClick   = { editingItem = it },
-                                    onPointsSent  = { loadItems() }
+                                    onPointsSent  = { loadItems() },
+                                    onOpenDetail  = { selectedItem = item }
                                 )
                             }
                             item { Spacer(Modifier.height(8.dp)) }
@@ -1362,7 +1374,8 @@ private fun AdminItemListContent(
                                         },
                                         onGoToChat  = onGoToChat,
                                         onEditClick = { editingItem = it },
-                                        onPointsSent = { loadItems() }
+                                        onPointsSent = { loadItems() },
+                                        onOpenDetail = { selectedItem = item }
                                     )
                                 } else {
                                     AdminViewOnlyItemCard(
@@ -1461,11 +1474,21 @@ private fun AdminViewOnlyItemCard(item: Item, onClick: () -> Unit = {}, onEditCl
                             color = LocalMarketAccents.current.success)
                     }
                 }
+
+                // The sale, on a sold row. A sold listing used to show what
+                // the store hoped to charge and nothing about what was
+                // actually handed over: no buyer, no method, no amount, and
+                // no sign of the points the buyer earned back.
+                item.sale?.let { sale -> SoldRowFacts(sale) }
             }
 
-            IconButton(onClick = { onEditClick(item) }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.Outlined.Edit, "Edit item",
-                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            // A sold item is history, and the server refuses to set that
+            // status by hand, so there is nothing here to edit.
+            if (!item.isSold) {
+                IconButton(onClick = { onEditClick(item) }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Outlined.Edit, "Edit item",
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
             }
         }
     }
@@ -1747,6 +1770,12 @@ private fun AdminItemDetailPage(item: Item, onBack: () -> Unit) {
                 }
             }
 
+            // The figures and the proof, as the website's item window lays
+            // them out. This page used to stop at the markup, so the agreed
+            // price, the payout, the counter's photographs and the sale
+            // itself could only be read on a computer.
+            AdminItemFactsCard(item)
+
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -1762,7 +1791,9 @@ private fun AdminPrivateOfferCard(
     onStatusSaved: (String) -> Unit,
     onGoToChat: () -> Unit = {},
     onEditClick: (Item) -> Unit = {},
-    onPointsSent: () -> Unit = {}
+    onPointsSent: () -> Unit = {},
+    /** Opens the full item page. Offers and acquired items had no way in. */
+    onOpenDetail: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -1777,6 +1808,37 @@ private fun AdminPrivateOfferCard(
     // "Send Points & Finalize" flow, which paid sellers in wallet points.
     var showTurnoverDialog by remember { mutableStateOf(false) }
     var showPayoutDialog   by remember { mutableStateOf(false) }
+    var showAcceptDialog   by remember { mutableStateOf(false) }
+    var showPublishDialog  by remember { mutableStateOf(false) }
+    var showDeleteDialog   by remember { mutableStateOf(false) }
+
+    if (showAcceptDialog) {
+        AcceptOfferDialog(
+            item = item,
+            token = token,
+            onDismiss = { showAcceptDialog = false },
+            onAccepted = { onStatusSaved(item.status) },
+        )
+    }
+
+    if (showPublishDialog) {
+        PublishItemDialog(
+            item = item,
+            token = token,
+            onDismiss = { showPublishDialog = false },
+            onPublished = { onStatusSaved("public") },
+            onEditDetails = { onEditClick(item) },
+        )
+    }
+
+    if (showDeleteDialog) {
+        DeleteOfferDialog(
+            item = item,
+            token = token,
+            onDismiss = { showDeleteDialog = false },
+            onDeleted = { onPointsSent() },
+        )
+    }
     var acquisitionInput   by remember(item.itemId) {
         mutableStateOf(Money.formatPlain(item.acquisitionPrice ?: item.sellerAskingPrice).replace(",", ""))
     }
@@ -1958,7 +2020,7 @@ private fun AdminPrivateOfferCard(
         )
     }
 
-    MarketCard(contentPadding = PaddingValues(0.dp)) {
+    MarketCard(onClick = onOpenDetail, contentPadding = PaddingValues(0.dp)) {
         // ── Photo with the status floating over it ────────────────────────
         Box(
             modifier = Modifier
@@ -2083,10 +2145,22 @@ private fun AdminPrivateOfferCard(
                     PrimaryButton(
                         text = "Set selling price and publish",
                         icon = StoreLogoIcon,
-                        onClick = { onEditClick(item) },
+                        onClick = { showPublishDialog = true },
                         modifier = Modifier.fillMaxWidth(),
                         containerColor = LocalMarketAccents.current.info,
                         contentColor = Color.White,
+                    )
+                }
+
+                // Accepting an offer is agreeing the price. It used to live
+                // only in the chat, so the offers list could receive an item
+                // nobody had answered yet.
+                if (item.isPending && !item.offerAccepted) {
+                    PrimaryButton(
+                        text = "Accept offer",
+                        icon = Icons.Outlined.Check,
+                        onClick = { showAcceptDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
@@ -2107,6 +2181,20 @@ private fun AdminPrivateOfferCard(
                         onClick = { onEditClick(item) },
                         modifier = Modifier.weight(1f),
                         compact = true,
+                    )
+                }
+
+                // Only for a listing the store has not taken in: once it
+                // holds the item the row is inventory and history, and the
+                // server refuses anyway.
+                if ((item.isPending || item.isRejected) && !item.isTurnoverVerified) {
+                    SecondaryButton(
+                        text = "Delete offer",
+                        icon = Icons.Outlined.DeleteOutline,
+                        onClick = { showDeleteDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        compact = true,
+                        contentColor = MaterialTheme.colorScheme.error,
                     )
                 }
             }
@@ -2144,7 +2232,6 @@ private fun AdminHomeContent(
     // Users statistics
     var totalStudents by remember { mutableStateOf(0) }
     var activeStudents by remember { mutableStateOf(0) }
-    var pendingStudents by remember { mutableStateOf(0) }
     var verifiedStudents by remember { mutableStateOf(0) }
 
     // Items statistics
@@ -2158,7 +2245,6 @@ private fun AdminHomeContent(
     // Recent activities
     var recentRegistrations by remember { mutableStateOf<List<DashboardLine>>(emptyList()) }
     var recentItemsList by remember { mutableStateOf<List<DashboardLine>>(emptyList()) }
-    var pendingVerifications by remember { mutableStateOf<List<DashboardLine>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
@@ -2189,7 +2275,6 @@ private fun AdminHomeContent(
                     val usersObj = dataObj.optJSONObject("users")
                     totalStudents = usersObj?.optInt("total_students", 0) ?: 0
                     activeStudents = usersObj?.optInt("active_students", 0) ?: 0
-                    pendingStudents = usersObj?.optInt("pending_students", 0) ?: 0
                     verifiedStudents = usersObj?.optInt("verified_students", 0) ?: 0
 
                     val itemsObj = dataObj.optJSONObject("items")
@@ -2219,15 +2304,6 @@ private fun AdminHomeContent(
                                 subtitle = "${obj.optString("seller", "")} · ${obj.optString("status", "")}",
                             )
                         }
-
-                        val verificationsArr = activitiesObj.optJSONArray("pending_verifications")
-                        pendingVerifications = (0 until (verificationsArr?.length() ?: 0)).map { i ->
-                            val obj = verificationsArr!!.getJSONObject(i)
-                            DashboardLine(
-                                title = obj.optString("student_name", ""),
-                                subtitle = obj.optString("email", ""),
-                            )
-                        }
                     }
                 }
             } else {
@@ -2247,7 +2323,9 @@ private fun AdminHomeContent(
             else -> "Good evening"
         }
     }
-    val attentionCount = pendingStudents + privateItems + reservedItems
+    // Approvals are not this screen's business any more, so they no longer
+    // count as something waiting on you.
+    val attentionCount = privateItems + reservedItems
 
     var showNotifications by remember { mutableStateOf(false) }
     if (showNotifications) {
@@ -2294,14 +2372,6 @@ private fun AdminHomeContent(
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                 SectionHeader(title = "Needs attention", subtitle = "Tap a card to deal with it")
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
-                    StatTile(
-                        label = "Students to approve",
-                        value = if (isLoading) "–" else pendingStudents.toString(),
-                        icon = Icons.Filled.HowToReg,
-                        tint = if (pendingStudents > 0) accents.warning else MaterialTheme.colorScheme.primary,
-                        onClick = onOpenStudents,
-                        modifier = Modifier.weight(1f),
-                    )
                     StatTile(
                         label = "Offers to review",
                         value = if (isLoading) "–" else privateItems.toString(),
@@ -2384,17 +2454,6 @@ private fun AdminHomeContent(
             }
 
             // ── Recent activity ───────────────────────────────────────────
-            if (pendingVerifications.isNotEmpty()) {
-                ActivityGroup(
-                    title = "Waiting for approval",
-                    lines = pendingVerifications.take(3),
-                    icon = Icons.Filled.HowToReg,
-                    tint = accents.warning,
-                    actionLabel = "Review",
-                    onAction = onOpenStudents,
-                )
-            }
-
             if (recentItemsList.isNotEmpty()) {
                 ActivityGroup(
                     title = "Recent items",
@@ -2675,7 +2734,7 @@ private fun fetchConversations(token: String): List<Conversation> {
  * Throws an Exception with the HTTP status + response body on failure so the
  * caller can display a meaningful error (instead of silently returning null).
  */
-private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): List<ChatMessage> {
+private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): ChatThread {
     val base = "https://fati-api.alertaraqc.com/api/messages/$itemId"
     val url  = if (otherUserId != 0) "$base?other_user_id=$otherUserId" else base
     Log.d("FetchMessages", "URL: $url, itemId: $itemId, otherUserId: $otherUserId")
@@ -2709,7 +2768,7 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
                     }
             }
         }
-        arr ?: return emptyList()   // valid 200 body but no message array → truly empty
+        arr ?: return ChatThread(emptyList())   // valid 200 body but no message array → truly empty
         for (i in 0 until arr.length()) {
             val obj = arr.getJSONObject(i)
             val senderObj   = obj.optJSONObject("sender")
@@ -2753,7 +2812,26 @@ private fun fetchMessages(token: String, itemId: Int, otherUserId: Int = 0): Lis
                 },
             ))
         }
-        return list
+
+        // The lines the thread keeps about itself - a rename so far. They
+        // used to be written to this phone's own storage, so a rename made on
+        // the website never reached the app, and reinstalling lost them.
+        val events = mutableListOf<ThreadEvent>()
+        val eventsArr = runCatching { JSONObject(body).optJSONArray("events") }.getOrNull()
+
+        for (i in 0 until (eventsArr?.length() ?: 0)) {
+            val obj = eventsArr!!.getJSONObject(i)
+            val at = Dates.parse(obj.optString("at"))?.toEpochMilli() ?: continue
+
+            events.add(
+                ThreadEvent(
+                    name = if (obj.isNull("name")) "" else obj.optString("name"),
+                    at = at,
+                )
+            )
+        }
+
+        return ChatThread(messages = list, events = events)
     }
 }
 
@@ -3035,7 +3113,6 @@ fun AdminChatContent(
             isArchived = archived ?: conv.isArchived,
         )
         replaceConversation(updated)
-        if (name != null && name != conv.customName) ThreadEvents.record(context, conv, name)
         scope.launch {
             val ok = withContext(Dispatchers.IO) {
                 updateConversationSettings(token, conv.itemId, conv.otherUserId, name, pinned, archived)
@@ -3497,9 +3574,9 @@ private fun ChatDetailContent(
 ) {
     // The thread as this screen last changed it - the list's copy catches up.
     var thread                 by remember(conversation) { mutableStateOf(conversation) }
-    val eventsContext          = LocalContext.current
-    // What happened to the thread itself - renames - kept on this phone.
-    var threadEvents           by remember(conversation) { mutableStateOf(ThreadEvents.load(eventsContext, conversation)) }
+    // What happened to the thread itself - renames - as the server keeps
+    // them for this account, so every device shows the same lines.
+    var threadEvents           by remember(conversation) { mutableStateOf<List<ThreadEvent>>(emptyList()) }
     var replyingTo             by remember { mutableStateOf<ChatMessage?>(null) }
     var showThreadMenu         by remember { mutableStateOf(false) }
     var renameOpen             by remember { mutableStateOf(false) }
@@ -3701,10 +3778,11 @@ private fun ChatDetailContent(
                 val fetched = withContext(Dispatchers.IO) {
                     fetchMessages(token, conversation.itemId, conversation.otherUserId)
                 }
-                Log.d("ChatDetail", "Fetched ${fetched.size} messages")
-                val distinct = fetched.distinctBy { it.messageId }
+                Log.d("ChatDetail", "Fetched ${fetched.messages.size} messages")
+                val distinct = fetched.messages.distinctBy { it.messageId }
                 // Only redraw the thread when something actually changed.
                 if (distinct != messages) messages = distinct
+                if (fetched.events != threadEvents) threadEvents = fetched.events
             } catch (e: Exception) {
                 fetchError = true
                 fetchErrorMsg = e.message ?: "Unknown error"
@@ -3832,14 +3910,18 @@ private fun ChatDetailContent(
         )
         thread = updated
         onConversationChanged(updated)
-        if (name != null && name != before.customName) {
-            threadEvents = ThreadEvents.record(eventsContext, before, name)
-        }
         scope.launch {
             val ok = withContext(Dispatchers.IO) {
                 updateConversationSettings(token, before.itemId, before.otherUserId, name, pinned, archived)
             }
-            if (!ok) { thread = before; onConversationChanged(before) }
+            if (!ok) {
+                thread = before
+                onConversationChanged(before)
+            } else if (name != null && name != before.customName) {
+                // The server writes the line in the thread; read it back
+                // rather than guessing what it says.
+                retryTrigger++
+            }
         }
     }
 
@@ -4216,6 +4298,13 @@ private fun ChatDetailContent(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                     val threadRows = remember(messages, threadEvents) { buildThreadRows(messages, threadEvents) }
+
+                    // The newest order card is the one the thread is still
+                    // about: the pickup code and the store's pin belong on it,
+                    // not on whichever older card happened to carry buttons.
+                    val liveOrderMessageId = remember(messages) {
+                        messages.lastOrNull { it.order != null }?.messageId ?: 0
+                    }
                     when {
                         isLoading -> LoadingState()
                         fetchError -> ErrorState(
@@ -4250,6 +4339,7 @@ private fun ChatDetailContent(
                                         msg = row.msg,
                                         isMe = row.msg.senderId == currentUserId,
                                         onReply = { replyingTo = it },
+                                        isLiveOrderCard = row.msg.messageId == liveOrderMessageId,
                                     )
                                     is ThreadRow.System -> ThreadSystemLine(row.event)
                                 }
@@ -5760,11 +5850,17 @@ private fun ChatMessage.previewText(): String = when {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatBubble(msg: ChatMessage, isMe: Boolean, onReply: ((ChatMessage) -> Unit)? = null) {
+private fun ChatBubble(
+    msg: ChatMessage,
+    isMe: Boolean,
+    onReply: ((ChatMessage) -> Unit)? = null,
+    /** True for the newest order card, which is the one still being acted on. */
+    isLiveOrderCard: Boolean = false,
+) {
     // An order is a card, not a sentence: the item, its photo, what is owed,
     // how it is being paid and whether that has happened yet.
     if (msg.isOrderCard) {
-        ChatOrderCard(msg = msg, isMe = isMe)
+        ChatOrderCard(msg = msg, isMe = isMe, isLiveOrderCard = isLiveOrderCard)
         return
     }
 
@@ -6110,35 +6206,11 @@ private fun ListShelfLabel(text: String) {
 /** Something that happened to the thread itself: a rename, and when. */
 internal data class ThreadEvent(val name: String, val at: Long)
 
-/**
- * Renames are this person's own, so the thread keeps them itself, on this
- * phone: each is drawn in the middle of the conversation after whatever
- * line was last when it happened.
- */
-internal object ThreadEvents {
-    private fun key(conv: Conversation) = "thread_events_${conv.itemId}_${conv.otherUserId}"
-
-    fun load(context: Context, conv: Conversation): List<ThreadEvent> {
-        val raw = context.getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE).getString(key(conv), null)
-            ?: return emptyList()
-        return runCatching {
-            val arr = JSONArray(raw)
-            (0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
-                ThreadEvent(o.optString("name"), o.optLong("at"))
-            }
-        }.getOrDefault(emptyList())
-    }
-
-    fun record(context: Context, conv: Conversation, name: String): List<ThreadEvent> {
-        val events = (load(context, conv) + ThreadEvent(name, System.currentTimeMillis())).takeLast(30)
-        val arr = JSONArray()
-        events.forEach { arr.put(JSONObject().put("name", it.name).put("at", it.at)) }
-        context.getSharedPreferences("fatimarket_prefs", Context.MODE_PRIVATE)
-            .edit().putString(key(conv), arr.toString()).apply()
-        return events
-    }
-}
+/** A thread as the API hands it over: its messages, and its own lines. */
+internal data class ChatThread(
+    val messages: List<ChatMessage>,
+    val events: List<ThreadEvent> = emptyList(),
+)
 
 /** One row of the thread: a message, or a line about the thread itself. */
 internal sealed class ThreadRow {
@@ -7299,15 +7371,16 @@ fun AdminProfileContent(
 
             // ── Store location ───────────────────────────────────────────
 
-            // Both roles: a buyer needs to know where to go, and the admin sees
-
-            // exactly what the buyer is shown.
+            // Students only need the location details and map actions here;
+            // the embedded preview stays available to administrators.
 
             StoreLocationGroup(
 
                 subtitle = if (isAdmin) "What students see for meet-ups and pickups"
 
                            else "Meet-ups and walk-in pickups happen here",
+
+                showMap = isAdmin,
 
             )
 
@@ -7317,6 +7390,33 @@ fun AdminProfileContent(
                 InfoRowItem(Icons.Outlined.Person, "Full name", fullName)
                 RowDivider()
                 InfoRowItem(Icons.Outlined.Email, "School email", email.ifBlank { "—" })
+
+                // The password this account signs in with. The app could set
+                // one for the recovery address and nothing else, so an admin
+                // had no way to change theirs short of the forgotten-password
+                // email.
+                RowDivider()
+
+                var changingPassword by remember { mutableStateOf(false) }
+                var passwordChanged by remember { mutableStateOf(false) }
+
+                if (changingPassword) {
+                    ChangePasswordDialog(
+                        onDismiss = { changingPassword = false },
+                        onSaved = { passwordChanged = true },
+                    )
+                }
+
+                SettingsRow(
+                    icon = Icons.Outlined.Lock,
+                    title = "Change password",
+                    subtitle = if (passwordChanged) {
+                        "Changed just now - your other devices were signed out"
+                    } else {
+                        "Your other devices are signed out when it changes"
+                    },
+                    onClick = { changingPassword = true },
+                )
 
                 // The address that outlives the school account. Only students
                 // need it - an admin account is not lent out by a school.
