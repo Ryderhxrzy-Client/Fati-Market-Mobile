@@ -29,11 +29,13 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Directions
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -140,16 +142,20 @@ fun StoreLocationGroup(
     title: String = "Store location",
     /** One line under the address - why the reader cares about this place. */
     subtitle: String = "Meet-ups and walk-in pickups happen here",
+    /** Profiles can show the address and actions without loading the map preview. */
+    showMap: Boolean = true,
 ) {
     val context = LocalContext.current
 
     SettingsGroup(title = title, modifier = modifier) {
-        StoreMapPreview(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp),
-            onClick = { StoreLocation.openInMaps(context) },
-        )
+        if (showMap) {
+            StoreMapPreview(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                onClick = { StoreLocation.openInMaps(context) },
+            )
+        }
 
         Row(
             modifier = Modifier
@@ -361,66 +367,104 @@ private fun WebView.loadFramed(url: String) {
 }
 
 /**
- * Where to collect an order, drawn inside a chat card once the order reaches
- * the pickup stage: a short map, the address, Directions and Open in Maps.
- * The same pin as the profile's Store location group, sized for a bubble.
+ * Where to collect an order, as one line in a chat card.
+ *
+ * The map used to be drawn straight into the card and swallowed the
+ * conversation around it. A thread is for reading messages, so the pin is a
+ * line you tap, and the map opens over it only when the way to the store is
+ * what you actually want.
  */
 @Composable
-fun PickupLocationCard(modifier: Modifier = Modifier, showMap: Boolean = true) {
-    val context = LocalContext.current
+fun PickupLocationRow(modifier: Modifier = Modifier) {
+    var showing by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.small)
-            .background(MaterialTheme.colorScheme.surfaceContainer),
+    if (showing) {
+        PickupLocationDialog(onDismiss = { showing = false })
+    }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        onClick = { showing = true },
     ) {
-        if (showMap) {
-            StoreMapPreview(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp),
-                onClick = { StoreLocation.openInMaps(context) },
-            )
-        }
-        Column(
+        Row(
             modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Icon(
-                    Icons.Outlined.Place,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp),
-                )
+            Icon(
+                Icons.Outlined.Place,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp),
+            )
+
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Pick up at ${StoreLocation.NAME}",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
+                Text(
+                    "Tap for the map and directions",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Text(
-                StoreLocation.ADDRESS,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+            Icon(
+                Icons.Filled.Map,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                TonalButton(
-                    text = "Directions",
-                    icon = Icons.Filled.Directions,
-                    compact = true,
-                    onClick = { StoreLocation.openDirections(context) },
-                    modifier = Modifier.weight(1f),
-                )
-                SecondaryButton(
-                    text = "Open in Maps",
-                    icon = Icons.Filled.Map,
-                    compact = true,
-                    onClick = { StoreLocation.openInMaps(context) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
         }
     }
+}
+
+/** The map itself, over the thread rather than inside it. */
+@Composable
+fun PickupLocationDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pick up at ${StoreLocation.NAME}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                StoreMapPreview(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(MaterialTheme.shapes.small),
+                    onClick = { StoreLocation.openInMaps(context) },
+                )
+
+                Text(
+                    StoreLocation.ADDRESS,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    TonalButton(
+                        text = "Directions",
+                        icon = Icons.Filled.Directions,
+                        compact = true,
+                        onClick = { StoreLocation.openDirections(context) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    SecondaryButton(
+                        text = "Open in Maps",
+                        icon = Icons.Filled.Map,
+                        compact = true,
+                        onClick = { StoreLocation.openInMaps(context) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
 }
