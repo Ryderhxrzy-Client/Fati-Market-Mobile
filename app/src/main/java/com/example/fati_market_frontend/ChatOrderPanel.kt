@@ -348,6 +348,14 @@ internal fun ChatOrderPanel(
                         compact = true,
                     )
                 }
+
+                // Where to take that code. The buyer was handed the code and
+                // left to work out where the store is; the pin lives on their
+                // profile screen, which is not where they are when the order
+                // becomes theirs to collect.
+                if (current.isCollectable()) {
+                    PickupLocationRow()
+                }
             }
         }
     }
