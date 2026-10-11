@@ -69,6 +69,7 @@ internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
     val token = remember { prefs.getString("auth_token", "") ?: "" }
     val currentUserId = remember { prefs.getInt("user_id", 0) }
+    val scope = rememberCoroutineScope()
 
     var orders by remember { mutableStateOf<List<MarketTransaction>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -227,7 +228,23 @@ internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
                                 OrderHistoryCard(
                                     order = order,
                                     onViewReceipt = { openReceiptFor = order },
-                                    onPay = { payingFor = order },
+                                    onPay = {
+                                        if (order.paymentMethod == "paymongo") {
+                                            scope.launch {
+                                                val result = withContext(Dispatchers.IO) {
+                                                    MarketplaceApi.createPayMongoCheckoutSession(token, order.transactionId)
+                                                }
+                                                if (result is MarketplaceApi.Result.Ok) {
+                                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(result.value.checkoutUrl))
+                                                    context.startActivity(intent)
+                                                } else if (result is MarketplaceApi.Result.Failure) {
+                                                    android.widget.Toast.makeText(context, result.message, android.widget.Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        } else {
+                                            payingFor = order
+                                        }
+                                    },
                                     onChangePayment = { changingPaymentFor = order },
                                 )
                             }
@@ -339,7 +356,7 @@ private fun OrderHistoryCard(
             SummaryRow(
                 label = "Payment method",
                 value = when (order.paymentMethod) {
-                    "gcash" -> "GCash"
+                    "paymongo", "gcash" -> "GCash"
                     "points_full" -> "Paid with points"
                     else -> "Cash at store"
                 },
@@ -408,14 +425,13 @@ private fun OrderHistoryCard(
             )
         } else if (stillOwes) {
             PrimaryButton(
-                text = if (order.paymentMethod == "gcash") {
-                    "Pay " + Money.format(order.amountDue)
-                } else {
-                    "Payment details"
+                text = when (order.paymentMethod) {
+                    "paymongo", "gcash" -> "Pay with GCash"
+                    else -> "Payment details"
                 },
                 onClick = onPay,
                 modifier = Modifier.fillMaxWidth(),
-                icon = Icons.Filled.Payments,
+                icon = GcashLogoIcon,
             )
 
             // Nothing paid or approved yet, so the buyer can still switch
