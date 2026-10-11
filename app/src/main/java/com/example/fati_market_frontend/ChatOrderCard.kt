@@ -1470,7 +1470,7 @@ internal fun isApprovedCashPickup(
 
 /** Everyday wording for a payment method. */
 internal fun paymentMethodLabel(method: String): String = when (method) {
-    "gcash" -> "GCash"
+    "gcash", "paymongo" -> "GCash"
     "points_full" -> "Points only"
     "cash" -> "Cash at store"
     else -> method.replaceFirstChar { it.uppercase() }
