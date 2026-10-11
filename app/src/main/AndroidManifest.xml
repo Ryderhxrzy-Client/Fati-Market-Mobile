@@ -32,6 +32,12 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="fatimarket" />
+            </intent-filter>
         </activity>
         <!-- The QR scanner, pinned upright. The zxing library's own
              CaptureActivity is landscape in its manifest; this subclass takes
