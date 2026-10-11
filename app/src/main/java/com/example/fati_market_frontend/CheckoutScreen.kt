@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -209,7 +210,19 @@ internal fun CheckoutScreen(
                             val usingPoints = pointsToUse > 0
 
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.small)
+                                    .background(
+                                        if (usingPoints) accents.reward.copy(alpha = 0.08f)
+                                        else MaterialTheme.colorScheme.surfaceContainerLow
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (usingPoints) accents.reward else MaterialTheme.colorScheme.outlineVariant,
+                                        shape = MaterialTheme.shapes.small
+                                    )
+                                    .padding(Spacing.sm),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -245,6 +258,11 @@ internal fun CheckoutScreen(
                                     },
                                     colors = SwitchDefaults.colors(
                                         checkedTrackColor = accents.reward,
+                                        checkedThumbColor = Color.White,
+                                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+                                        checkedBorderColor = accents.reward,
                                     ),
                                 )
                             }
@@ -386,11 +404,11 @@ internal fun PaymentMethodOptions(selected: String, onSelect: (String) -> Unit) 
         onClick = { onSelect("cash") },
     )
     PaymentOption(
-        selected = selected == "gcash",
-        icon = Icons.Filled.PhoneAndroid,
+        selected = selected == "paymongo" || selected == "gcash",
+        icon = GcashLogoIcon,
         title = "GCash",
-        subtitle = "Send the payment, then upload your receipt for the admin to verify.",
-        onClick = { onSelect("gcash") },
+        subtitle = "Pay instantly using your GCash account.",
+        onClick = { onSelect("paymongo") },
     )
 }
 
@@ -521,6 +539,52 @@ private fun OrderPlacedSection(
                         "you when the item is ready for pickup.",
                     tone = StatusTone.Success,
                     icon = Icons.Filled.CheckCircle,
+                )
+            }
+
+            current.paymentMethod == "paymongo" && current.paymentStatus != "verified" -> {
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+                var launchingPayMongo by remember { mutableStateOf(false) }
+                var payMongoError by remember { mutableStateOf<String?>(null) }
+
+                fun launchPayMongo() {
+                    scope.launch {
+                        launchingPayMongo = true
+                        payMongoError = null
+                        val result = withContext(Dispatchers.IO) {
+                            MarketplaceApi.createPayMongoCheckoutSession(token, current.transactionId)
+                        }
+                        launchingPayMongo = false
+                        when (result) {
+                            is MarketplaceApi.Result.Ok -> {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(result.value.checkoutUrl))
+                                context.startActivity(intent)
+                            }
+                            is MarketplaceApi.Result.Failure -> {
+                                payMongoError = result.message
+                            }
+                        }
+                    }
+                }
+
+                InfoBanner(
+                    title = "GCash Payment Required",
+                    text = "Pay ${Money.format(current.amountDue)} using your GCash account.",
+                    tone = StatusTone.Warning,
+                    icon = GcashLogoIcon,
+                )
+
+                payMongoError?.let { err ->
+                    InfoBanner(text = err, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
+                }
+
+                PrimaryButton(
+                    text = "Pay with GCash",
+                    onClick = { launchPayMongo() },
+                    modifier = Modifier.fillMaxWidth(),
+                    loading = launchingPayMongo,
+                    icon = GcashLogoIcon,
                 )
             }
 
