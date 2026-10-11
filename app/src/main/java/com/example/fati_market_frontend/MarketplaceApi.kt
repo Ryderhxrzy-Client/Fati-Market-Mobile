@@ -56,6 +56,37 @@ internal object MarketplaceApi {
         return post(token, "/checkout", body) { parseTransaction(it.getJSONObject("data")) }
     }
 
+    data class PayMongoCheckoutResponse(
+        val checkoutSessionId: String,
+        val checkoutUrl: String,
+        val transactionId: Int,
+    )
+
+    fun createPayMongoCheckoutSession(
+        token: String,
+        transactionId: Int,
+        successUrl: String? = null,
+        cancelUrl: String? = null,
+    ): Result<PayMongoCheckoutResponse> {
+        val finalSuccessUrl = successUrl ?: "https://ofelia.alertaraqc.com/payment/success?transaction_id=$transactionId"
+        val finalCancelUrl = cancelUrl ?: "https://ofelia.alertaraqc.com/payment/cancel?transaction_id=$transactionId"
+
+        val body = JSONObject().apply {
+            put("transaction_id", transactionId)
+            put("success_url", finalSuccessUrl)
+            put("cancel_url", finalCancelUrl)
+        }
+
+        return post(token, "/paymongo/checkout", body) { json ->
+            val data = json.getJSONObject("data")
+            PayMongoCheckoutResponse(
+                checkoutSessionId = data.getString("checkout_session_id"),
+                checkoutUrl = data.getString("checkout_url"),
+                transactionId = data.getInt("transaction_id"),
+            )
+        }
+    }
+
     /**
      * Where to send a GCash payment.
      *
