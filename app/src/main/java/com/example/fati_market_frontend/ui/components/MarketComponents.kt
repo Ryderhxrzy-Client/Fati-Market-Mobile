@@ -46,8 +46,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -423,9 +421,11 @@ data class BottomTab(
 /**
  * The tab bar shared by the student and admin shells.
  *
- * Four tabs around a raised centre action - "Sell" for a student, "Scan"
- * for the store. The profile slot draws the user's avatar instead of an
- * icon, so the bar itself says who is signed in.
+ * Four tabs around a prominent centre action - "Sell" for a student, "Scan"
+ * for the store. The centre action is integrated into the navigation surface
+ * instead of floating above it, which keeps the bar clean and shadow-free.
+ * The profile slot draws the user's avatar instead of an icon, so the bar
+ * itself says who is signed in.
  */
 @Composable
 fun MarketBottomBar(
@@ -443,77 +443,121 @@ fun MarketBottomBar(
 ) {
     require(tabs.size == 4) { "MarketBottomBar lays out exactly four tabs around the centre action" }
 
-    Box(modifier = modifier.fillMaxWidth()) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            tonalElevation = Elevation.flat,
-            shadowElevation = Elevation.bar,
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(68.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    tabs.forEachIndexed { index, tab ->
-                        if (index == 2) Spacer(Modifier.weight(1f))
-
-                        BottomBarItem(
-                            tab = tab,
-                            selected = selectedIndex == index && !centerSelected,
-                            modifier = Modifier.weight(1f),
-                            avatar = if (index == profileIndex) {
-                                { tint ->
-                                    Avatar(
-                                        url = profilePicture,
-                                        initial = profileInitial,
-                                        size = 26.dp,
-                                        ringColor = if (selectedIndex == index && !centerSelected) tint else Color.Transparent,
-                                    )
-                                }
-                            } else null,
-                            onClick = { onSelect(index) },
-                        )
-                    }
-                }
-                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
-            }
-        }
-
-        // The centre action floats above the bar with a surface-coloured ring
-        // so it reads as cut out of the bar rather than pasted onto it.
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = (-18).dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            FloatingActionButton(
-                onClick = onCenter,
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = Elevation.flat,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
                 modifier = Modifier
-                    .size(56.dp)
-                    .border(4.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                elevation = FloatingActionButtonDefaults.elevation(
-                    defaultElevation = Elevation.floating,
-                    pressedElevation = Elevation.bar,
-                ),
+                    .fillMaxWidth()
+                    .height(76.dp)
+                    .padding(horizontal = Spacing.xxs, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(centerIcon, contentDescription = centerLabel, modifier = Modifier.size(26.dp))
+                tabs.take(2).forEachIndexed { index, tab ->
+                    BottomBarItem(
+                        tab = tab,
+                        selected = selectedIndex == index && !centerSelected,
+                        modifier = Modifier.weight(1f),
+                        avatar = null,
+                        onClick = { onSelect(index) },
+                    )
+                }
+
+                CenterBottomBarAction(
+                    label = centerLabel,
+                    icon = centerIcon,
+                    selected = centerSelected,
+                    modifier = Modifier.weight(1f),
+                    onClick = onCenter,
+                )
+
+                tabs.drop(2).forEachIndexed { localIndex, tab ->
+                    val index = localIndex + 2
+                    BottomBarItem(
+                        tab = tab,
+                        selected = selectedIndex == index && !centerSelected,
+                        modifier = Modifier.weight(1f),
+                        avatar = if (index == profileIndex) {
+                            { tint ->
+                                Avatar(
+                                    url = profilePicture,
+                                    initial = profileInitial,
+                                    size = 24.dp,
+                                    ringColor = if (selectedIndex == index && !centerSelected) tint else Color.Transparent,
+                                )
+                            }
+                        } else null,
+                        onClick = { onSelect(index) },
+                    )
+                }
             }
-            Text(
-                text = centerLabel,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = if (centerSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (centerSelected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 3.dp),
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+        }
+    }
+}
+
+@Composable
+private fun CenterBottomBarAction(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val labelColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "centerActionLabel",
+    )
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 48.dp, height = 38.dp)
+                .clip(RoundedCornerShape(15.dp))
+                .background(
+                    if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.primaryContainer,
+                )
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 0f else 0.22f),
+                    shape = RoundedCornerShape(15.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (selected) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
             )
         }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            color = labelColor,
+            modifier = Modifier.padding(top = 2.dp),
+            maxLines = 1,
+        )
     }
 }
 
@@ -546,8 +590,8 @@ private fun BottomBarItem(
         Box {
             Box(
                 modifier = Modifier
-                    .background(pill, CircleShape)
-                    .padding(horizontal = 18.dp, vertical = 4.dp),
+                    .background(pill, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 if (avatar != null) {
@@ -575,7 +619,7 @@ private fun BottomBarItem(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = tint,
-            modifier = Modifier.padding(top = 3.dp),
+            modifier = Modifier.padding(top = 2.dp),
             maxLines = 1,
         )
     }
