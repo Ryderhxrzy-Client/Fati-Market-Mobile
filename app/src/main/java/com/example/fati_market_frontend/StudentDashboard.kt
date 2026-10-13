@@ -51,6 +51,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import compose.icons.LucideIcons
+import compose.icons.lucideicons.House
+import compose.icons.lucideicons.MessageCircle
+import compose.icons.lucideicons.Plus
+import compose.icons.lucideicons.ReceiptText
+import compose.icons.lucideicons.UserRound
 import com.fati_market.ui.components.Avatar
 import com.fati_market.ui.components.BottomTab
 import com.fati_market.ui.components.BrandMark
@@ -324,10 +330,10 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                 if (!chatIsOpen) {
                     MarketBottomBar(
                         tabs = listOf(
-                            BottomTab("Home", Icons.Outlined.Home, Icons.Filled.Home),
-                            BottomTab("Chat", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
-                            BottomTab("Orders", Icons.Outlined.ReceiptLong, Icons.Filled.ReceiptLong),
-                            BottomTab("Profile", Icons.Outlined.Person, Icons.Filled.Person),
+                            BottomTab("Home", LucideIcons.House),
+                            BottomTab("Chat", LucideIcons.MessageCircle),
+                            BottomTab("Orders", LucideIcons.ReceiptText),
+                            BottomTab("Profile", LucideIcons.UserRound),
                         ),
                         selectedIndex = when (selectedTab) {
                             StudentTab.HOME -> 0
@@ -347,7 +353,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                             )
                         },
                         centerLabel = "Sell",
-                        centerIcon = Icons.Filled.Add,
+                        centerIcon = LucideIcons.Plus,
                         centerSelected = selectedTab == StudentTab.ADD_ITEM,
                         onCenter = { selectStudentTab(StudentTab.ADD_ITEM) },
                         profilePicture = userProfilePic,
