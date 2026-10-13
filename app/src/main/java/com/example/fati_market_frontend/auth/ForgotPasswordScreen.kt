@@ -45,7 +45,7 @@ fun ForgotPasswordScreen(navController: NavController) {
         subtitle = if (codeSent) {
             "Type the 6-digit code we sent, then choose a new password."
         } else {
-            "Enter your student email and we'll send you a code to reset it."
+            "Enter your email and we'll send you a code to reset it."
         },
         onBack = { navController.navigateUp() },
         heroIcon = Icons.Filled.LockReset,
@@ -54,7 +54,7 @@ fun ForgotPasswordScreen(navController: NavController) {
             value = email,
             onValueChange = { email = it; error = null },
             label = "Email address",
-            placeholder = "yourname@student.fatima.edu.ph",
+            placeholder = "yourname@gmail.com",
             leadingIcon = Icons.Filled.Email,
             enabled = !codeSent,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
