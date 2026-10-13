@@ -97,7 +97,7 @@ internal fun AdminItemPhotoEditor(
             // moved aside before the next one can land on the same name.
             val files = withContext(Dispatchers.IO) {
                 picked.mapIndexed { index, uri ->
-                    copyUriToCache(context, uri)?.let { (file, mimeType) ->
+                    com.fati_market.auth.utils.compressImageToCache(context, uri)?.let { (file, mimeType) ->
                         val unique = File(file.parentFile, "item_photo_${index}_${file.name}")
                         if (file.renameTo(unique)) unique to mimeType else file to mimeType
                     }
@@ -105,7 +105,7 @@ internal fun AdminItemPhotoEditor(
             }
 
             if (files.any { it == null }) {
-                error = "One or more photos could not be read or are over 5 MB."
+                error = "One or more photos could not be processed."
             } else {
                 apply(withContext(Dispatchers.IO) {
                     MarketplaceApi.addItemPhotos(token, itemId, files.filterNotNull())
