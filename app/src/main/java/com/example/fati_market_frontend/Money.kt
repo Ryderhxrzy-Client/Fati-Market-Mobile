@@ -81,7 +81,7 @@ object Money {
 object LoyaltyRules {
 
     /** A redeemed point is worth this many pesos off the bill. */
-    const val PESOS_PER_REDEEMED_POINT = 5
+    const val PESOS_PER_REDEEMED_POINT = 1
 
     /** A buyer earns one point per this many pesos of selling price. */
     const val PESOS_PER_REWARD_POINT = 100
@@ -93,7 +93,7 @@ object LoyaltyRules {
         return price.divide(BigDecimal(PESOS_PER_REWARD_POINT), 0, RoundingMode.FLOOR).toInt()
     }
 
-    /** pointsDiscount = pointsUsed × ₱5 */
+    /** pointsDiscount = pointsUsed × ₱1 */
     fun discountFor(points: Int): BigDecimal =
         if (points <= 0) BigDecimal.ZERO
         else BigDecimal(points * PESOS_PER_REDEEMED_POINT).setScale(2)
