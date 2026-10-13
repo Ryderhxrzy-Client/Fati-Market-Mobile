@@ -233,10 +233,22 @@ internal data class CheckoutQuote(
     val rewardPointsOnCompletion: Int,
     val isFullPointsCheckout: Boolean,
     val paymentRequired: Boolean,
+    val downpaymentRequired: Boolean = true,
+    val downpaymentRate: Double = 0.50,
+    val downpaymentAmount: String = "0.00",
+    val downpaymentAmountFormatted: String = "₱0.00",
+    val remainingBalance: String = "0.00",
+    val remainingBalanceFormatted: String = "₱0.00",
+    val isPastCutoff: Boolean = false,
+    val cutoffTime: String = "5:00 PM",
+    val pickupScheduleNote: String? = null,
 )
 
 internal fun parseCheckoutQuote(json: JSONObject): CheckoutQuote {
     val data = json.optJSONObject("data") ?: json
+
+    fun str(key: String): String? =
+        data.optString(key).takeIf { it.isNotBlank() && it != "null" }
 
     return CheckoutQuote(
         itemId = data.optInt("item_id"),
@@ -250,6 +262,15 @@ internal fun parseCheckoutQuote(json: JSONObject): CheckoutQuote {
         rewardPointsOnCompletion = data.optInt("reward_points_on_completion"),
         isFullPointsCheckout = data.optBoolean("is_full_points_checkout"),
         paymentRequired = data.optBoolean("payment_required", true),
+        downpaymentRequired = data.optBoolean("downpayment_required", true),
+        downpaymentRate = data.optDouble("downpayment_rate", 0.50),
+        downpaymentAmount = data.optString("downpayment_amount", "0.00"),
+        downpaymentAmountFormatted = data.optString("downpayment_amount_formatted", "₱0.00"),
+        remainingBalance = data.optString("remaining_balance", "0.00"),
+        remainingBalanceFormatted = data.optString("remaining_balance_formatted", "₱0.00"),
+        isPastCutoff = data.optBoolean("is_past_cutoff", false),
+        cutoffTime = data.optString("cutoff_time", "5:00 PM"),
+        pickupScheduleNote = str("pickup_schedule_note"),
     )
 }
 
@@ -282,6 +303,16 @@ internal data class MarketTransaction(
     val reservedUntil: String?,
     val createdAt: String,
     val availableActions: List<String>,
+
+    val downpaymentRequired: Boolean = false,
+    val downpaymentRate: Double = 0.50,
+    val downpaymentAmount: String = "0.00",
+    val downpaymentAmountFormatted: String = "₱0.00",
+    val remainingBalance: String = "0.00",
+    val remainingBalanceFormatted: String = "₱0.00",
+    val isPastCutoff: Boolean = false,
+    val cutoffTime: String = "5:00 PM",
+    val pickupScheduleNote: String? = null,
 
     /**
      * The signed walk-in pickup code. The buyer renders it as a QR at the
@@ -351,6 +382,15 @@ internal fun parseTransaction(obj: JSONObject): MarketTransaction {
         reservedUntil = str("reserved_until"),
         createdAt = obj.optString("created_at"),
         availableActions = actions,
+        downpaymentRequired = obj.optBoolean("downpayment_required", false),
+        downpaymentRate = obj.optDouble("downpayment_rate", 0.50),
+        downpaymentAmount = obj.optString("downpayment_amount", "0.00"),
+        downpaymentAmountFormatted = obj.optString("downpayment_amount_formatted", "₱0.00"),
+        remainingBalance = obj.optString("remaining_balance", "0.00"),
+        remainingBalanceFormatted = obj.optString("remaining_balance_formatted", "₱0.00"),
+        isPastCutoff = obj.optBoolean("is_past_cutoff", false),
+        cutoffTime = obj.optString("cutoff_time", "5:00 PM"),
+        pickupScheduleNote = str("pickup_schedule_note"),
         qrCode = str("qr_code"),
         handoverPhoto = str("handover_photo"),
         completedAt = str("completed_at"),
