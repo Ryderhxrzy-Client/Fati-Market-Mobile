@@ -2509,7 +2509,7 @@ private fun StudentAddItemContent(
                     onRemove = { uri -> selectedUris = selectedUris - uri },
                 )
                 Text(
-                    "JPG or PNG  ·  up to 5 MB each  ·  the first photo is the cover",
+                    "JPG, PNG or WebP  ·  photos are auto-optimized  ·  the first photo is the cover",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -2576,23 +2576,18 @@ private fun StudentAddItemContent(
                         try {
                             val photoFiles = withContext(Dispatchers.IO) {
                                 selectedUris.mapIndexedNotNull { index, uri ->
-                                    // Normalise to jpeg or png — avoids sending heic/webp
-                                    val rawMime = context.contentResolver.getType(uri) ?: "image/jpeg"
-                                    val mimeType = if (rawMime.contains("png")) "image/png" else "image/jpeg"
-                                    val ext      = if (mimeType == "image/png") "png" else "jpg"
-                                    val input = context.contentResolver.openInputStream(uri)
-                                        ?: return@mapIndexedNotNull null
-                                    val file = File(context.cacheDir, "photo_$index.$ext")
-                                    input.use { src -> file.outputStream().use { dst -> src.copyTo(dst) } }
-                                    if (file.length() > 5 * 1024 * 1024) {
-                                        file.delete()
-                                        return@mapIndexedNotNull null
+                                    val compressed = com.fati_market.auth.utils.compressImageToCache(context, uri)
+                                    if (compressed != null) {
+                                        val (file, mime) = compressed
+                                        val target = File(context.cacheDir, "offer_photo_${index}_${file.name}")
+                                        if (file.renameTo(target)) target to mime else file to mime
+                                    } else {
+                                        null
                                     }
-                                    Pair(file, mimeType)
                                 }
                             }
                             if (photoFiles.size < selectedUris.size) {
-                                errorMessage = "One or more photos exceed 5 MB. Please remove them and try again."
+                                errorMessage = "Could not process one or more photos. Please try selecting different photos."
                                 isLoading = false
                                 return@launch
                             }
