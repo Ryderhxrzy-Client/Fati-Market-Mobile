@@ -56,6 +56,7 @@ import compose.icons.lucideicons.House
 import compose.icons.lucideicons.MessageCircle
 import compose.icons.lucideicons.Plus
 import compose.icons.lucideicons.ReceiptText
+import compose.icons.lucideicons.ShoppingBag
 import compose.icons.lucideicons.UserRound
 import com.fati_market.ui.components.Avatar
 import com.fati_market.ui.components.BottomTab
@@ -73,6 +74,7 @@ import com.fati_market.ui.components.LoadingState
 import com.fati_market.ui.components.MarketBottomBar
 import com.fati_market.ui.components.MarketCard
 import com.fati_market.ui.components.MarketHeader
+import com.fati_market.ui.components.MarketPanel
 import com.fati_market.ui.components.MarketPageTopBar
 import com.fati_market.ui.components.MarketTextField
 import com.fati_market.ui.components.Overline
@@ -126,7 +128,7 @@ private enum class SortOption(val label: String) {
 
 // ── HTTP client ────────────────────────────────────────────────────────────────
 
-private val studentHttpClient = OkHttpClient.Builder()
+internal val studentHttpClient = OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
     .readTimeout(30, TimeUnit.SECONDS)
     .writeTimeout(60, TimeUnit.SECONDS)
@@ -157,6 +159,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
     var favoritedIds    by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var showFavorites   by remember { mutableStateOf(false) }
     var selectedFavItem by remember { mutableStateOf<Item?>(null) }
+    var selectedDetailItem by remember { mutableStateOf<Item?>(null) }
 
     // Checkout is a full-screen overlay so the buyer is not distracted by the
     // tab bar while committing to a purchase.
@@ -228,46 +231,10 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
         favoritedIds = withContext(Dispatchers.IO) { fetchFavoriteIds(token) }
     }
 
-    // ── Favorites overlays (accessible from any page) ─────────────────────────
-    selectedFavItem?.let { item ->
-        ItemDetailDialog(
-            item             = item,
-            token            = token,
-            isFavorited      = favoritedIds.contains(item.itemId),
-            onFavoriteToggle = { itemId, nowFav ->
-                favoritedIds = if (nowFav) favoritedIds + itemId else favoritedIds - itemId
-            },
-            onGoToChat       = { selectedFavItem = null; selectedTab = StudentTab.CHAT },
-            onDismiss        = { selectedFavItem = null },
-            onBuyNow         = { buyItem -> selectedFavItem = null; checkoutItem = buyItem },
-            currentUserId    = currentUserId
-        )
-    }
-    // Checkout draws over the tab content so the buyer is not distracted by
-    // navigation while committing to a purchase.
-    checkoutItem?.let { buyItem ->
-        CheckoutScreen(
-            item   = buyItem,
-            onBack = { checkoutItem = null },
-        )
-    }
-
-    if (showMyOrders) {
-        MyOrdersScreen(onDismiss = { showMyOrders = false })
-    }
-
-    if (showFavorites) {
-        FavoritesScreen(
-            token             = token,
-            onFavoriteRemoved = { itemId -> favoritedIds = favoritedIds - itemId },
-            onItemClick       = { item -> selectedFavItem = item },
-            onDismiss         = { showFavorites = false }
-        )
-    }
-
     val drawerShowing = drawerState.isOpen || drawerState.targetValue == DrawerValue.Open
 
-    ModalNavigationDrawer(
+    Box(modifier = Modifier.fillMaxSize()) {
+        ModalNavigationDrawer(
         drawerState   = drawerState,
         // Swiping the drawer open works only on Home, where no other screen
         // wants that edge. Once it is open, though, every page has to be able
@@ -327,7 +294,8 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
 
         Scaffold(
             bottomBar = {
-                if (!chatIsOpen) {
+                val itemDetailOpen = selectedDetailItem != null || selectedFavItem != null
+                if (!chatIsOpen && !itemDetailOpen && checkoutItem == null && !showMyOrders && !showFavorites) {
                     MarketBottomBar(
                         tabs = listOf(
                             BottomTab("Home", LucideIcons.House),
@@ -397,6 +365,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                                 onOpenOrders         = { selectStudentTab(StudentTab.ORDERS) },
                                 onOpenProfile        = { selectStudentTab(StudentTab.PROFILE) },
                                 onSell               = { selectStudentTab(StudentTab.ADD_ITEM) },
+                                onItemClick          = { selectedDetailItem = it },
                             )
                             StudentTab.CHAT     -> AdminChatContent(
                                 onMenuClick          = { openDrawer() },
@@ -443,6 +412,58 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
             }
         }
     }
+
+    // ── Overlays (rendered on top of drawer and tabs) ────────────────────────
+        selectedDetailItem?.let { item ->
+            ItemDetailDialog(
+                item             = item,
+                token            = token,
+                isFavorited      = favoritedIds.contains(item.itemId),
+                onFavoriteToggle = { itemId, nowFav ->
+                    favoritedIds = if (nowFav) favoritedIds + itemId else favoritedIds - itemId
+                },
+                onGoToChat       = { selectedDetailItem = null; selectedTab = StudentTab.CHAT },
+                onDismiss        = { selectedDetailItem = null },
+                onBuyNow         = { buyItem -> selectedDetailItem = null; checkoutItem = buyItem },
+                currentUserId    = currentUserId
+            )
+        }
+
+        selectedFavItem?.let { item ->
+            ItemDetailDialog(
+                item             = item,
+                token            = token,
+                isFavorited      = favoritedIds.contains(item.itemId),
+                onFavoriteToggle = { itemId, nowFav ->
+                    favoritedIds = if (nowFav) favoritedIds + itemId else favoritedIds - itemId
+                },
+                onGoToChat       = { selectedFavItem = null; selectedTab = StudentTab.CHAT },
+                onDismiss        = { selectedFavItem = null },
+                onBuyNow         = { buyItem -> selectedFavItem = null; checkoutItem = buyItem },
+                currentUserId    = currentUserId
+            )
+        }
+
+        checkoutItem?.let { buyItem ->
+            CheckoutScreen(
+                item   = buyItem,
+                onBack = { checkoutItem = null },
+            )
+        }
+
+        if (showMyOrders) {
+            MyOrdersScreen(onDismiss = { showMyOrders = false })
+        }
+
+        if (showFavorites) {
+            FavoritesScreen(
+                token             = token,
+                onFavoriteRemoved = { itemId -> favoritedIds = favoritedIds - itemId },
+                onItemClick       = { item -> selectedFavItem = item },
+                onDismiss         = { showFavorites = false }
+            )
+        }
+    }
 }
 
 // ── Home ───────────────────────────────────────────────────────────────────────
@@ -463,6 +484,7 @@ private fun StudentHomeContent(
     onOpenOrders: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
     onSell: () -> Unit = {},
+    onItemClick: (Item) -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs   = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
@@ -476,7 +498,6 @@ private fun StudentHomeContent(
     var searchQuery      by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<Int?>(null) }
     var sortOption       by remember { mutableStateOf(SortOption.NEWEST) }
-    var selectedItem     by remember { mutableStateOf<Item?>(null) }
 
     // Points, read once here and shared by the hero and the reward strip -
     // not polled: the balance only moves when an order completes.
@@ -566,22 +587,6 @@ private fun StudentHomeContent(
             }
             if (ok) onFavoritedIdsChange(if (nowFav) favoritedIds + item.itemId else favoritedIds - item.itemId)
         }
-    }
-
-    // ── Item detail overlay (home page items) ─────────────────────────────────
-    selectedItem?.let { item ->
-        ItemDetailDialog(
-            item             = item,
-            token            = token,
-            isFavorited      = favoritedIds.contains(item.itemId),
-            onFavoriteToggle = { itemId, nowFav ->
-                onFavoritedIdsChange(if (nowFav) favoritedIds + itemId else favoritedIds - itemId)
-            },
-            onGoToChat       = { selectedItem = null; onGoToChat() },
-            onDismiss        = { selectedItem = null },
-            onBuyNow         = { buyItem -> selectedItem = null; onBuyNow(buyItem) },
-            currentUserId    = currentUserId
-        )
     }
 
     var showNotifications by remember { mutableStateOf(false) }
@@ -694,7 +699,7 @@ private fun StudentHomeContent(
                                         categoryName     = categoryMap[item.categoryId]?.name ?: "",
                                         isFavorited      = favoritedIds.contains(item.itemId),
                                         onFavoriteToggle = { toggleFavorite(item) },
-                                        onItemClick      = { selectedItem = item }
+                                        onItemClick      = { onItemClick(item) }
                                     )
                                 }
                             }
@@ -731,7 +736,7 @@ private fun StudentHomeContent(
                                     categoryName     = categoryMap[item.categoryId]?.name ?: "",
                                     isFavorited      = favoritedIds.contains(item.itemId),
                                     onFavoriteToggle = { toggleFavorite(item) },
-                                    onItemClick      = { selectedItem = item }
+                                    onItemClick      = { onItemClick(item) }
                                 )
                             }
                         }
@@ -1507,7 +1512,13 @@ private fun EditItemDialog(
         return null
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
 
             if (showSuccess) {
@@ -1802,414 +1813,6 @@ private fun CategoryDropdown(
         }
     }
 }
-
-// ── Item Detail Dialog ─────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun ItemDetailDialog(
-    item: Item,
-    token: String,
-    isFavorited: Boolean,
-    onFavoriteToggle: (itemId: Int, nowFav: Boolean) -> Unit,
-    onGoToChat: () -> Unit,
-    onDismiss: () -> Unit,
-    /** Opens checkout. Absent for surfaces where buying does not apply. */
-    onBuyNow: (Item) -> Unit = {},
-    /** Used to stop a seller buying their own listing. */
-    currentUserId: Int = 0
-) {
-    val scope = rememberCoroutineScope()
-    var detailItem        by remember { mutableStateOf(item) }
-    var isLoading         by remember { mutableStateOf(true) }
-    var isFav             by remember { mutableStateOf(isFavorited) }
-    var isToggling        by remember { mutableStateOf(false) }
-    var showImageViewer   by remember { mutableStateOf(false) }
-    var messageText       by remember { mutableStateOf("Available pa ba?") }
-    var isSending         by remember { mutableStateOf(false) }
-    var showSentDialog    by remember { mutableStateOf(false) }
-    var sendError         by remember { mutableStateOf<String?>(null) }
-    val accents = LocalMarketAccents.current
-
-    LaunchedEffect(item.itemId) {
-        val detail    = withContext(Dispatchers.IO) { fetchItemDetail(token, item.itemId) }
-        val favStatus = withContext(Dispatchers.IO) { checkFavorite(token, item.itemId) }
-        if (detail != null) {
-            detailItem = detail
-        }
-        isFav     = favStatus
-        isLoading = false
-    }
-
-    val photoPager = rememberPagerState(pageCount = { detailItem.photos.size.coerceAtLeast(1) })
-
-    fun sendMessage() {
-        if (messageText.isBlank()) {
-            sendError = "Please enter a message first."
-            return
-        }
-        scope.launch {
-            isSending = true
-            sendError = null
-            val ok = withContext(Dispatchers.IO) {
-                sendMessageToAdmin(token, detailItem.itemId, messageText.trim())
-            }
-            isSending = false
-            if (ok) { showSentDialog = true; messageText = "Available pa ba?" }
-            else sendError = "Failed to send. Please try again."
-        }
-    }
-
-    // ── Success dialog ──────────────────────────────────────────────────────────
-    if (showSentDialog) {
-        AlertDialog(
-            onDismissRequest = { showSentDialog = false },
-            icon = {
-                Icon(
-                    Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint     = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp)
-                )
-            },
-            title   = { Text("Message sent") },
-            text    = { Text("Ofelia's Store will reply in your chat.") },
-            confirmButton = {
-                PrimaryButton(text = "Open chat", compact = true, onClick = { showSentDialog = false; onGoToChat() })
-            },
-            dismissButton = {
-                TextButton(onClick = { showSentDialog = false }) { Text("Close") }
-            }
-        )
-    }
-
-    // Full-screen image viewer. Tapping the main image opens this view.
-    if (showImageViewer && detailItem.photos.isNotEmpty()) {
-        Dialog(
-            onDismissRequest = { showImageViewer = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-        ) {
-            Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    AsyncImage(
-                        model = detailItem.photos[photoPager.currentPage.coerceIn(0, detailItem.photos.lastIndex)],
-                        contentDescription = "Full-screen item image",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable { showImageViewer = false }
-                    )
-                    IconButton(
-                        onClick = { showImageViewer = false },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .safeAreaTop()
-                            .padding(8.dp)
-                    ) {
-                        Icon(Icons.Filled.Close, "Close image", tint = Color.White)
-                    }
-                    if (detailItem.photos.size > 1) {
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .safeAreaBottom()
-                                .padding(bottom = 24.dp),
-                            color = Color.Black.copy(alpha = 0.6f),
-                            shape = CircleShape
-                        ) {
-                            Text(
-                                "${photoPager.currentPage + 1} / ${detailItem.photos.size}",
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ── Top bar ────────────────────────────────────────────────────
-                MarketPageTopBar(title = "Item details", onBack = onDismiss) {
-                    if (!isLoading) {
-                        IconButton(
-                            onClick = {
-                                if (!isToggling) {
-                                    isToggling = true
-                                    scope.launch {
-                                        val nowFav = !isFav
-                                        val ok = withContext(Dispatchers.IO) {
-                                            if (nowFav) addFavorite(token, detailItem.itemId)
-                                            else removeFavorite(token, detailItem.itemId)
-                                        }
-                                        if (ok) { isFav = nowFav; onFavoriteToggle(detailItem.itemId, nowFav) }
-                                        isToggling = false
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                contentDescription = if (isFav) "Remove from favourites" else "Add to favourites",
-                                tint = if (isFav) FavoriteRed else accents.onBrand
-                            )
-                        }
-                    }
-                }
-
-                if (isLoading) {
-                    LoadingState()
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        // ── Images ─────────────────────────────────────────────
-                        if (detailItem.photos.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(320.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                            ) {
-                                HorizontalPager(state = photoPager, modifier = Modifier.fillMaxSize()) { page ->
-                                    AsyncImage(
-                                        model              = detailItem.photos[page],
-                                        contentDescription = null,
-                                        contentScale       = ContentScale.Crop,
-                                        modifier           = Modifier
-                                            .fillMaxSize()
-                                            .clickable { showImageViewer = true }
-                                    )
-                                }
-                                if (detailItem.photos.size > 1) {
-                                    PagerDots(
-                                        count = detailItem.photos.size,
-                                        selectedIndex = photoPager.currentPage,
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .padding(bottom = Spacing.md)
-                                            .background(Color.Black.copy(alpha = 0.35f), CircleShape)
-                                            .padding(horizontal = Spacing.sm, vertical = 5.dp),
-                                    )
-                                }
-                                Surface(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(Spacing.md),
-                                    shape = CircleShape,
-                                    color = Color.Black.copy(alpha = 0.45f),
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Fullscreen, "Open full screen",
-                                        tint = Color.White,
-                                        modifier = Modifier.padding(6.dp).size(18.dp),
-                                    )
-                                }
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(220.dp)
-                                    .background(MaterialTheme.colorScheme.surfaceContainer),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Outlined.Image, null,
-                                    tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                                    modifier = Modifier.size(64.dp))
-                            }
-                        }
-
-                        // ── Info ───────────────────────────────────────────────
-                        Column(
-                            modifier            = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = Spacing.xl, vertical = Spacing.lg),
-                            verticalArrangement = Arrangement.spacedBy(Spacing.md)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                            ) {
-                                ItemStatusPill(detailItem.status)
-                                RewardChip(points = detailItem.rewardPoints, compact = true)
-                            }
-
-                            Text(detailItem.title, style = MaterialTheme.typography.headlineMedium)
-
-                            PriceTag(detailItem.displayPrice, size = PriceSize.Large)
-
-                            // -- Availability ---------------------------------
-                            // Buying itself lives on the pinned bar below. The
-                            // store owns a published item, so even its
-                            // original seller may buy it back.
-                            if (detailItem.isReserved && detailItem.reservedByMe) {
-                                InfoBanner(
-                                    title = "You reserved this item",
-                                    text  = "It is being held for you. Finish paying in " +
-                                            "My Orders, then show your pickup code at the store.",
-                                    tone = StatusTone.Success,
-                                    icon = Icons.Filled.Lock
-                                )
-                            } else if (detailItem.isReserved) {
-                                InfoBanner(
-                                    text = "Someone is already checking this item out. " +
-                                           "It becomes available again if their reservation expires.",
-                                    tone = StatusTone.Warning,
-                                    icon = Icons.Filled.Lock
-                                )
-                            } else if (detailItem.isSold) {
-                                InfoBanner(
-                                    text = "This item has been sold.",
-                                    tone = StatusTone.Neutral,
-                                    icon = Icons.Filled.Inventory
-                                )
-                            }
-
-                            SoftDivider()
-
-                            // Seller. Once the store has acquired the item it
-                            // is the store selling it - the student who
-                            // consigned it is not the counterparty a buyer
-                            // deals with.
-                            val storeOwned = detailItem.isAcquired || detailItem.isPublic ||
-                                detailItem.isReserved || detailItem.isSold
-
-                            Row(
-                                verticalAlignment     = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.md)
-                            ) {
-                                if (storeOwned) {
-                                    StoreLogo(Modifier.size(40.dp), shape = CircleShape)
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Person,
-                                            null,
-                                            tint     = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-                                }
-                                Column {
-                                    Text(
-                                        if (storeOwned) "Ofelia's Store" else detailItem.sellerEmail,
-                                        style = MaterialTheme.typography.titleSmall,
-                                    )
-                                    Text(
-                                        if (storeOwned) "Pick up at the store on campus" else "Student seller",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-
-                            SoftDivider()
-
-                            // Description
-                            Text("Description", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                detailItem.description,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-
-                            SoftDivider()
-
-                            // ── Send message ──────────────────────────────────
-                            Text("Ask Ofelia's Store", style = MaterialTheme.typography.titleMedium)
-                            sendError?.let { err ->
-                                Text(
-                                    text  = err,
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                            Row(
-                                modifier          = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                            ) {
-                                OutlinedTextField(
-                                    value         = messageText,
-                                    onValueChange = { messageText = it; sendError = null },
-                                    placeholder   = { Text("Available pa ba?") },
-                                    modifier      = Modifier.weight(1f),
-                                    shape         = RoundedCornerShape(22.dp),
-                                    maxLines      = 3,
-                                    textStyle     = MaterialTheme.typography.bodyMedium,
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                    keyboardActions = KeyboardActions(onSend = { if (!isSending) sendMessage() }),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                                    ),
-                                )
-                                RoundIconButton(
-                                    icon = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send",
-                                    onClick = { sendMessage() },
-                                    loading = isSending,
-                                    size = 48.dp,
-                                )
-                            }
-
-                            Spacer(Modifier.height(Spacing.sm))
-                        }
-
-                        // ── Buy ──────────────────────────────────────────
-                        // The last thing on the page rather than a bar pinned
-                        // to the window, so it can never end up under the
-                        // system's navigation buttons.
-                        if (detailItem.isPublic) {
-                            SoftDivider(Modifier.padding(horizontal = Spacing.screen))
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = Spacing.screen, vertical = Spacing.lg),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.lg),
-                            ) {
-                                Column {
-                                    Text(
-                                        "Total",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    PriceTag(detailItem.displayPrice, size = PriceSize.Medium)
-                                }
-                                PrimaryButton(
-                                    text = "Buy now",
-                                    icon = Icons.Filled.ShoppingBag,
-                                    onClick = { onBuyNow(detailItem) },
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                        }
-
-                        SafeAreaBottomSpacer()
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ── Favorites Screen ───────────────────────────────────────────────────────────
 
 @Composable
 private fun FavoritesScreen(
@@ -2799,7 +2402,7 @@ private fun fetchFavoriteItems(token: String): List<Item> {
     }
 }
 
-private fun addFavorite(token: String, itemId: Int): Boolean {
+internal fun addFavorite(token: String, itemId: Int): Boolean {
     val body = "{\"item_id\":$itemId}".toRequestBody("application/json".toMediaType())
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/favorites")
@@ -2812,7 +2415,7 @@ private fun addFavorite(token: String, itemId: Int): Boolean {
     } catch (_: Exception) { false }
 }
 
-private fun removeFavorite(token: String, itemId: Int): Boolean {
+internal fun removeFavorite(token: String, itemId: Int): Boolean {
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/favorites/$itemId")
         .header("Authorization", "Bearer $token")
@@ -2824,7 +2427,7 @@ private fun removeFavorite(token: String, itemId: Int): Boolean {
     } catch (_: Exception) { false }
 }
 
-private fun checkFavorite(token: String, itemId: Int): Boolean {
+internal fun checkFavorite(token: String, itemId: Int): Boolean {
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/favorites/$itemId/check")
         .header("Authorization", "Bearer $token")
@@ -2843,7 +2446,7 @@ private fun checkFavorite(token: String, itemId: Int): Boolean {
     } catch (_: Exception) { false }
 }
 
-private fun fetchItemDetail(token: String, itemId: Int): Item? {
+internal fun fetchItemDetail(token: String, itemId: Int): Item? {
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/items/$itemId")
         .header("Authorization", "Bearer $token")
@@ -2859,7 +2462,7 @@ private fun fetchItemDetail(token: String, itemId: Int): Item? {
     } catch (_: Exception) { null }
 }
 
-private fun sendMessageToAdmin(token: String, itemId: Int, message: String): Boolean {
+internal fun sendMessageToAdmin(token: String, itemId: Int, message: String): Boolean {
     val payload = "{\"receiver_id\":1,\"message\":${JSONObject.quote(message)}}"
     val request = Request.Builder()
         .url("https://fati-api.alertaraqc.com/api/messages/$itemId")

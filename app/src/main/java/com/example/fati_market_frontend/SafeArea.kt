@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.tappableElement
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
@@ -70,6 +72,8 @@ fun ProvideSafeArea(content: @Composable () -> Unit) {
         // navigation bar; take whichever the device fills in.
         val reported = maxOf(
             WindowInsets.navigationBars.getBottom(this),
+            WindowInsets.systemBars.getBottom(this),
+            WindowInsets.safeDrawing.getBottom(this),
             WindowInsets.tappableElement.getBottom(this),
         ).toDp()
 
@@ -128,7 +132,17 @@ fun Modifier.safeAreaBottom(): Modifier = composed {
  */
 fun Modifier.safeAreaBarBottom(floor: Dp = 12.dp): Modifier = composed {
     val safe = LocalSafeArea.current
-    padding(bottom = max(max(safe.bottom, safe.ime), floor))
+    val density = LocalDensity.current
+    val navBars = with(density) {
+        maxOf(
+            WindowInsets.navigationBars.getBottom(density),
+            WindowInsets.systemBars.getBottom(density),
+            WindowInsets.safeDrawing.getBottom(density),
+            WindowInsets.tappableElement.getBottom(density),
+        ).toDp()
+    }
+    val bottom = maxOf(safe.bottom, navBars, floor)
+    padding(bottom = max(bottom, safe.ime))
 }
 
 /**

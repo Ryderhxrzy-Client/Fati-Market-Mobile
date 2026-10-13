@@ -18,16 +18,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -74,6 +71,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
+import com.fati_market.LocalSafeArea
+import com.fati_market.safeAreaBarBottom
 import com.fati_market.safeAreaTopHeight
 import com.fati_market.ui.theme.Elevation
 import com.fati_market.ui.theme.LocalMarketAccents
@@ -445,21 +444,25 @@ fun MarketBottomBar(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = Elevation.flat,
-        shadowElevation = 0.dp,
+        shadowElevation = 8.dp,
         border = BorderStroke(
             width = 1.dp,
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
         ),
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .safeAreaBarBottom(),
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(76.dp)
-                    .padding(horizontal = Spacing.xxs, vertical = 6.dp),
+                    .height(68.dp)
+                    .padding(horizontal = Spacing.xxs, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 tabs.take(2).forEachIndexed { index, tab ->
@@ -500,7 +503,6 @@ fun MarketBottomBar(
                     )
                 }
             }
-            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
     }
 }
@@ -523,14 +525,14 @@ private fun CenterBottomBarAction(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 3.dp),
+            .padding(vertical = 1.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Box(
             modifier = Modifier
-                .size(width = 48.dp, height = 38.dp)
-                .clip(RoundedCornerShape(15.dp))
+                .size(width = 46.dp, height = 30.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .background(
                     if (selected) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.primaryContainer,
@@ -538,7 +540,7 @@ private fun CenterBottomBarAction(
                 .border(
                     width = 1.dp,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 0f else 0.22f),
-                    shape = RoundedCornerShape(15.dp),
+                    shape = RoundedCornerShape(14.dp),
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -547,7 +549,7 @@ private fun CenterBottomBarAction(
                 contentDescription = label,
                 tint = if (selected) MaterialTheme.colorScheme.onPrimary
                 else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(20.dp),
             )
         }
         Text(
@@ -555,7 +557,7 @@ private fun CenterBottomBarAction(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
             color = labelColor,
-            modifier = Modifier.padding(top = 2.dp),
+            modifier = Modifier.padding(top = 1.dp),
             maxLines = 1,
         )
     }
@@ -583,7 +585,7 @@ private fun BottomBarItem(
         modifier = modifier
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
-            .padding(vertical = Spacing.sm),
+            .padding(vertical = 1.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -591,7 +593,7 @@ private fun BottomBarItem(
             Box(
                 modifier = Modifier
                     .background(pill, RoundedCornerShape(14.dp))
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
+                    .padding(horizontal = 10.dp, vertical = 2.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 if (avatar != null) {
@@ -601,7 +603,7 @@ private fun BottomBarItem(
                         imageVector = if (selected) tab.selectedIcon else tab.icon,
                         contentDescription = tab.label,
                         tint = tint,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(22.dp),
                     )
                 }
             }
@@ -619,7 +621,7 @@ private fun BottomBarItem(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = tint,
-            modifier = Modifier.padding(top = 2.dp),
+            modifier = Modifier.padding(top = 1.dp),
             maxLines = 1,
         )
     }
