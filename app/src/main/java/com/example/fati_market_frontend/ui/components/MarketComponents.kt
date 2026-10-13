@@ -414,7 +414,7 @@ fun SectionHeader(
 data class BottomTab(
     val label: String,
     val icon: ImageVector,
-    val selectedIcon: ImageVector,
+    val selectedIcon: ImageVector = icon,
     val badge: Int = 0,
 )
 
