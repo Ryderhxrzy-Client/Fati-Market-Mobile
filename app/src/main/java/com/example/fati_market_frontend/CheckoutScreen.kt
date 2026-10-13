@@ -94,6 +94,22 @@ internal fun CheckoutScreen(
     val isFullPoints = amountDue.signum() == 0
     val rewardOnCompletion = quote?.rewardPointsOnCompletion ?: item.rewardPoints
 
+    val isPastCutoff = quote?.isPastCutoff == true || runCatching {
+        java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) >= 17
+    }.getOrDefault(false)
+
+    val isCash = paymentMethod == "cash" && !isFullPoints
+    val downpayment = if (isCash) {
+        amountDue.multiply(java.math.BigDecimal("0.50")).setScale(2, java.math.RoundingMode.HALF_UP)
+    } else {
+        java.math.BigDecimal.ZERO
+    }
+    val remainingBalance = if (isCash) {
+        amountDue.subtract(downpayment)
+    } else {
+        java.math.BigDecimal.ZERO
+    }
+
     Dialog(
         onDismissRequest = onBack,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -174,6 +190,16 @@ internal fun CheckoutScreen(
                                 PriceTag(Money.format(itemPrice), size = PriceSize.Small)
                             }
                         }
+                    }
+
+                    if (isPastCutoff) {
+                        InfoBanner(
+                            title = "Store Cutoff Notice (Past 5:00 PM)",
+                            text = quote?.pickupScheduleNote
+                                ?: "Orders placed at or after 5:00 PM are automatically scheduled for next-day pickup/meet-up at Ofelia's store during opening hours.",
+                            tone = StatusTone.Warning,
+                            icon = Icons.Filled.Schedule,
+                        )
                     }
 
                     // ── Points redemption ───────────────────────────────
@@ -294,6 +320,20 @@ internal fun CheckoutScreen(
                             value = Money.PESO + Money.formatPlain(amountDue.toPlainString()),
                             emphasized = true,
                         )
+
+                        if (isCash && amountDue.signum() > 0) {
+                            SoftDivider(Modifier.padding(vertical = Spacing.xs))
+                            SummaryRow(
+                                label = "Mandatory 50% DP (via GCash)",
+                                value = Money.PESO + Money.formatPlain(downpayment.toPlainString()),
+                                valueColor = MaterialTheme.colorScheme.primary,
+                                emphasized = true,
+                            )
+                            SummaryRow(
+                                label = "Remaining 50% (Cash on pickup)",
+                                value = Money.PESO + Money.formatPlain(remainingBalance.toPlainString()),
+                            )
+                        }
                     }
 
                     // ── How the balance is settled ──────────────────────
@@ -338,20 +378,56 @@ internal fun CheckoutScreen(
                     // bar for its last few pixels.
                     SoftDivider()
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            "Total to pay",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        PriceTag(
-                            Money.PESO + Money.formatPlain(amountDue.toPlainString()),
-                            size = PriceSize.Medium,
-                        )
+                    if (isCash && amountDue.signum() > 0) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column {
+                                    Text(
+                                        "Downpayment to pay now",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        "50% via GCash",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                PriceTag(
+                                    Money.PESO + Money.formatPlain(downpayment.toPlainString()),
+                                    size = PriceSize.Medium,
+                                )
+                            }
+                            Text(
+                                "Remaining ${Money.PESO}${Money.formatPlain(remainingBalance.toPlainString())} payable in cash upon pickup at Ofelia's store.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Total to pay",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            PriceTag(
+                                Money.PESO + Money.formatPlain(amountDue.toPlainString()),
+                                size = PriceSize.Medium,
+                            )
+                        }
                     }
 
                     PrimaryButton(
@@ -399,15 +475,15 @@ internal fun PaymentMethodOptions(selected: String, onSelect: (String) -> Unit) 
     PaymentOption(
         selected = selected == "cash",
         icon = StoreLogoIcon,
-        title = "Cash at the store",
-        subtitle = "Pay Ofelia in person when you collect the item.",
+        title = "Cash at the store (50% DP via GCash)",
+        subtitle = "Mandatory 50% downpayment via GCash to reserve item. Remaining 50% paid in cash upon pickup at Ofelia's store.",
         onClick = { onSelect("cash") },
     )
     PaymentOption(
         selected = selected == "paymongo" || selected == "gcash",
         icon = GcashLogoIcon,
-        title = "GCash",
-        subtitle = "Pay instantly using your GCash account.",
+        title = "Full Payment via GCash",
+        subtitle = "Pay 100% instantly using your GCash account.",
         onClick = { onSelect("paymongo") },
     )
 }
@@ -521,14 +597,40 @@ private fun OrderPlacedSection(
             TransactionStatusPill(current.status, paymentMethod = current.paymentMethod)
         }
 
+        if (current.isPastCutoff || current.pickupScheduleNote != null) {
+            InfoBanner(
+                title = "Pickup Scheduled (Past 5:00 PM Cutoff)",
+                text = current.pickupScheduleNote
+                    ?: "This order was placed after the 5:00 PM cutoff and is scheduled for pickup/meet-up tomorrow during opening hours at Ofelia's store.",
+                tone = StatusTone.Warning,
+                icon = Icons.Filled.Schedule,
+            )
+        }
+
         MarketCard {
             Overline("What you paid")
             Spacer(Modifier.height(Spacing.xs))
             SummaryRow("Item price", Money.format(current.subtotal))
-            SummaryRow("Points used", "${current.pointsUsed}")
-            SummaryRow("Points discount", "-" + Money.format(current.pointsDiscountAmount))
+            if (current.pointsUsed > 0) {
+                SummaryRow("Points used", "${current.pointsUsed}")
+                SummaryRow("Points discount", "-" + Money.format(current.pointsDiscountAmount))
+            }
             SoftDivider(Modifier.padding(vertical = Spacing.xs))
             SummaryRow("Amount due", Money.format(current.amountDue), emphasized = true)
+
+            if (current.paymentMethod == "cash" && current.downpaymentRequired) {
+                SoftDivider(Modifier.padding(vertical = Spacing.xs))
+                SummaryRow(
+                    label = "Mandatory 50% DP (via GCash)",
+                    value = current.downpaymentAmountFormatted.ifBlank { Money.format(current.downpaymentAmount) },
+                    valueColor = MaterialTheme.colorScheme.primary,
+                    emphasized = true,
+                )
+                SummaryRow(
+                    label = "Remaining 50% (Cash on pickup)",
+                    value = current.remainingBalanceFormatted.ifBlank { Money.format(current.remainingBalance) },
+                )
+            }
         }
 
         when {
@@ -539,6 +641,33 @@ private fun OrderPlacedSection(
                         "you when the item is ready for pickup.",
                     tone = StatusTone.Success,
                     icon = Icons.Filled.CheckCircle,
+                )
+            }
+
+            current.paymentMethod == "cash" && current.downpaymentRequired && current.paymentStatus != "verified" && current.paymentProof == null -> {
+                var payingDp by remember { mutableStateOf(false) }
+
+                if (payingDp) {
+                    PaymentProofDialog(
+                        transaction = current,
+                        token = token,
+                        onDismiss = { payingDp = false },
+                        onSubmitted = { updated -> current = updated; payingDp = false },
+                    )
+                }
+
+                InfoBanner(
+                    title = "Mandatory 50% Downpayment via GCash",
+                    text = "Send your 50% downpayment (${current.downpaymentAmountFormatted.ifBlank { Money.format(current.downpaymentAmount) }}) through GCash to confirm reservation. Pay remaining balance (${current.remainingBalanceFormatted.ifBlank { Money.format(current.remainingBalance) }}) in cash at store.",
+                    tone = StatusTone.Warning,
+                    icon = GcashLogoIcon,
+                )
+
+                PrimaryButton(
+                    text = "Upload GCash DP Proof",
+                    onClick = { payingDp = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = Icons.Filled.Payments,
                 )
             }
 
@@ -631,8 +760,11 @@ private fun OrderPlacedSection(
             else -> {
                 InfoBanner(
                     title = "Pay at the store",
-                    text = "Bring ${Money.format(current.amountDue)} when you collect the item. " +
-                        "The admin will confirm your payment on handover.",
+                    text = if (current.paymentMethod == "cash" && current.downpaymentRequired) {
+                        "Your 50% downpayment is recorded. Bring ${current.remainingBalanceFormatted.ifBlank { Money.format(current.remainingBalance) }} cash when you collect the item at Ofelia's store."
+                    } else {
+                        "Bring ${Money.format(current.amountDue)} when you collect the item. The admin will confirm your payment on handover."
+                    },
                     tone = StatusTone.Info,
                     icon = StoreLogoIcon,
                 )
