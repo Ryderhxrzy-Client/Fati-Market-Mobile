@@ -700,7 +700,7 @@ private fun AcquireOfferFallbackDialog(
 
                 // The same proof the QR turnover takes, captured in place.
                 AcquireProofRow("Item received", itemPhoto) { capture("item") }
-                AcquireProofRow("Seller paid", payoutPhoto) { capture("payout") }
+                AcquireProofRow("Payout to seller", payoutPhoto) { capture("payout") }
 
                 error?.let {
                     InfoBanner(text = it, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
@@ -1313,10 +1313,10 @@ internal fun ItemAcquiredCard(msg: ChatMessage, isMe: Boolean) {
                                 onClick = { url -> viewing = "Item received" to url },
                             )
                             ProofThumbnail(
-                                label = "Seller paid",
+                                label = "Payout to seller",
                                 photo = item.sellerPayoutPhoto,
                                 modifier = Modifier.weight(1f),
-                                onClick = { url -> viewing = "Seller paid" to url },
+                                onClick = { url -> viewing = "Payout to seller" to url },
                             )
                         }
                     }
