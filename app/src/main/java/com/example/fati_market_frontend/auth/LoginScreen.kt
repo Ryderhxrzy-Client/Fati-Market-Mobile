@@ -181,7 +181,7 @@ fun LoginScreen(navController: NavController) {
             value = email,
             onValueChange = { email = it; errorMessage = null },
             label = "Email address",
-            placeholder = if (selectedRole == "student") "yourname@student.fatima.edu.ph" else null,
+            placeholder = if (selectedRole == "student") "yourname@gmail.com or student email" else null,
             leadingIcon = Icons.Filled.Email,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
         )
@@ -441,7 +441,7 @@ fun RoleSwitch(selected: String, onSelect: (String) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             RoleOption(
-                label = "Student",
+                label = "Student / Buyer",
                 icon = Icons.Filled.School,
                 selected = selected == "student",
                 modifier = Modifier.weight(1f),
