@@ -90,6 +90,12 @@ import coil.compose.AsyncImage
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import coil.compose.SubcomposeAsyncImage
+import compose.icons.LucideIcons
+import compose.icons.lucideicons.LayoutDashboard
+import compose.icons.lucideicons.MessageCircle
+import compose.icons.lucideicons.ScanLine
+import compose.icons.lucideicons.UserRound
+import compose.icons.lucideicons.UsersRound
 import com.fati_market.ui.components.Avatar
 import com.fati_market.ui.components.BottomTab
 import com.fati_market.ui.components.ChoiceChip
@@ -559,10 +565,10 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                     // profile to make room.
                     MarketBottomBar(
                         tabs = listOf(
-                            BottomTab("Home", Icons.Outlined.Dashboard, Icons.Filled.Dashboard),
-                            BottomTab("Chat", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
-                            BottomTab("Students", Icons.Outlined.Group, Icons.Filled.Group),
-                            BottomTab("Profile", Icons.Outlined.Person, Icons.Filled.Person),
+                            BottomTab("Home", LucideIcons.LayoutDashboard),
+                            BottomTab("Chat", LucideIcons.MessageCircle),
+                            BottomTab("Students", LucideIcons.UsersRound),
+                            BottomTab("Profile", LucideIcons.UserRound),
                         ),
                         selectedIndex = when (selectedTab) {
                             AdminTab.HOME -> 0
@@ -581,7 +587,7 @@ fun AdminDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: () 
                             )
                         },
                         centerLabel = "Scan",
-                        centerIcon = Icons.Filled.QrCodeScanner,
+                        centerIcon = LucideIcons.ScanLine,
                         onCenter = { launchScanner() },
                         profilePicture = userProfilePic,
                         profileInitial = userFirstName.firstOrNull()?.uppercaseChar()?.toString() ?: "A",
