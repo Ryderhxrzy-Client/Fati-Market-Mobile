@@ -424,7 +424,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                 },
                 onGoToChat       = { selectedDetailItem = null; selectedTab = StudentTab.CHAT },
                 onDismiss        = { selectedDetailItem = null },
-                onBuyNow         = { buyItem -> selectedDetailItem = null; checkoutItem = buyItem },
+                onBuyNow         = { buyItem -> checkoutItem = buyItem },
                 currentUserId    = currentUserId
             )
         }
@@ -439,15 +439,20 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                 },
                 onGoToChat       = { selectedFavItem = null; selectedTab = StudentTab.CHAT },
                 onDismiss        = { selectedFavItem = null },
-                onBuyNow         = { buyItem -> selectedFavItem = null; checkoutItem = buyItem },
+                onBuyNow         = { buyItem -> checkoutItem = buyItem },
                 currentUserId    = currentUserId
             )
         }
 
         checkoutItem?.let { buyItem ->
             CheckoutScreen(
-                item   = buyItem,
-                onBack = { checkoutItem = null },
+                item          = buyItem,
+                onBack        = { checkoutItem = null },
+                onOrderPlaced = {
+                    selectedDetailItem = null
+                    selectedFavItem = null
+                    selectStudentTab(StudentTab.ORDERS)
+                },
             )
         }
 
@@ -1626,14 +1631,14 @@ private fun EditItemDialog(
                                     val photoFiles = if (newUris.isNotEmpty()) {
                                         withContext(Dispatchers.IO) {
                                             newUris.mapIndexedNotNull { index, uri ->
-                                                val rawMime  = context.contentResolver.getType(uri) ?: "image/jpeg"
-                                                val mimeType = if (rawMime.contains("png")) "image/png" else "image/jpeg"
-                                                val ext      = if (mimeType == "image/png") "png" else "jpg"
-                                                val input    = context.contentResolver.openInputStream(uri) ?: return@mapIndexedNotNull null
-                                                val file     = File(context.cacheDir, "edit_photo_$index.$ext")
-                                                input.use { src -> file.outputStream().use { dst -> src.copyTo(dst) } }
-                                                if (file.length() > 5 * 1024 * 1024) { file.delete(); return@mapIndexedNotNull null }
-                                                Pair(file, mimeType)
+                                                val compressed = com.fati_market.auth.utils.compressImageToCache(context, uri)
+                                                if (compressed != null) {
+                                                    val (file, mime) = compressed
+                                                    val target = File(context.cacheDir, "edit_photo_${index}_${file.name}")
+                                                    if (file.renameTo(target)) target to mime else file to mime
+                                                } else {
+                                                    null
+                                                }
                                             }
                                         }
                                     } else emptyList()
@@ -2575,9 +2580,9 @@ private fun StudentDrawerContent(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                     ) {
-                        Icon(Icons.Filled.School, null, tint = accents.onBrand, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Filled.Person, null, tint = accents.onBrand, modifier = Modifier.size(14.dp))
                         Text(
-                            "OLFU student",
+                            "User",
                             style = MaterialTheme.typography.labelSmall,
                             color = accents.onBrand,
                         )

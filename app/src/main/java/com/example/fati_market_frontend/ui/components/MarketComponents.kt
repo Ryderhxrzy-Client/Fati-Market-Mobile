@@ -516,8 +516,7 @@ private fun CenterBottomBarAction(
     onClick: () -> Unit,
 ) {
     val labelColor by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = MaterialTheme.colorScheme.primary,
         label = "centerActionLabel",
     )
 
@@ -534,12 +533,13 @@ private fun CenterBottomBarAction(
                 .size(width = 46.dp, height = 30.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(
-                    if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.primaryContainer,
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha = if (selected) 1f else 0.82f,
+                    ),
                 )
                 .border(
                     width = 1.dp,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 0f else 0.22f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (selected) 0f else 0.35f),
                     shape = RoundedCornerShape(14.dp),
                 ),
             contentAlignment = Alignment.Center,
@@ -547,8 +547,7 @@ private fun CenterBottomBarAction(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (selected) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.size(20.dp),
             )
         }

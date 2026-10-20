@@ -229,7 +229,9 @@ internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
                                     order = order,
                                     onViewReceipt = { openReceiptFor = order },
                                     onPay = {
-                                        if (order.paymentMethod == "paymongo") {
+                                        if (order.paymentMethod == "paymongo" ||
+                                            (order.paymentMethod == "cash" && order.downpaymentRequired)
+                                        ) {
                                             scope.launch {
                                                 val result = withContext(Dispatchers.IO) {
                                                     MarketplaceApi.createPayMongoCheckoutSession(token, order.transactionId)
@@ -276,7 +278,7 @@ private enum class OrderFilter(val label: String) {
         // Still owes money, or the proof was declined and must be redone.
         ToPay -> order.paymentStatus == "unpaid" && !order.isTerminal
         // Submitted, waiting on the admin.
-        Pending -> order.paymentStatus == "proof_submitted"
+        Pending -> order.paymentStatus == "proof_submitted" || order.paymentStatus == "partially_paid"
         // Payment settled but not yet handed over.
         Paid -> order.paymentStatus == "verified" && order.status != "completed"
         Completed -> order.status == "completed"
@@ -294,7 +296,7 @@ private fun OrderHistoryCard(
 ) {
     val accents = LocalMarketAccents.current
 
-    val hasReceipt = order.paymentStatus == "verified"
+    val hasReceipt = order.paymentStatus == "verified" || order.paymentStatus == "partially_paid"
 
     MarketCard(onClick = if (hasReceipt) onViewReceipt else null) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
@@ -356,9 +358,14 @@ private fun OrderHistoryCard(
             SummaryRow(
                 label = "Payment method",
                 value = when (order.paymentMethod) {
-                    "paymongo", "gcash" -> "GCash"
+                    "paymongo" -> "PayMongo (GCash)"
+                    "gcash" -> "GCash"
                     "points_full" -> "Paid with points"
-                    else -> "Cash at store"
+                    else -> if (order.downpaymentRequired) {
+                        "50% PayMongo + 50% cash at pickup"
+                    } else {
+                        "Cash at store"
+                    }
                 },
             )
             SummaryRow(
@@ -374,6 +381,7 @@ private fun OrderHistoryCard(
                 ),
                 valueColor = when {
                     order.paymentStatus == "verified" -> accents.success
+                    order.paymentStatus == "partially_paid" -> accents.info
                     order.paymentStatus == "rejected" -> MaterialTheme.colorScheme.error
                     isApprovedCashPickup(order.paymentStatus, order.paymentMethod, order.status) ->
                         accents.info
@@ -381,6 +389,22 @@ private fun OrderHistoryCard(
                     else -> null
                 },
             )
+            if (order.paymentMethod == "cash" && order.paymentStatus == "partially_paid") {
+                SummaryRow(
+                    label = "Amount paid",
+                    value = order.downpaymentAmountFormatted.ifBlank {
+                        Money.format(order.downpaymentAmount)
+                    },
+                    valueColor = accents.success,
+                    emphasized = true,
+                )
+                SummaryRow(
+                    label = "Remaining balance",
+                    value = order.remainingBalanceFormatted.ifBlank {
+                        Money.format(order.remainingBalance)
+                    },
+                )
+            }
         }
 
         // The backend reserves the item the moment a checkout is created, but
@@ -415,20 +439,28 @@ private fun OrderHistoryCard(
         val approvedCashPickup = order.paymentMethod == "cash" &&
             (order.status == "reserved" || order.status == "ready_for_pickup")
 
-        if (stillOwes && approvedCashPickup) {
+        val partiallyPaidCash = order.paymentMethod == "cash" &&
+            order.paymentStatus == "partially_paid"
+
+        if (partiallyPaidCash) {
+            InfoBanner(
+                title = "Partially paid",
+                text = "You paid ${order.downpaymentAmountFormatted.ifBlank { Money.format(order.downpaymentAmount) }}. " +
+                    "Pay the remaining ${order.remainingBalanceFormatted.ifBlank { Money.format(order.remainingBalance) }} in cash when you collect the item.",
+                tone = StatusTone.Info,
+                icon = Icons.Filled.Payments,
+            )
+        } else if (stillOwes && approvedCashPickup) {
             InfoBanner(
                 title = "Approved - pay at the store",
                 text = "Show your pickup code when you collect the item and hand over " +
-                    Money.format(order.amountDue) + " in cash. It is marked paid then.",
+                    Money.format(order.remainingBalance) + " in cash. It is marked paid then.",
                 tone = StatusTone.Info,
                 icon = StoreLogoIcon,
             )
         } else if (stillOwes) {
             PrimaryButton(
-                text = when (order.paymentMethod) {
-                    "paymongo", "gcash" -> "Pay with GCash"
-                    else -> "Payment details"
-                },
+                text = if (order.paymentMethod == "gcash") "Payment details" else "Continue payment",
                 onClick = onPay,
                 modifier = Modifier.fillMaxWidth(),
                 icon = GcashLogoIcon,
@@ -663,7 +695,15 @@ internal fun ReceiptDialog(
                                 .padding(Spacing.screen),
                             verticalArrangement = Arrangement.spacedBy(Spacing.md),
                         ) {
-                            if (!r.isOfficial) {
+                            if (r.paymentStatus == "partially_paid") {
+                                InfoBanner(
+                                    title = "Partial payment receipt",
+                                    text = "The PayMongo downpayment is paid. The remaining " +
+                                        "${Money.format(r.remainingBalance)} is still unpaid and is due in cash at pickup.",
+                                    tone = StatusTone.Info,
+                                    icon = Icons.Filled.Payments,
+                                )
+                            } else if (!r.isOfficial) {
                                 InfoBanner(
                                     title = "Provisional receipt",
                                     text = "The admin has not verified this payment yet. " +
@@ -682,7 +722,11 @@ internal fun ReceiptDialog(
                                 ) {
                                     Text(r.storeName, style = MaterialTheme.typography.titleLarge)
                                     Text(
-                                        "Official Receipt",
+                                        when {
+                                            r.paymentStatus == "partially_paid" -> "Partial Payment Receipt"
+                                            r.isOfficial -> "Official Receipt"
+                                            else -> "Provisional Receipt"
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -770,10 +814,24 @@ internal fun ReceiptDialog(
                                     )
                                 }
 
+                                if (r.paymentStatus == "partially_paid") {
+                                    SummaryRow(
+                                        label = "Remaining balance",
+                                        value = Money.format(r.remainingBalance),
+                                        emphasized = true,
+                                    )
+                                    SummaryRow(
+                                        label = "Remaining status",
+                                        value = "Unpaid",
+                                        valueColor = MaterialTheme.colorScheme.error,
+                                        emphasized = true,
+                                    )
+                                }
+
                                 SoftDivider()
 
                                 SummaryRow("Payment method", r.paymentMethodLabel)
-                                r.paymentReference?.let { SummaryRow("GCash reference", it) }
+                                r.paymentReference?.let { SummaryRow("PayMongo reference", it) }
                                 if (r.rewardPointsEarned > 0) {
                                     SummaryRow(
                                         label = "Reward points earned",

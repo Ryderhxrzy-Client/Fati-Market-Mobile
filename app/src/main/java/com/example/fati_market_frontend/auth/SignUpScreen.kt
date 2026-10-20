@@ -118,9 +118,9 @@ fun SignUpScreen(navController: NavController) {
     AuthScaffold(
         title = if (isVerifyingOtp) "Verify your email" else "Create your account",
         subtitle = if (isVerifyingOtp) {
-            "Enter the 6-digit verification code sent to $registeredEmail"
+            "Enter the 6-digit verification code sent to $registeredEmail (valid for 5 minutes)"
         } else {
-            "Open to Fatima students and public buyers. Sign up below."
+            "Sign up with your email to start buying and selling on Fati Market."
         },
         onBack = {
             if (isVerifyingOtp) {
@@ -137,19 +137,19 @@ fun SignUpScreen(navController: NavController) {
             // ── Features Banner ──────────────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                 SignUpPoint(
-                    icon = Icons.Filled.School,
-                    title = "Students & Public Buyers",
-                    text = "Fatima students and public buyers are welcome! Join using your personal Gmail or school email.",
+                    icon = Icons.Filled.Person,
+                    title = "Open to Everyone",
+                    text = "Everyone is welcome! Sign up using your email address to buy, sell, and earn reward points.",
                 )
                 SignUpPoint(
                     icon = Icons.Filled.Verified,
                     title = "Secure OTP Verification",
-                    text = "Verify your email with a 6-digit code sent to your inbox to protect your account.",
+                    text = "Verify your email with a 6-digit code (valid for 5 minutes) sent to your inbox to protect your account.",
                 )
                 SignUpPoint(
                     icon = Icons.Filled.Shield,
                     title = "Your Account Stays Yours",
-                    text = "Keep your account forever to buy, sell, or swap school items with Ofelia's store.",
+                    text = "Keep your account forever to buy, sell, or swap items with Ofelia's store.",
                 )
             }
 
@@ -186,7 +186,7 @@ fun SignUpScreen(navController: NavController) {
                 value = email,
                 onValueChange = { email = it; errorMessage = null },
                 label = "Email address",
-                placeholder = "yourname@gmail.com or student email",
+                placeholder = "yourname@gmail.com",
                 leadingIcon = Icons.Filled.Email,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
             )

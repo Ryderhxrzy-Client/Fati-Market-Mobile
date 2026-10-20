@@ -240,7 +240,7 @@ internal data class CheckoutQuote(
     val remainingBalance: String = "0.00",
     val remainingBalanceFormatted: String = "₱0.00",
     val isPastCutoff: Boolean = false,
-    val cutoffTime: String = "5:00 PM",
+    val cutoffTime: String = "6:00 PM",
     val pickupScheduleNote: String? = null,
 )
 
@@ -269,7 +269,7 @@ internal fun parseCheckoutQuote(json: JSONObject): CheckoutQuote {
         remainingBalance = data.optString("remaining_balance", "0.00"),
         remainingBalanceFormatted = data.optString("remaining_balance_formatted", "₱0.00"),
         isPastCutoff = data.optBoolean("is_past_cutoff", false),
-        cutoffTime = data.optString("cutoff_time", "5:00 PM"),
+        cutoffTime = data.optString("cutoff_time", "6:00 PM"),
         pickupScheduleNote = str("pickup_schedule_note"),
     )
 }
@@ -311,7 +311,7 @@ internal data class MarketTransaction(
     val remainingBalance: String = "0.00",
     val remainingBalanceFormatted: String = "₱0.00",
     val isPastCutoff: Boolean = false,
-    val cutoffTime: String = "5:00 PM",
+    val cutoffTime: String = "6:00 PM",
     val pickupScheduleNote: String? = null,
 
     /**
@@ -389,7 +389,7 @@ internal fun parseTransaction(obj: JSONObject): MarketTransaction {
         remainingBalance = obj.optString("remaining_balance", "0.00"),
         remainingBalanceFormatted = obj.optString("remaining_balance_formatted", "₱0.00"),
         isPastCutoff = obj.optBoolean("is_past_cutoff", false),
-        cutoffTime = obj.optString("cutoff_time", "5:00 PM"),
+        cutoffTime = obj.optString("cutoff_time", "6:00 PM"),
         pickupScheduleNote = str("pickup_schedule_note"),
         qrCode = str("qr_code"),
         handoverPhoto = str("handover_photo"),
@@ -431,6 +431,8 @@ internal data class Receipt(
     val pointsUsed: Int,
     val pointsDiscountAmount: String,
     val amountPaid: String,
+    val remainingBalance: String,
+    val remainingBalanceStatus: String,
     val rewardPointsEarned: Int,
     val paymentMethodLabel: String,
     val paymentReference: String?,
@@ -459,6 +461,8 @@ internal fun parseReceipt(json: JSONObject): Receipt {
         pointsUsed = d.optInt("points_used"),
         pointsDiscountAmount = d.optString("points_discount_amount", "0.00"),
         amountPaid = d.optString("amount_paid", "0.00"),
+        remainingBalance = d.optString("remaining_balance", "0.00"),
+        remainingBalanceStatus = d.optString("remaining_balance_status", "paid"),
         rewardPointsEarned = d.optInt("reward_points_earned"),
         paymentMethodLabel = d.optString("payment_method_label"),
         paymentReference = str("payment_reference"),

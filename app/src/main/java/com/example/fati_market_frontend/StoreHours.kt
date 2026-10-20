@@ -88,7 +88,7 @@ internal fun parseStoreHours(data: JSONObject): StoreHours {
     // missing a field rather than one that was configured.
     return StoreHours(
         openTime = time("open_time", LocalTime.of(8, 0)),
-        closeTime = time("close_time", LocalTime.of(17, 0)),
+        closeTime = time("close_time", LocalTime.of(18, 0)),
         openDays = days.ifEmpty { (1..6).toSet() },
         slotMinutes = data.optInt("slot_minutes", 30).takeIf { it > 0 } ?: 30,
         label = data.optString("hours_label"),

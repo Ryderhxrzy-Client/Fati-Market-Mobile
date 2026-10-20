@@ -77,13 +77,29 @@ internal object ReceiptPdf {
 
         canvas.drawText(receipt.storeName, MARGIN, y, title)
         y += 20f
-        canvas.drawText("Official Receipt", MARGIN, y, muted)
+        canvas.drawText(
+            when {
+                receipt.paymentStatus == "partially_paid" -> "Partial Payment Receipt"
+                receipt.isOfficial -> "Official Receipt"
+                else -> "Provisional Receipt"
+            },
+            MARGIN,
+            y,
+            muted,
+        )
 
         // Receipt number, right-aligned.
         val noPaint = paint(13f, bold = true).apply { textAlign = Paint.Align.RIGHT }
         canvas.drawText(receipt.receiptNo, PAGE_WIDTH - MARGIN, MARGIN + 24f, noPaint)
 
-        if (!receipt.isOfficial) {
+        if (receipt.paymentStatus == "partially_paid") {
+            y += 22f
+            canvas.drawText(
+                "PARTIALLY PAID - remaining balance is unpaid",
+                MARGIN, y,
+                paint(10f, bold = true, color = Color.rgb(178, 94, 2)),
+            )
+        } else if (!receipt.isOfficial) {
             y += 22f
             canvas.drawText(
                 "PROVISIONAL - payment not yet verified by the admin",
@@ -136,12 +152,18 @@ internal object ReceiptPdf {
         val totalPaint = total.apply { textAlign = Paint.Align.RIGHT }
         canvas.drawText(peso(receipt.amountPaid), PAGE_WIDTH - MARGIN, y, totalPaint)
 
+        if (receipt.paymentStatus == "partially_paid") {
+            y += 24f
+            y = row(canvas, y, "Remaining balance", peso(receipt.remainingBalance), body)
+            y = row(canvas, y, "Remaining status", "UNPAID", body)
+        }
+
         // ── Payment ─────────────────────────────────────────────────────
         y += 34f
         y = row(canvas, y, "Payment method", receipt.paymentMethodLabel, body)
 
         receipt.paymentReference?.let {
-            y = row(canvas, y, "GCash reference", it, body)
+            y = row(canvas, y, "PayMongo reference", it, body)
         }
 
         if (receipt.rewardPointsEarned > 0) {

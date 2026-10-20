@@ -4,12 +4,14 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -24,11 +26,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.fati_market.auth.utils.copyUriToCache
 import com.fati_market.ui.components.*
+import com.fati_market.ui.theme.Elevation
 import com.fati_market.ui.theme.LocalMarketAccents
 import com.fati_market.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +41,8 @@ import kotlinx.coroutines.withContext
  *
  * Points act as a discount here, never as the currency. The buyer chooses how
  * many of their points to spend, sees the whole breakdown update as they do,
- * and settles whatever is left in cash or by GCash.
+ * and settles whatever is left through PayMongo or with a 50% PayMongo
+ * downpayment followed by the remaining cash balance at pickup.
  *
  * The preview shown while sliding is computed locally from the shared loyalty
  * rules purely for responsiveness - the amount actually charged is recalculated
@@ -51,6 +53,7 @@ import kotlinx.coroutines.withContext
 internal fun CheckoutScreen(
     item: Item,
     onBack: () -> Unit,
+    onOrderPlaced: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
@@ -66,7 +69,6 @@ internal fun CheckoutScreen(
     var paymentMethod by remember { mutableStateOf("cash") }
     var submitting by remember { mutableStateOf(false) }
     var submitError by remember { mutableStateOf<String?>(null) }
-    var placedOrder by remember { mutableStateOf<MarketTransaction?>(null) }
 
     BackHandler(onBack = onBack)
 
@@ -95,7 +97,9 @@ internal fun CheckoutScreen(
     val rewardOnCompletion = quote?.rewardPointsOnCompletion ?: item.rewardPoints
 
     val isPastCutoff = quote?.isPastCutoff == true || runCatching {
-        java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) >= 17
+        val cal = java.util.Calendar.getInstance()
+        cal.get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.SUNDAY ||
+        cal.get(java.util.Calendar.HOUR_OF_DAY) >= 18
     }.getOrDefault(false)
 
     val isCash = paymentMethod == "cash" && !isFullPoints
@@ -110,10 +114,55 @@ internal fun CheckoutScreen(
         java.math.BigDecimal.ZERO
     }
 
-    Dialog(
-        onDismissRequest = onBack,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
+    val submitOrder: () -> Unit = {
+        scope.launch {
+            submitting = true
+            submitError = null
+            val result = withContext(Dispatchers.IO) {
+                MarketplaceApi.checkout(token, item.itemId, pointsToUse, paymentMethod)
+            }
+            when (result) {
+                is MarketplaceApi.Result.Ok -> {
+                    onOrderPlaced()
+                    if (!result.value.isFullPointsCheckout) {
+                        when (val payment = withContext(Dispatchers.IO) {
+                            MarketplaceApi.createPayMongoCheckoutSession(
+                                token,
+                                result.value.transactionId,
+                            )
+                        }) {
+                            is MarketplaceApi.Result.Ok -> {
+                                val intent = android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(payment.value.checkoutUrl),
+                                )
+                                context.startActivity(intent)
+                                onBack()
+                            }
+                            is MarketplaceApi.Result.Failure -> {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "Order saved. Continue payment from My Orders. ${payment.message}",
+                                    android.widget.Toast.LENGTH_LONG,
+                                ).show()
+                                onBack()
+                            }
+                        }
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Order placed successfully.",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                        onBack()
+                    }
+                }
+                is MarketplaceApi.Result.Failure -> submitError = result.message
+            }
+            submitting = false
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -125,6 +174,19 @@ internal fun CheckoutScreen(
         // apply them or the bottom bar gets padded twice.
         contentWindowInsets = WindowInsets(0),
         topBar = { MarketPageTopBar("Checkout", onBack) },
+        bottomBar = {
+            if (!loading && loadError == null) {
+                CheckoutConfirmBar(
+                    amountDue = Money.PESO + Money.formatPlain(amountDue.toPlainString()),
+                    downpayment = Money.PESO + Money.formatPlain(downpayment.toPlainString()),
+                    remainingBalance = Money.PESO + Money.formatPlain(remainingBalance.toPlainString()),
+                    isCash = isCash,
+                    isFullPoints = isFullPoints,
+                    submitting = submitting,
+                    onConfirm = submitOrder,
+                )
+            }
+        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -155,10 +217,6 @@ internal fun CheckoutScreen(
                         title = "This item cannot be bought right now",
                     )
                     SecondaryButton("Go back", onBack, Modifier.fillMaxWidth())
-                }
-
-                placedOrder != null -> {
-                    OrderPlacedSection(order = placedOrder!!, token = token)
                 }
 
                 else -> {
@@ -192,15 +250,17 @@ internal fun CheckoutScreen(
                         }
                     }
 
-                    if (isPastCutoff) {
-                        InfoBanner(
-                            title = "Store Cutoff Notice (Past 5:00 PM)",
-                            text = quote?.pickupScheduleNote
-                                ?: "Orders placed at or after 5:00 PM are automatically scheduled for next-day pickup/meet-up at Ofelia's store during opening hours.",
-                            tone = StatusTone.Warning,
-                            icon = Icons.Filled.Schedule,
-                        )
-                    }
+                    InfoBanner(
+                        title = "Cut off time: 6pm and Monday to Saturday",
+                        text = if (isPastCutoff) {
+                            quote?.pickupScheduleNote
+                                ?: "Orders placed after 6:00 PM or on Sunday will be ready for pickup the next store day."
+                        } else {
+                            "Store hours: Monday to Saturday until 6:00 PM. Orders placed after 6:00 PM or on Sunday will be ready for pickup the next store day."
+                        },
+                        tone = if (isPastCutoff) StatusTone.Warning else StatusTone.Info,
+                        icon = Icons.Filled.Schedule,
+                    )
 
                     // ── Points redemption ───────────────────────────────
                     MarketCard {
@@ -212,7 +272,7 @@ internal fun CheckoutScreen(
                             Column {
                                 Text("Use your points", style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    "1 point = ${Money.PESO}${LoyaltyRules.PESOS_PER_REDEEMED_POINT} off",
+                                    "1 point = 1 peso (₱1.00 discount)",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -230,36 +290,58 @@ internal fun CheckoutScreen(
                         } else {
                             Spacer(Modifier.height(Spacing.xs))
 
-                            // One decision, not a dial: spend the points here
-                            // or keep them. Flipping it on applies every point
-                            // this order can absorb.
                             val usingPoints = pointsToUse > 0
 
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(MaterialTheme.shapes.small)
+                                    .clip(MaterialTheme.shapes.medium)
                                     .background(
-                                        if (usingPoints) accents.reward.copy(alpha = 0.08f)
+                                        if (usingPoints) accents.reward.copy(alpha = 0.12f)
                                         else MaterialTheme.colorScheme.surfaceContainerLow
                                     )
                                     .border(
-                                        width = 1.dp,
+                                        width = if (usingPoints) 2.dp else 1.dp,
                                         color = if (usingPoints) accents.reward else MaterialTheme.colorScheme.outlineVariant,
-                                        shape = MaterialTheme.shapes.small
+                                        shape = MaterialTheme.shapes.medium
                                     )
+                                    .clickable {
+                                        pointsToUse = if (usingPoints) 0 else maxUsable
+                                    }
                                     .padding(Spacing.sm),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                // Noticeable Points Icon with distinct border
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(if (usingPoints) accents.rewardContainer else MaterialTheme.colorScheme.surfaceContainerHighest)
+                                        .border(
+                                            width = if (usingPoints) 2.dp else 1.dp,
+                                            color = if (usingPoints) accents.reward else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Stars,
+                                        contentDescription = "Points",
+                                        tint = if (usingPoints) accents.reward else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                }
+
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         if (usingPoints) {
-                                            "Using $pointsToUse point(s)"
+                                            "Using $pointsToUse point(s) (₱${pointsToUse}.00 discount)"
                                         } else {
-                                            "Use my $maxUsable point(s)"
+                                            "Use my $maxUsable point(s) (1 point = 1 peso)"
                                         },
                                         style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (usingPoints) FontWeight.Bold else FontWeight.Medium,
                                     )
                                     Text(
                                         if (usingPoints) {
@@ -270,10 +352,10 @@ internal fun CheckoutScreen(
                                             "Turn on to take " + Money.PESO +
                                                 Money.formatPlain(
                                                     LoyaltyRules.discountFor(maxUsable).toPlainString(),
-                                                ) + " off"
+                                                ) + " off (1 pt = ₱1)"
                                         },
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = if (usingPoints) accents.reward else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
 
@@ -324,7 +406,7 @@ internal fun CheckoutScreen(
                         if (isCash && amountDue.signum() > 0) {
                             SoftDivider(Modifier.padding(vertical = Spacing.xs))
                             SummaryRow(
-                                label = "Mandatory 50% DP (via GCash)",
+                                label = "50% downpayment (via PayMongo)",
                                 value = Money.PESO + Money.formatPlain(downpayment.toPlainString()),
                                 valueColor = MaterialTheme.colorScheme.primary,
                                 emphasized = true,
@@ -373,100 +455,92 @@ internal fun CheckoutScreen(
                     }
 
                     // ── Confirm ─────────────────────────────────────────
-                    // The end of the page rather than a bar welded to the
-                    // window, so the button never competes with the gesture
-                    // bar for its last few pixels.
-                    SoftDivider()
-
-                    if (isCash && amountDue.signum() > 0) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column {
-                                    Text(
-                                        "Downpayment to pay now",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Text(
-                                        "50% via GCash",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                }
-                                PriceTag(
-                                    Money.PESO + Money.formatPlain(downpayment.toPlainString()),
-                                    size = PriceSize.Medium,
-                                )
-                            }
-                            Text(
-                                "Remaining ${Money.PESO}${Money.formatPlain(remainingBalance.toPlainString())} payable in cash upon pickup at Ofelia's store.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "Total to pay",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            PriceTag(
-                                Money.PESO + Money.formatPlain(amountDue.toPlainString()),
-                                size = PriceSize.Medium,
-                            )
-                        }
-                    }
-
-                    PrimaryButton(
-                        text = if (isFullPoints) "Confirm with points" else "Confirm order",
-                        onClick = {
-                            scope.launch {
-                                submitting = true
-                                submitError = null
-                                val result = withContext(Dispatchers.IO) {
-                                    MarketplaceApi.checkout(
-                                        token,
-                                        item.itemId,
-                                        pointsToUse,
-                                        paymentMethod,
-                                    )
-                                }
-                                submitting = false
-                                when (result) {
-                                    is MarketplaceApi.Result.Ok -> placedOrder = result.value
-                                    is MarketplaceApi.Result.Failure ->
-                                        submitError = result.message
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        loading = submitting,
-                    )
-
-                    SafeAreaBottomSpacer()
                 }
             }
         }
     }
     }
+}
+
+/** Fixed checkout action bar matching the Item Details purchase bar. */
+@Composable
+private fun CheckoutConfirmBar(
+    amountDue: String,
+    downpayment: String,
+    remainingBalance: String,
+    isCash: Boolean,
+    isFullPoints: Boolean,
+    submitting: Boolean,
+    onConfirm: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = Elevation.flat,
+        shadowElevation = 8.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .safeAreaBarBottom(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 72.dp)
+                    .padding(horizontal = Spacing.screen, vertical = Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = when {
+                        isFullPoints -> "Total after points"
+                        isCash -> "Downpayment due (50%)"
+                        else -> "Total via PayMongo"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                PriceTag(
+                    price = if (isCash) downpayment else amountDue,
+                    size = PriceSize.Medium,
+                )
+                if (isCash) {
+                    Text(
+                        text = "Remaining $remainingBalance cash at pickup",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+
+            PrimaryButton(
+                text = when {
+                    isFullPoints -> "Confirm with points"
+                    isCash -> "Pay 50% via PayMongo"
+                    else -> "Pay via PayMongo"
+                },
+                onClick = onConfirm,
+                compact = true,
+                loading = submitting,
+            )
+            }
+        }
     }
 }
 
 /**
- * Cash or GCash - the two ways to settle what is left after points. Shared
+ * Cash pickup or full PayMongo payment - the two ways to settle what is left after points. Shared
  * with the order history, where an unpaid order can still switch methods, so
  * the choice reads the same in both places.
  */
@@ -475,15 +549,15 @@ internal fun PaymentMethodOptions(selected: String, onSelect: (String) -> Unit) 
     PaymentOption(
         selected = selected == "cash",
         icon = StoreLogoIcon,
-        title = "Cash at the store (50% DP via GCash)",
-        subtitle = "Mandatory 50% downpayment via GCash to reserve item. Remaining 50% paid in cash upon pickup at Ofelia's store.",
+        title = "Cash on pickup (50% Downpayment required)",
+        subtitle = "A mandatory 50% downpayment via PayMongo is required to reserve the item. Pay the remaining 50% cash when picking up at Ofelia's store.",
         onClick = { onSelect("cash") },
     )
     PaymentOption(
         selected = selected == "paymongo" || selected == "gcash",
         icon = GcashLogoIcon,
-        title = "Full Payment via GCash",
-        subtitle = "Pay 100% instantly using your GCash account.",
+        title = "Full payment via PayMongo",
+        subtitle = "Pay 100% online now securely via PayMongo using GCash.",
         onClick = { onSelect("paymongo") },
     )
 }
@@ -552,19 +626,29 @@ private fun PaymentOption(
 /**
  * What the buyer sees once the order exists.
  *
- * For GCash this is also where the receipt is uploaded - there is no live
- * payment gateway, so a proof image goes to the admin for manual verification.
+ * Online payments continue through PayMongo. If the buyer leaves the gateway,
+ * the same action remains available from My Orders.
  */
 @Composable
 private fun OrderPlacedSection(
     order: MarketTransaction,
     token: String,
+    paymentError: String? = null,
 ) {
     // The QR, receipt picker and upload all live in PaymentProofDialog now, so
     // the same flow serves this screen and the order history.
     var current by remember { mutableStateOf(order) }
 
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+        paymentError?.let { error ->
+            InfoBanner(
+                title = "Order saved, payment not opened",
+                text = "$error Use the payment button below or continue later from My Orders.",
+                tone = StatusTone.Danger,
+                icon = Icons.Filled.ErrorOutline,
+            )
+        }
+
         MarketCard {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -585,9 +669,9 @@ private fun OrderPlacedSection(
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Order placed", style = MaterialTheme.typography.titleLarge)
+                    Text("Order reserved", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "Order #${current.transactionId} - ${current.itemTitle}",
+                        "Order #${current.transactionId} was created once",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -597,18 +681,31 @@ private fun OrderPlacedSection(
             TransactionStatusPill(current.status, paymentMethod = current.paymentMethod)
         }
 
+        InfoBanner(
+            title = "Next: complete your payment",
+            text = if (current.paymentMethod == "cash" && current.downpaymentRequired) {
+                "Pay the 50% downpayment in PayMongo now. The remaining 50% is paid in cash when you collect ${current.itemTitle}."
+            } else if (current.isFullPointsCheckout) {
+                "No payment gateway is needed because your points covered the order."
+            } else {
+                "Complete the payment in PayMongo. This does not create another order."
+            },
+            tone = if (current.isFullPointsCheckout) StatusTone.Success else StatusTone.Info,
+            icon = if (current.isFullPointsCheckout) Icons.Filled.CheckCircle else Icons.Filled.Payments,
+        )
+
         if (current.isPastCutoff || current.pickupScheduleNote != null) {
             InfoBanner(
-                title = "Pickup Scheduled (Past 5:00 PM Cutoff)",
+                title = "Cut off time: 6pm and Monday to Saturday",
                 text = current.pickupScheduleNote
-                    ?: "This order was placed after the 5:00 PM cutoff and is scheduled for pickup/meet-up tomorrow during opening hours at Ofelia's store.",
+                    ?: "This order was placed after the 6:00 PM cutoff and is scheduled for pickup/meet-up tomorrow during opening hours at Ofelia's store.",
                 tone = StatusTone.Warning,
                 icon = Icons.Filled.Schedule,
             )
         }
 
         MarketCard {
-            Overline("What you paid")
+            Overline("Payment breakdown")
             Spacer(Modifier.height(Spacing.xs))
             SummaryRow("Item price", Money.format(current.subtotal))
             if (current.pointsUsed > 0) {
@@ -621,7 +718,7 @@ private fun OrderPlacedSection(
             if (current.paymentMethod == "cash" && current.downpaymentRequired) {
                 SoftDivider(Modifier.padding(vertical = Spacing.xs))
                 SummaryRow(
-                    label = "Mandatory 50% DP (via GCash)",
+                    label = "50% downpayment (via PayMongo)",
                     value = current.downpaymentAmountFormatted.ifBlank { Money.format(current.downpaymentAmount) },
                     valueColor = MaterialTheme.colorScheme.primary,
                     emphasized = true,
@@ -644,30 +741,47 @@ private fun OrderPlacedSection(
                 )
             }
 
-            current.paymentMethod == "cash" && current.downpaymentRequired && current.paymentStatus != "verified" && current.paymentProof == null -> {
-                var payingDp by remember { mutableStateOf(false) }
-
-                if (payingDp) {
-                    PaymentProofDialog(
-                        transaction = current,
-                        token = token,
-                        onDismiss = { payingDp = false },
-                        onSubmitted = { updated -> current = updated; payingDp = false },
-                    )
-                }
+            current.paymentMethod == "cash" && current.downpaymentRequired && current.paymentStatus == "unpaid" -> {
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+                var launchingPayMongo by remember { mutableStateOf(false) }
+                var payMongoError by remember { mutableStateOf<String?>(null) }
 
                 InfoBanner(
-                    title = "Mandatory 50% Downpayment via GCash",
-                    text = "Send your 50% downpayment (${current.downpaymentAmountFormatted.ifBlank { Money.format(current.downpaymentAmount) }}) through GCash to confirm reservation. Pay remaining balance (${current.remainingBalanceFormatted.ifBlank { Money.format(current.remainingBalance) }}) in cash at store.",
+                    title = "Downpayment still pending",
+                    text = "This is the same order #${current.transactionId}. Continue the ${current.downpaymentAmountFormatted.ifBlank { Money.format(current.downpaymentAmount) }} PayMongo payment; pay the remaining ${current.remainingBalanceFormatted.ifBlank { Money.format(current.remainingBalance) }} in cash at pickup.",
                     tone = StatusTone.Warning,
                     icon = GcashLogoIcon,
                 )
 
+                payMongoError?.let { err ->
+                    InfoBanner(text = err, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
+                }
+
                 PrimaryButton(
-                    text = "Upload GCash DP Proof",
-                    onClick = { payingDp = true },
+                    text = "Continue 50% payment",
+                    onClick = {
+                        scope.launch {
+                            launchingPayMongo = true
+                            payMongoError = null
+                            when (val result = withContext(Dispatchers.IO) {
+                                MarketplaceApi.createPayMongoCheckoutSession(token, current.transactionId)
+                            }) {
+                                is MarketplaceApi.Result.Ok -> {
+                                    val intent = android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW,
+                                        android.net.Uri.parse(result.value.checkoutUrl),
+                                    )
+                                    context.startActivity(intent)
+                                }
+                                is MarketplaceApi.Result.Failure -> payMongoError = result.message
+                            }
+                            launchingPayMongo = false
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
-                    icon = Icons.Filled.Payments,
+                    loading = launchingPayMongo,
+                    icon = GcashLogoIcon,
                 )
             }
 
@@ -698,8 +812,8 @@ private fun OrderPlacedSection(
                 }
 
                 InfoBanner(
-                    title = "GCash Payment Required",
-                    text = "Pay ${Money.format(current.amountDue)} using your GCash account.",
+                    title = "PayMongo payment required",
+                    text = "Pay ${Money.format(current.amountDue)} securely through PayMongo using GCash.",
                     tone = StatusTone.Warning,
                     icon = GcashLogoIcon,
                 )
@@ -709,7 +823,7 @@ private fun OrderPlacedSection(
                 }
 
                 PrimaryButton(
-                    text = "Pay with GCash",
+                    text = "Continue with PayMongo",
                     onClick = { launchPayMongo() },
                     modifier = Modifier.fillMaxWidth(),
                     loading = launchingPayMongo,

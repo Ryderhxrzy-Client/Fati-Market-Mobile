@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.fati_market.auth.utils.compressImageToCache
 import com.fati_market.auth.utils.copyUriToCache
 import com.fati_market.ui.components.*
 import com.fati_market.ui.theme.Spacing
@@ -247,12 +248,11 @@ internal fun PaymentProofDialog(
                                     error = null
 
                                     val prepared = withContext(Dispatchers.IO) {
-                                        copyUriToCache(context, uri)
+                                        compressImageToCache(context, uri)
                                     }
 
                                     if (prepared == null) {
-                                        error = "That file could not be read, or it is over 5 MB. " +
-                                            "Try another image."
+                                        error = "That file could not be read. Please try selecting a different image or document."
                                         uploading = false
                                         return@launch
                                     }

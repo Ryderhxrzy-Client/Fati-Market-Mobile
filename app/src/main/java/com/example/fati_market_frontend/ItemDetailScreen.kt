@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -542,25 +543,26 @@ private fun ItemDetailPurchaseBar(
                     .height(68.dp)
                     .padding(horizontal = Spacing.screen, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                horizontalArrangement = Arrangement.End,
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
                     Text(
-                        text = "Total amount",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "Total amount:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     PriceTag(item.displayPrice, size = PriceSize.Medium)
                 }
+                Spacer(Modifier.width(Spacing.md))
                 PrimaryButton(
                     text = "Buy now",
                     icon = LucideIcons.ShoppingBag,
                     onClick = onBuyNow,
                     compact = true,
-                    modifier = Modifier.weight(1.1f),
                 )
             }
         }
