@@ -61,6 +61,7 @@ internal fun ChatOrderPanel(
     var showBuyer by remember { mutableStateOf(false) }
     var showProof by remember { mutableStateOf(false) }
     var payingNow by remember { mutableStateOf(false) }
+    var expanded by remember(itemId, buyerId) { mutableStateOf(false) }
 
     LaunchedEffect(itemId, buyerId, refreshKey) {
         if (itemId <= 0 || buyerId <= 0) return@LaunchedEffect
@@ -143,10 +144,45 @@ internal fun ChatOrderPanel(
 
                     SoftDivider()
 
-                    MarketPanel {
-                        SummaryRow("Order", current.receiptNo.ifBlank { "#${current.transactionId}" })
-                        SummaryRow("Item", current.itemTitle)
-                        SummaryRow("Amount due", Money.format(current.amountDue), emphasized = true)
+                    MarketPanel(
+                        contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
+                    ) {
+                        CompactOrderRow("Order", current.receiptNo.ifBlank { "#${current.transactionId}" })
+                        CompactOrderRow("Item", current.itemTitle)
+                        CompactOrderRow("Order total", Money.format(current.amountDue), emphasized = true)
+                        CompactOrderRow("Payment method", orderPaymentMethodLabel(current))
+
+                        if (current.paymentMethod == "cash" && current.downpaymentRequired) {
+                            val downpaymentPaid = current.paymentStatus in setOf(
+                                "partially_paid",
+                                "paid",
+                                "verified",
+                            )
+                            val balancePaid = current.paymentStatus in setOf("paid", "verified")
+
+                            CompactOrderRow(
+                                label = "PayMongo downpayment",
+                                value = Money.format(current.downpaymentAmount) +
+                                    if (downpaymentPaid) " · Paid" else " · Unpaid",
+                                valueColor = if (downpaymentPaid) {
+                                    accents.success
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                                emphasized = true,
+                            )
+                            CompactOrderRow(
+                                label = "Cash balance at pickup",
+                                value = Money.format(current.remainingBalance) +
+                                    if (balancePaid) " · Paid" else " · Unpaid",
+                                valueColor = if (balancePaid) {
+                                    accents.success
+                                } else {
+                                    MaterialTheme.colorScheme.error
+                                },
+                                emphasized = true,
+                            )
+                        }
                     }
 
                     SecondaryButton("Close", { showBuyer = false }, Modifier.fillMaxWidth())
@@ -245,19 +281,45 @@ internal fun ChatOrderPanel(
             // One line: which order, what is owed, where it stands. The card
             // in the thread carries the detail; this is the reminder.
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable { expanded = !expanded }
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    current.receiptNo.ifBlank { "Order #${current.transactionId}" } + " · " +
-                        Money.format(current.amountDue) + " · " + paymentMethodLabel(current.paymentMethod),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                Icon(
+                    Icons.Filled.ReceiptLong,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
                 )
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        current.receiptNo.ifBlank { "Order #${current.transactionId}" } +
+                            " · " + current.itemTitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        if (current.paymentMethod == "cash" && current.downpaymentRequired) {
+                            val paid = current.paymentStatus in setOf("partially_paid", "paid", "verified")
+                            Money.format(current.downpaymentAmount) +
+                                (if (paid) " paid · " else " unpaid · ") +
+                                Money.format(current.remainingBalance) + " cash due"
+                        } else {
+                            Money.format(current.amountDue) + " · " +
+                                orderPaymentMethodLabel(current)
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
 
                 PaymentStatusPill(
                     current.paymentStatus,
@@ -265,9 +327,52 @@ internal fun ChatOrderPanel(
                     paymentMethod = current.paymentMethod,
                     orderStatus = current.status,
                 )
+
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    if (expanded) "Collapse order" else "Expand order",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
             }
 
-            if (isAdmin) {
+            if (expanded && current.paymentMethod == "cash" && current.downpaymentRequired) {
+                val downpaymentPaid = current.paymentStatus in setOf(
+                    "partially_paid",
+                    "paid",
+                    "verified",
+                )
+                val balancePaid = current.paymentStatus in setOf("paid", "verified")
+
+                MarketPanel(
+                    contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
+                ) {
+                    CompactOrderRow(
+                        label = "PayMongo downpayment",
+                        value = Money.format(current.downpaymentAmount) +
+                            if (downpaymentPaid) " · Paid" else " · Unpaid",
+                        valueColor = if (downpaymentPaid) {
+                            accents.success
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        emphasized = true,
+                    )
+                    CompactOrderRow(
+                        label = "Cash balance at pickup",
+                        value = Money.format(current.remainingBalance) +
+                            if (balancePaid) " · Paid" else " · Unpaid",
+                        valueColor = if (balancePaid) {
+                            accents.success
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        emphasized = true,
+                    )
+                }
+            }
+
+            if (expanded && isAdmin) {
                 // Admin: the decisions the server still allows, plus the two
                 // things worth a glance - who is buying, and their receipt.
                 if (!current.isTerminal) {
@@ -319,7 +424,7 @@ internal fun ChatOrderPanel(
                         )
                     }
                 }
-            } else if (!current.isTerminal) {
+            } else if (expanded && !current.isTerminal) {
                 // Buyer: settle the bill, then carry the pickup code - both
                 // without leaving the conversation.
                 val owes = current.paymentMethod == "gcash" &&
@@ -413,10 +518,25 @@ internal fun ChatOrderActionDialog(
         // anything over yet, and saying "paid" here would put it on a receipt.
         "approve_order" -> Triple(
             "Approve this order",
-            "Accept ${Money.format(transaction.amountDue)} cash at the store for " +
-                "\"${transaction.itemTitle}\". The item is held and the buyer gets their " +
-                "pickup code - they pay when they collect it, and completing the order is " +
-                "what marks it paid.",
+            if (transaction.downpaymentRequired) {
+                val downpaymentState = if (
+                    transaction.paymentStatus in setOf("partially_paid", "paid", "verified")
+                ) "Paid" else "Unpaid"
+                val balanceState = if (
+                    transaction.paymentStatus in setOf("paid", "verified")
+                ) "Paid" else "Unpaid"
+
+                "Payment method: ${orderPaymentMethodLabel(transaction)}. " +
+                    "PayMongo downpayment: ${Money.format(transaction.downpaymentAmount)} " +
+                    "($downpaymentState). Remaining cash to collect at pickup: " +
+                    "${Money.format(transaction.remainingBalance)} ($balanceState). " +
+                    "Approve the order to hold \"${transaction.itemTitle}\" for the buyer."
+            } else {
+                "Accept ${Money.format(transaction.amountDue)} cash at the store for " +
+                    "\"${transaction.itemTitle}\". The item is held and the buyer gets their " +
+                    "pickup code - they pay when they collect it, and completing the order is " +
+                    "what marks it paid."
+            },
             "Approve",
         )
         "reject_payment" -> Triple(
