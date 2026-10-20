@@ -2473,11 +2473,11 @@ private fun AdminHomeContent(
 
             if (recentRegistrations.isNotEmpty()) {
                 ActivityGroup(
-                    title = "New students",
+                    title = "New users",
                     lines = recentRegistrations.take(3),
                     icon = Icons.Filled.PersonAdd,
                     tint = accents.info,
-                    actionLabel = "All students",
+                    actionLabel = "All users",
                     onAction = onOpenStudents,
                 )
             }
@@ -3598,6 +3598,7 @@ private fun ChatDetailContent(
     var showEmojiPicker        by remember { mutableStateOf(false) }
     var chatItem               by remember { mutableStateOf<ChatItem?>(null) }
     var showItemPreview        by remember { mutableStateOf(false) }
+    var showFallbackItemPreview by remember { mutableStateOf(false) }
 
     // The student's View Item: the same ItemDetailDialog the Home screen
     // opens - Buy Now bar and all - floating over the chat, with checkout
@@ -3947,6 +3948,16 @@ private fun ChatDetailContent(
     }
     BackHandler(enabled = showItemPreview && !showEmojiPicker) { showItemPreview = false }
 
+    if (showFallbackItemPreview) {
+        ChatItemPreviewDialog(
+            itemId = conversation.itemId,
+            token = token,
+            fallbackTitle = conversation.itemTitle,
+            fallbackPhoto = conversation.itemPhoto.takeIf { it.isNotBlank() },
+            onDismiss = { showFallbackItemPreview = false },
+        )
+    }
+
     if (studentViewItem) {
         chatItem?.let { item ->
             ItemDetailDialog(
@@ -4281,7 +4292,13 @@ private fun ChatDetailContent(
                             // View Item button
                             OutlinedButton(
                                 onClick = {
-                                    if (isAdmin) showItemPreview = true else studentViewItem = true
+                                    if (chatItem == null) {
+                                        showFallbackItemPreview = true
+                                    } else if (isAdmin) {
+                                        showItemPreview = true
+                                    } else {
+                                        studentViewItem = true
+                                    }
                                 },
                                 shape = RoundedCornerShape(8.dp),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
@@ -4335,8 +4352,8 @@ private fun ChatDetailContent(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = 12.dp),
-                            contentPadding = PaddingValues(vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            contentPadding = PaddingValues(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             // Pass reversed list so newest message is at index 0 (bottom)
                             items(threadRows.asReversed(), key = { it.key }) { row ->
@@ -7469,7 +7486,7 @@ fun AdminProfileContent(
                         title = "Personal email",
                         subtitle = linked.ifBlank {
                             pending.takeIf { it.isNotBlank() }?.let { "Verify $it and set a password" } ?:
-                            "Not set - add one so you keep this account after graduation"
+                            "Not set - add a recovery email to keep your account secure"
                         },
                         tint = if (linked.isBlank()) accents.warning else MaterialTheme.colorScheme.primary,
                         onClick = { if (linked.isBlank() || !emailVerified) editing = true else settingPassword = true },
