@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.fati_market.auth.utils.compressImageToCache
 import com.fati_market.auth.utils.copyUriToCache
 import com.fati_market.ui.components.ErrorState
 import com.fati_market.ui.components.InfoBanner
@@ -114,10 +115,10 @@ internal fun AdminGcashSettingsDialog(onDismiss: () -> Unit) {
         scope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
-                    val prepared = selectedQr?.let { copyUriToCache(context, it) }
+                    val prepared = selectedQr?.let { compressImageToCache(context, it) }
                     if (selectedQr != null && (prepared == null || prepared.second !in listOf("image/png", "image/jpeg"))) {
                         prepared?.first?.delete()
-                        MarketplaceApi.Result.Failure("Choose a readable PNG or JPG image up to 5 MB.", 422)
+                        MarketplaceApi.Result.Failure("Choose a readable PNG or JPG image.", 422)
                     } else {
                         try {
                             MarketplaceApi.saveGcashSettings(token, name, number, prepared?.first, prepared?.second, removeQr)
@@ -273,7 +274,7 @@ internal fun AdminGcashSettingsDialog(onDismiss: () -> Unit) {
                                     }
 
                                     Text(
-                                        "PNG or JPG, up to 5 MB. Confirm the QR belongs to the account above.",
+                                        "PNG or JPG image. Confirm the QR belongs to the account above.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
