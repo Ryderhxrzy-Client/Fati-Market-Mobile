@@ -19,7 +19,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -73,6 +75,7 @@ internal fun ChatOrderCard(
     var showProof by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
     var payingNow by remember { mutableStateOf(false) }
+    var expanded by remember(msg.messageId) { mutableStateOf(false) }
 
     if (showItem) {
         ChatItemPreviewDialog(
@@ -121,7 +124,7 @@ internal fun ChatOrderCard(
         horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start,
     ) {
         Surface(
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.widthIn(max = 320.dp),
             shape = RoundedCornerShape(
                 topStart = 18.dp,
                 topEnd = 18.dp,
@@ -138,14 +141,15 @@ internal fun ChatOrderCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                        .clickable { expanded = !expanded }
+                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 ) {
-                    OrderCardHeading(msg.kind, order)
+                    OrderCardHeading(msg.kind, order, expanded)
                 }
 
                 Column(
-                    modifier = Modifier.padding(Spacing.md),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
 
                 // ── The item, and the way through to it ──────────────────
@@ -157,7 +161,7 @@ internal fun ChatOrderCard(
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ItemThumbnail(order.itemPhoto)
+                    ItemThumbnail(order.itemPhoto, thumbnailSize = 44.dp)
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -167,42 +171,102 @@ internal fun ChatOrderCard(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            Money.format(order.amountDue) + " due",
+                            if (order.paymentMethod == "cash" && order.downpaymentRequired) {
+                                val downpaymentState = if (
+                                    order.paymentStatus in setOf("partially_paid", "paid", "verified")
+                                ) "paid" else "unpaid"
+                                val balanceState = if (
+                                    order.paymentStatus in setOf("paid", "verified")
+                                ) "paid" else "unpaid"
+
+                                Money.format(order.downpaymentAmount) + " $downpaymentState · " +
+                                    Money.format(order.remainingBalance) + " $balanceState"
+                            } else {
+                                Money.format(order.amountDue) + " · " + paymentStateLabel(
+                                    paymentStatus = order.paymentStatus,
+                                    isFullPointsCheckout = order.isFullPointsCheckout,
+                                    paymentMethod = order.paymentMethod,
+                                    orderStatus = order.status,
+                                )
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        Text(
-                            "Tap to view item",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                    }
+
+                    TextButton(
+                        onClick = { showItem = true },
+                        modifier = Modifier.heightIn(min = 36.dp),
+                        contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 0.dp),
+                    ) {
+                        Text("View item", style = MaterialTheme.typography.labelSmall)
                     }
                 }
 
-                SoftDivider()
+                if (expanded) {
+                    SoftDivider()
 
                 // ── The money ────────────────────────────────────────────
-                SummaryRow("Price", Money.format(order.subtotal))
+                CompactOrderRow("Price", Money.format(order.subtotal))
 
                 if (order.pointsUsed > 0) {
-                    SummaryRow(
+                    CompactOrderRow(
                         label = "${order.pointsUsed} point(s) used",
                         value = "−" + Money.format(order.pointsDiscountAmount),
                         valueColor = accents.reward,
                     )
                 }
 
-                SummaryRow("Amount due", Money.format(order.amountDue), emphasized = true)
-                SummaryRow("Payment", paymentMethodLabel(order.paymentMethod))
+                CompactOrderRow("Order total", Money.format(order.amountDue), emphasized = true)
+                CompactOrderRow("Payment method", orderPaymentMethodLabel(order))
+                if (order.paymentMethod == "cash" && order.downpaymentRequired) {
+                    val downpaymentPaid = order.paymentStatus in setOf(
+                        "partially_paid",
+                        "paid",
+                        "verified",
+                    )
+                    val balancePaid = order.paymentStatus in setOf("paid", "verified")
+
+                    CompactOrderRow(
+                        "PayMongo downpayment",
+                        Money.format(order.downpaymentAmount) +
+                            if (downpaymentPaid) " · Paid" else " · Unpaid",
+                        valueColor = if (downpaymentPaid) {
+                            accents.success
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        emphasized = true,
+                    )
+                    CompactOrderRow(
+                        "Cash balance at pickup",
+                        Money.format(order.remainingBalance) +
+                            if (balancePaid) " · Paid" else " · Unpaid",
+                        valueColor = if (balancePaid) {
+                            accents.success
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        emphasized = true,
+                    )
+                }
 
                 // ── Paid, or not, at the time of writing ─────────────────
                 // The thread is a history: this line keeps the state it
                 // recorded. Older messages, posted before the snapshot
                 // existed, fall back to what their kind implies.
-                val paymentThen = msg.paymentStatusAt ?: when (msg.kind) {
-                    "order_placed" -> if (order.isFullPointsCheckout) "verified" else "unpaid"
-                    "payment_submitted" -> "proof_submitted"
-                    else -> order.paymentStatus
+                val paymentThen = if (
+                    order.paymentMethod == "cash" && order.paymentStatus == "partially_paid"
+                ) {
+                    "partially_paid"
+                } else {
+                    msg.paymentStatusAt ?: when (msg.kind) {
+                        "order_placed" -> if (order.isFullPointsCheckout) "verified" else "unpaid"
+                        "payment_submitted" -> "proof_submitted"
+                        else -> order.paymentStatus
+                    }
                 }
                 val statusThen = msg.orderStatusAt ?: when (msg.kind) {
                     "order_placed" -> "pending_payment"
@@ -227,7 +291,7 @@ internal fun ChatOrderCard(
                 // ── The GCash receipt, when one has been sent ────────────
                 if (msg.kind == "payment_submitted" || order.paymentProof != null) {
                     order.paymentReference?.let { reference ->
-                        SummaryRow("Reference", reference)
+                        CompactOrderRow("Reference", reference)
                     }
 
                     order.paymentProof?.let { proof ->
@@ -306,11 +370,13 @@ internal fun ChatOrderCard(
                 if (isAdmin && carriesActions) {
                     OrderCardActions(order) { pendingAction = it }
                 }
+                }
 
                 Text(
                     timeAgo(msg.sentAt),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.align(Alignment.End),
                 )
                 }
             }
@@ -341,25 +407,22 @@ internal fun ItemOfferCard(msg: ChatMessage, isMe: Boolean) {
     var offerAction by remember { mutableStateOf<String?>(null) }
     var confirmAcquire by remember { mutableStateOf(false) }
     var acquireError by remember { mutableStateOf<String?>(null) }
-    // BOOKING/SCHEDULE DISABLED - no longer required
-    // var scheduling by remember { mutableStateOf(false) }
+    var scheduling by remember { mutableStateOf(false) }
 
-    // BOOKING/SCHEDULE DISABLED - no longer required
-    // fun pickSchedule() {
-        // scheduling = true
-    // }
+    fun pickSchedule() {
+        scheduling = true
+    }
 
-    // BOOKING/SCHEDULE DISABLED - no longer required
-    // if (scheduling) {
-        // MeetupScheduleDialog(
-            // itemId = listing.itemId,
-            // token = token,
-            // current = listing.meetupSchedule,
-            // onDismiss = { scheduling = false },
-            // // The chat's poll repaints the card with the new time.
-            // onSaved = { scheduling = false },
-        // )
-    // }
+    if (scheduling) {
+        MeetupScheduleDialog(
+            itemId = listing.itemId,
+            token = token,
+            current = listing.meetupSchedule,
+            onDismiss = { scheduling = false },
+            // The chat's poll repaints the card with the new time.
+            onSaved = { scheduling = false },
+        )
+    }
 
     if (showItem) {
         ChatItemPreviewDialog(
@@ -527,13 +590,12 @@ internal fun ItemOfferCard(msg: ChatMessage, isMe: Boolean) {
                             // this with photographs; this button is the
                             // manual twin, like Complete has on an order.
                             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                                // BOOKING/SCHEDULE DISABLED - no longer required
-                                // SecondaryButton(
-                                    // text = if (listing.meetupSchedule == null) "Set schedule" else "Change schedule",
-                                    // onClick = { pickSchedule() },
-                                    // modifier = Modifier.weight(1f),
-                                    // icon = Icons.Filled.Event,
-                                // )
+                                SecondaryButton(
+                                    text = if (listing.meetupSchedule == null) "Set schedule" else "Change schedule",
+                                    onClick = { pickSchedule() },
+                                    modifier = Modifier.weight(1f),
+                                    icon = Icons.Filled.Event,
+                                )
 
                                 PrimaryButton(
                                     text = "Mark acquired",
@@ -676,10 +738,10 @@ private fun AcquireOfferFallbackDialog(
                 Text(
                     if (needsPrice) {
                         "Confirm \"${listing.title}\" is physically in the store and " +
-                            "the seller is being paid. The seller asked " +
+                            "the student seller is paid. The seller asked " +
                             Money.format(listing.sellerAskingPrice) + "."
                     } else {
-                        "Confirm the item is physically in the store and the seller was " +
+                        "Confirm the item is physically in the store and the student seller was " +
                             "handed " + Money.format(listing.acquisitionPrice) + "."
                     },
                     style = MaterialTheme.typography.bodyMedium,
@@ -700,7 +762,7 @@ private fun AcquireOfferFallbackDialog(
 
                 // The same proof the QR turnover takes, captured in place.
                 AcquireProofRow("Item received", itemPhoto) { capture("item") }
-                AcquireProofRow("Payout to seller", payoutPhoto) { capture("payout") }
+                AcquireProofRow("Student seller paid", payoutPhoto) { capture("payout") }
 
                 error?.let {
                     InfoBanner(text = it, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
@@ -838,8 +900,7 @@ internal fun ItemOfferPanel(
     var refreshKey by remember(itemId) { mutableStateOf(0) }
     var offerAction by remember { mutableStateOf<String?>(null) }
     var confirmAcquire by remember { mutableStateOf(false) }
-    // BOOKING/SCHEDULE DISABLED - no longer required
-    // var scheduling by remember { mutableStateOf(false) }
+    var scheduling by remember { mutableStateOf(false) }
 
     LaunchedEffect(itemId, refreshKey) {
         if (itemId <= 0) return@LaunchedEffect
@@ -875,16 +936,15 @@ internal fun ItemOfferPanel(
         )
     }
 
-    // BOOKING/SCHEDULE DISABLED - no longer required
-    // if (scheduling) {
-        // MeetupScheduleDialog(
-            // itemId = item.itemId,
-            // token = token,
-            // current = item.meetupSchedule,
-            // onDismiss = { scheduling = false },
-            // onSaved = { scheduling = false; refreshKey++ },
-        // )
-    // }
+    if (scheduling) {
+        MeetupScheduleDialog(
+            itemId = item.itemId,
+            token = token,
+            current = item.meetupSchedule,
+            onDismiss = { scheduling = false },
+            onSaved = { scheduling = false; refreshKey++ },
+        )
+    }
 
     if (confirmAcquire) {
         AcquireOfferDialog(
@@ -926,13 +986,12 @@ internal fun ItemOfferPanel(
                 }
 
                 isAdmin -> {
-                    // BOOKING/SCHEDULE DISABLED - no longer required
-                    // SecondaryButton(
-                        // text = if (item.meetupSchedule == null) "Set schedule" else "Change schedule",
-                        // onClick = { scheduling = true },
-                        // modifier = Modifier.weight(1f),
-                        // compact = true,
-                    // )
+                    SecondaryButton(
+                        text = if (item.meetupSchedule == null) "Set schedule" else "Change schedule",
+                        onClick = { scheduling = true },
+                        modifier = Modifier.weight(1f),
+                        compact = true,
+                    )
                     PrimaryButton(
                         text = "Mark acquired",
                         onClick = { confirmAcquire = true },
@@ -1061,9 +1120,51 @@ private fun ItemOfferActionDialog(
     )
 }
 
+/** A dense label/value line sized for narrow chat cards. */
+@Composable
+internal fun CompactOrderRow(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    emphasized: Boolean = false,
+    valueColor: Color? = null,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = value,
+            style = if (emphasized) {
+                MaterialTheme.typography.labelLarge
+            } else {
+                MaterialTheme.typography.bodySmall
+            },
+            color = valueColor ?: if (emphasized) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            textAlign = TextAlign.End,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1.35f),
+        )
+    }
+}
+
 /** What happened, in one line, so the card announces itself before the detail. */
 @Composable
-private fun OrderCardHeading(kind: String, order: MarketTransaction) {
+private fun OrderCardHeading(kind: String, order: MarketTransaction, expanded: Boolean) {
     val (icon, label) = when (kind) {
         "order_placed" -> Icons.Filled.ShoppingCart to "Order placed"
         "payment_submitted" -> Icons.Filled.Receipt to "Payment sent"
@@ -1088,11 +1189,22 @@ private fun OrderCardHeading(kind: String, order: MarketTransaction) {
             Text(label, style = MaterialTheme.typography.labelLarge)
         }
 
-        Text(
-            order.receiptNo.ifBlank { "#${order.transactionId}" },
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                order.receiptNo.ifBlank { "#${order.transactionId}" },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Icon(
+                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                if (expanded) "Collapse order" else "Expand order",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 
@@ -1313,10 +1425,10 @@ internal fun ItemAcquiredCard(msg: ChatMessage, isMe: Boolean) {
                                 onClick = { url -> viewing = "Item received" to url },
                             )
                             ProofThumbnail(
-                                label = "Payout to seller",
+                                label = "Student seller paid",
                                 photo = item.sellerPayoutPhoto,
                                 modifier = Modifier.weight(1f),
-                                onClick = { url -> viewing = "Payout to seller" to url },
+                                onClick = { url -> viewing = "Student seller paid" to url },
                             )
                         }
                     }
@@ -1378,10 +1490,10 @@ private fun ProofThumbnail(
 }
 
 @Composable
-private fun ItemThumbnail(photo: String?) {
+private fun ItemThumbnail(photo: String?, thumbnailSize: Dp = 56.dp) {
     Box(
         modifier = Modifier
-            .size(56.dp)
+            .size(thumbnailSize)
             .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center,
@@ -1421,6 +1533,7 @@ internal fun PaymentStatusPill(
 ) {
     val tone = when {
         paymentStatus == "verified" -> StatusTone.Success
+        paymentStatus == "partially_paid" -> StatusTone.Info
         paymentStatus == "rejected" -> StatusTone.Danger
         isApprovedCashPickup(paymentStatus, paymentMethod, orderStatus) -> StatusTone.Info
         else -> StatusTone.Warning
@@ -1453,6 +1566,7 @@ internal fun paymentStateLabel(
 ): String = when {
     isFullPointsCheckout && paymentStatus == "verified" -> "Paid with points"
     paymentStatus == "verified" -> "Paid"
+    paymentStatus == "partially_paid" -> "Partially paid"
     paymentStatus == "proof_submitted" -> "Checking payment"
     paymentStatus == "rejected" -> "Payment declined"
     paymentMethod != "cash" -> "Not paid yet"
@@ -1465,7 +1579,7 @@ internal fun isApprovedCashPickup(
     paymentStatus: String,
     paymentMethod: String?,
     orderStatus: String?,
-): Boolean = paymentStatus == "unpaid" && paymentMethod == "cash" &&
+): Boolean = paymentStatus in listOf("unpaid", "partially_paid") && paymentMethod == "cash" &&
     (orderStatus == "reserved" || orderStatus == "ready_for_pickup")
 
 /** Everyday wording for a payment method. */
@@ -1474,6 +1588,13 @@ internal fun paymentMethodLabel(method: String): String = when (method) {
     "points_full" -> "Points only"
     "cash" -> "Cash at store"
     else -> method.replaceFirstChar { it.uppercase() }
+}
+
+/** Payment plan wording used wherever a complete order is available. */
+internal fun orderPaymentMethodLabel(order: MarketTransaction): String = when {
+    order.paymentMethod == "cash" && order.downpaymentRequired ->
+        "50% PayMongo downpayment + 50% cash on pickup"
+    else -> paymentMethodLabel(order.paymentMethod)
 }
 
 /**
@@ -1541,7 +1662,7 @@ internal fun OrderPhotoViewer(
  * and the full record fills in when it arrives - the dialog is never blank.
  */
 @Composable
-private fun ChatItemPreviewDialog(
+internal fun ChatItemPreviewDialog(
     itemId: Int,
     token: String,
     fallbackTitle: String,
