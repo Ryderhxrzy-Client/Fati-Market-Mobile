@@ -412,7 +412,7 @@ internal fun AdminAcquireScreen(
                                     Overline("Turnover proof")
                                     Spacer(Modifier.height(Spacing.xs))
                                     Text(
-                                        "Photograph the item received at the store, and the proof of payout handed to the seller (" +
+                                        "Photograph the item received at the store, and proof that the student seller was paid (" +
                                             Money.format(agreedPrice) + ").",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -429,7 +429,7 @@ internal fun AdminAcquireScreen(
                                     Spacer(Modifier.height(Spacing.sm))
 
                                     ProofSlot(
-                                        label = "Payout to seller",
+                                        label = "Student seller paid",
                                         bitmap = payoutPhoto,
                                         onCapture = { capture("payout") },
                                     )
@@ -536,7 +536,7 @@ internal fun AdminAcquireScreen(
                                 turnoverStatus == "public" && sellingPrice == null ->
                                     "A public item needs a price"
                                 turnoverStatus == "public" -> "Mark acquired & publish"
-                                turnoverStatus == "acquired" -> "Mark acquired & disburse payout"
+                                turnoverStatus == "acquired" -> "Mark acquired & student seller paid"
                                 else -> "Mark acquired as ${itemStatusLabel(turnoverStatus)}"
                             },
                             enabled = hasProof && !working && agreedPrice != null &&
