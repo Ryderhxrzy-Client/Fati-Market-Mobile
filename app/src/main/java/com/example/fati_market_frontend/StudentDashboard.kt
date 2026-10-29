@@ -415,7 +415,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
 
     // ── Overlays (rendered on top of drawer and tabs) ────────────────────────
         selectedDetailItem?.let { item ->
-            ItemDetailDialog(
+            ItemDetailScreen(
                 item             = item,
                 token            = token,
                 isFavorited      = favoritedIds.contains(item.itemId),
@@ -424,13 +424,16 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                 },
                 onGoToChat       = { selectedDetailItem = null; selectedTab = StudentTab.CHAT },
                 onDismiss        = { selectedDetailItem = null },
-                onBuyNow         = { buyItem -> checkoutItem = buyItem },
+                onBuyNow         = { buyItem ->
+                    selectedDetailItem = null
+                    checkoutItem = buyItem
+                },
                 currentUserId    = currentUserId
             )
         }
 
         selectedFavItem?.let { item ->
-            ItemDetailDialog(
+            ItemDetailScreen(
                 item             = item,
                 token            = token,
                 isFavorited      = favoritedIds.contains(item.itemId),
@@ -439,7 +442,10 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                 },
                 onGoToChat       = { selectedFavItem = null; selectedTab = StudentTab.CHAT },
                 onDismiss        = { selectedFavItem = null },
-                onBuyNow         = { buyItem -> checkoutItem = buyItem },
+                onBuyNow         = { buyItem ->
+                    selectedFavItem = null
+                    checkoutItem = buyItem
+                },
                 currentUserId    = currentUserId
             )
         }
