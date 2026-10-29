@@ -147,7 +147,7 @@ internal fun PickupQrDialog(order: MarketTransaction, onDismiss: () -> Unit) {
  */
 internal fun MarketTransaction.isCollectable(): Boolean =
     qrCode != null && !isTerminal &&
-        (paymentStatus == "verified" || status == "reserved" || status == "ready_for_pickup")
+        (paymentStatus == "verified" || status == "reserved" || status == "ready_for_pickup" || status == "overdue")
 
 /** The row-level entry point: a button that opens [PickupQrDialog]. */
 @Composable
