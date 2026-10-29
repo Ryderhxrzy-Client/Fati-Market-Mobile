@@ -462,6 +462,8 @@ internal data class Receipt(
     val paymentMethodLabel: String,
     val paymentReference: String?,
     val paymentStatus: String,
+    val pickupDate: String? = null,
+    val pickupDateFormatted: String? = null,
 )
 
 internal fun parseReceipt(json: JSONObject): Receipt {
@@ -492,6 +494,8 @@ internal fun parseReceipt(json: JSONObject): Receipt {
         paymentMethodLabel = d.optString("payment_method_label"),
         paymentReference = str("payment_reference"),
         paymentStatus = d.optString("payment_status"),
+        pickupDate = str("pickup_date"),
+        pickupDateFormatted = str("pickup_date_formatted"),
     )
 }
 
