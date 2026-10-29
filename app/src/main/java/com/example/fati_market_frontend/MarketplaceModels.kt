@@ -239,9 +239,13 @@ internal data class CheckoutQuote(
     val downpaymentAmountFormatted: String = "₱0.00",
     val remainingBalance: String = "0.00",
     val remainingBalanceFormatted: String = "₱0.00",
+    val downpaymentStatus: String? = null,
     val isPastCutoff: Boolean = false,
     val cutoffTime: String = "6:00 PM",
     val pickupScheduleNote: String? = null,
+    val pickupDate: String? = null,
+    val pickupDateFormatted: String? = null,
+    val hasPaidDownpayment: Boolean = false,
 )
 
 internal fun parseCheckoutQuote(json: JSONObject): CheckoutQuote {
@@ -310,9 +314,13 @@ internal data class MarketTransaction(
     val downpaymentAmountFormatted: String = "₱0.00",
     val remainingBalance: String = "0.00",
     val remainingBalanceFormatted: String = "₱0.00",
+    val downpaymentStatus: String? = null,
     val isPastCutoff: Boolean = false,
     val cutoffTime: String = "6:00 PM",
     val pickupScheduleNote: String? = null,
+    val pickupDate: String? = null,
+    val pickupDateFormatted: String? = null,
+    val hasPaidDownpayment: Boolean = false,
 
     /**
      * The signed walk-in pickup code. The buyer renders it as a QR at the
@@ -335,7 +343,20 @@ internal data class MarketTransaction(
     val awaitingProofReview: Boolean get() = paymentStatus == "proof_submitted"
     val isTerminal: Boolean get() = status in listOf("completed", "cancelled", "rejected")
 
-    fun canDo(action: String): Boolean = availableActions.contains(action)
+    val isPaid: Boolean
+        get() = paymentStatus in listOf("verified", "paid", "partially_paid") ||
+            hasPaidDownpayment ||
+            downpaymentStatus in listOf("verified", "paid")
+
+    val isReadyForPickup: Boolean
+        get() = status == "ready_for_pickup" || pickupStatus == "ready"
+
+    fun canDo(action: String): Boolean {
+        if (!availableActions.contains(action)) return false
+        if (action == "cancel" && isPaid) return false
+        if (action == "mark_ready_for_pickup" && isReadyForPickup) return false
+        return true
+    }
 }
 
 internal fun parseTransaction(obj: JSONObject): MarketTransaction {
@@ -388,9 +409,13 @@ internal fun parseTransaction(obj: JSONObject): MarketTransaction {
         downpaymentAmountFormatted = obj.optString("downpayment_amount_formatted", "₱0.00"),
         remainingBalance = obj.optString("remaining_balance", "0.00"),
         remainingBalanceFormatted = obj.optString("remaining_balance_formatted", "₱0.00"),
+        downpaymentStatus = str("downpayment_status"),
         isPastCutoff = obj.optBoolean("is_past_cutoff", false),
         cutoffTime = obj.optString("cutoff_time", "6:00 PM"),
         pickupScheduleNote = str("pickup_schedule_note"),
+        pickupDate = str("pickup_date"),
+        pickupDateFormatted = str("pickup_date_formatted"),
+        hasPaidDownpayment = obj.optBoolean("has_paid_downpayment", false),
         qrCode = str("qr_code"),
         handoverPhoto = str("handover_photo"),
         completedAt = str("completed_at"),
