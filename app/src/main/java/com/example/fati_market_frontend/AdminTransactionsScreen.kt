@@ -424,32 +424,21 @@ private fun AdminTransactionCard(
             SoftDivider()
 
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                if (!transaction.isTerminal) {
-                    val scheduleText = when {
-                        transaction.status == "overdue" -> "Extend pick-up date"
-                        transaction.pickupDate != null -> "Edit pick-up date"
-                        else -> "Set pick-up date"
-                    }
+                if (transaction.status == "overdue") {
                     PrimaryButton(
-                        text = scheduleText,
+                        text = "Extend pick-up date",
                         onClick = onExtend,
                         modifier = Modifier.fillMaxWidth(),
                         icon = Icons.Filled.DateRange,
                         containerColor = accents.info,
                     )
-                }
-
-                if (transaction.canDo("complete") || transaction.status == "overdue") {
                     PrimaryButton(
-                        text = if (transaction.status == "overdue") "Mark as Sold" else "Complete transaction",
+                        text = "Mark as Sold",
                         onClick = { onAction("complete") },
                         modifier = Modifier.fillMaxWidth(),
                         icon = Icons.Filled.DoneAll,
                         containerColor = accents.success,
                     )
-                }
-
-                if (transaction.canDo("forfeit_and_relist") || transaction.canDo("cancel_and_relist") || transaction.status == "overdue") {
                     val isUnpaid = !transaction.hasPaidDownpayment
                     SecondaryButton(
                         text = if (isUnpaid) "Cancel & Return to Marketplace" else "Forfeit DP & Relist",
@@ -458,64 +447,76 @@ private fun AdminTransactionCard(
                         contentColor = MaterialTheme.colorScheme.error,
                         icon = Icons.Filled.Cancel,
                     )
-                }
-                if (transaction.canDo("verify_payment")) {
-                    PrimaryButton(
-                        text = "Verify payment",
-                        onClick = { onAction("verify_payment") },
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.CheckCircle,
-                    )
-                }
-
-                // A pay-at-the-store order is approved, not verified: the cash
-                // arrives at the counter, and completing the order is what
-                // records it as paid.
-                if (transaction.canDo("approve_order")) {
-                    PrimaryButton(
-                        text = "Approve order",
-                        onClick = { onAction("approve_order") },
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.CheckCircle,
-                    )
-                }
-
-                if (transaction.canDo("mark_ready_for_pickup")) {
-                    PrimaryButton(
-                        text = "Mark ready for pickup",
-                        onClick = { onAction("mark_ready_for_pickup") },
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.Inventory,
-                        containerColor = accents.info,
-                    )
-                }
-
-                if (transaction.canDo("complete")) {
-                    PrimaryButton(
-                        text = "Complete transaction",
-                        onClick = { onAction("complete") },
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.DoneAll,
-                        containerColor = accents.success,
-                    )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    if (transaction.canDo("reject_payment")) {
-                        SecondaryButton(
-                            text = "Reject proof",
-                            onClick = { onAction("reject_payment") },
-                            modifier = Modifier.weight(1f),
-                            contentColor = MaterialTheme.colorScheme.error,
+                } else {
+                    if (!transaction.isTerminal) {
+                        val scheduleText = if (transaction.pickupDate != null) "Edit pick-up date" else "Set pick-up date"
+                        PrimaryButton(
+                            text = scheduleText,
+                            onClick = onExtend,
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = Icons.Filled.DateRange,
+                            containerColor = accents.info,
                         )
                     }
-                    if (transaction.canDo("cancel")) {
-                        SecondaryButton(
-                            text = "Cancel",
-                            onClick = { onAction("cancel") },
-                            modifier = Modifier.weight(1f),
-                            contentColor = MaterialTheme.colorScheme.error,
+
+                    if (transaction.canDo("verify_payment")) {
+                        PrimaryButton(
+                            text = "Verify payment",
+                            onClick = { onAction("verify_payment") },
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = Icons.Filled.CheckCircle,
                         )
+                    }
+
+                    // A pay-at-the-store order is approved, not verified: the cash
+                    // arrives at the counter, and completing the order is what
+                    // records it as paid.
+                    if (transaction.canDo("approve_order")) {
+                        PrimaryButton(
+                            text = "Approve order",
+                            onClick = { onAction("approve_order") },
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = Icons.Filled.CheckCircle,
+                        )
+                    }
+
+                    if (transaction.canDo("mark_ready_for_pickup") && !transaction.isReadyForPickup) {
+                        PrimaryButton(
+                            text = "Mark ready for pickup",
+                            onClick = { onAction("mark_ready_for_pickup") },
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = Icons.Filled.Inventory,
+                            containerColor = accents.info,
+                        )
+                    }
+
+                    if (transaction.canDo("complete")) {
+                        PrimaryButton(
+                            text = "Complete transaction",
+                            onClick = { onAction("complete") },
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = Icons.Filled.DoneAll,
+                            containerColor = accents.success,
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        if (transaction.canDo("reject_payment")) {
+                            SecondaryButton(
+                                text = "Reject proof",
+                                onClick = { onAction("reject_payment") },
+                                modifier = Modifier.weight(1f),
+                                contentColor = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                        if (transaction.canDo("cancel")) {
+                            SecondaryButton(
+                                text = "Cancel",
+                                onClick = { onAction("cancel") },
+                                modifier = Modifier.weight(1f),
+                                contentColor = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
 
