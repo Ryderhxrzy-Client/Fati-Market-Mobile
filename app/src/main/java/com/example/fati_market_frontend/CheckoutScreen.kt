@@ -35,6 +35,15 @@ import com.fati_market.ui.theme.Spacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.text.style.TextAlign
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
  * Buyer checkout.
@@ -62,6 +71,7 @@ internal fun CheckoutScreen(
     val accents = LocalMarketAccents.current
 
     var quote by remember { mutableStateOf<CheckoutQuote?>(null) }
+    var storeHours by remember { mutableStateOf<StoreHours?>(null) }
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
 
@@ -85,6 +95,10 @@ internal fun CheckoutScreen(
             }
             is MarketplaceApi.Result.Failure -> loadError = result.message
         }
+        val hoursRes = withContext(Dispatchers.IO) { MarketplaceApi.fetchStoreHours(token) }
+        if (hoursRes is MarketplaceApi.Result.Ok) {
+            storeHours = hoursRes.value
+        }
         loading = false
     }
 
@@ -96,11 +110,32 @@ internal fun CheckoutScreen(
     val isFullPoints = amountDue.signum() == 0
     val rewardOnCompletion = quote?.rewardPointsOnCompletion ?: item.rewardPoints
 
+    val now = remember(storeHours) {
+        val zone = storeHours?.zone ?: ZoneId.of("Asia/Manila")
+        ZonedDateTime.now(zone)
+    }
+    val openDays = storeHours?.openDays ?: setOf(1, 2, 3, 4, 5, 6)
     val isPastCutoff = quote?.isPastCutoff == true || runCatching {
         val cal = java.util.Calendar.getInstance()
         cal.get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.SUNDAY ||
         cal.get(java.util.Calendar.HOUR_OF_DAY) >= 18
     }.getOrDefault(false)
+
+    val earliestDate: LocalDate = remember(now, openDays, isPastCutoff) {
+        if (!isPastCutoff && openDays.contains(now.dayOfWeek.value)) {
+            now.toLocalDate()
+        } else {
+            var cand = now.toLocalDate().plusDays(1)
+            while (!openDays.contains(cand.dayOfWeek.value)) {
+                cand = cand.plusDays(1)
+            }
+            cand
+        }
+    }
+
+    var selectedPickupDate by remember(earliestDate) { mutableStateOf(earliestDate) }
+    var displayedMonth by remember(earliestDate) { mutableStateOf(YearMonth.from(earliestDate)) }
+    var showDatePickerModal by remember { mutableStateOf(false) }
 
     val isCash = paymentMethod == "cash" && !isFullPoints
     val downpayment = if (isCash) {
@@ -119,7 +154,8 @@ internal fun CheckoutScreen(
             submitting = true
             submitError = null
             val result = withContext(Dispatchers.IO) {
-                MarketplaceApi.checkout(token, item.itemId, pointsToUse, paymentMethod)
+                val pickupDateStr = selectedPickupDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                MarketplaceApi.checkout(token, item.itemId, pointsToUse, paymentMethod, pickupDateStr)
             }
             when (result) {
                 is MarketplaceApi.Result.Ok -> {
@@ -250,17 +286,68 @@ internal fun CheckoutScreen(
                         }
                     }
 
-                    InfoBanner(
-                        title = "Cut off time: 6pm and Monday to Saturday",
-                        text = if (isPastCutoff) {
-                            quote?.pickupScheduleNote
-                                ?: "Orders placed after 6:00 PM or on Sunday will be ready for pickup the next store day."
-                        } else {
-                            "Store hours: Monday to Saturday until 6:00 PM. Orders placed after 6:00 PM or on Sunday will be ready for pickup the next store day."
-                        },
-                        tone = if (isPastCutoff) StatusTone.Warning else StatusTone.Info,
-                        icon = Icons.Filled.Schedule,
-                    )
+                    val nextOpenDayFormatted = earliestDate.format(DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()))
+
+                    if (isPastCutoff) {
+                        InfoBanner(
+                            title = "Store is closed",
+                            text = "Store is closed. Choose a pick-up/meet-up date from $nextOpenDayFormatted.",
+                            tone = StatusTone.Warning,
+                            icon = Icons.Filled.Storefront,
+                        )
+                    } else {
+                        InfoBanner(
+                            title = "Store is open (until 6:00 PM)",
+                            text = "Store hours: Monday to Saturday, 8:00 AM – 6:00 PM. Choose your preferred pick-up date (today or an upcoming open day).",
+                            tone = StatusTone.Info,
+                            icon = Icons.Filled.Schedule,
+                        )
+                    }
+
+                    // ── Pick-up Schedule Date Selector (Modal Trigger) ───
+                    if (showDatePickerModal) {
+                        PickupDatePickerModal(
+                            storeHours = storeHours,
+                            current = selectedPickupDate,
+                            isAdmin = false,
+                            title = "Choose pick-up date",
+                            onDismiss = { showDatePickerModal = false },
+                            onConfirm = { picked ->
+                                selectedPickupDate = picked
+                                showDatePickerModal = false
+                            }
+                        )
+                    }
+
+                    MarketCard(onClick = { showDatePickerModal = true }) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Pick-up schedule date", style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(Spacing.xxs))
+                                Text(
+                                    text = selectedPickupDate.format(DateTimeFormatter.ofPattern("EEEE, MMMM d, yyyy", Locale.getDefault())),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = "Tap to change date · Store open: Mon-Sat (8AM – 6PM)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Icon(
+                                Icons.Filled.DateRange,
+                                contentDescription = "Select pick-up date",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
 
                     // ── Points redemption ───────────────────────────────
                     MarketCard {
