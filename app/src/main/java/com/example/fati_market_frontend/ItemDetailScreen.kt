@@ -516,7 +516,6 @@ internal fun ItemDetailScreen(
             }
         }
     }
-}
 
 /**
  * Backwards-compatible dialog wrapper for surfaces that display item details
