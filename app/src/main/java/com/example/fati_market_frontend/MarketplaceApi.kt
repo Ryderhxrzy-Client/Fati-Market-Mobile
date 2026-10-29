@@ -46,15 +46,46 @@ internal object MarketplaceApi {
     fun fetchQuote(token: String, itemId: Int, pointsUsed: Int): Result<CheckoutQuote> =
         get(token, "/checkout/quote?item_id=$itemId&points_used=$pointsUsed") { parseCheckoutQuote(it) }
 
-    fun checkout(token: String, itemId: Int, pointsUsed: Int, paymentMethod: String): Result<MarketTransaction> {
+    fun checkout(
+        token: String,
+        itemId: Int,
+        pointsUsed: Int,
+        paymentMethod: String,
+        pickupDate: String? = null
+    ): Result<MarketTransaction> {
         val body = JSONObject().apply {
             put("item_id", itemId)
             put("points_used", pointsUsed)
             put("payment_method", paymentMethod)
+            if (!pickupDate.isNullOrBlank()) {
+                put("pickup_date", pickupDate)
+            }
         }
 
         return post(token, "/checkout", body) { parseTransaction(it.getJSONObject("data")) }
     }
+
+    fun setPickupSchedule(
+        token: String,
+        transactionId: Int,
+        pickupDate: String?,
+        isAdmin: Boolean = false
+    ): Result<MarketTransaction> {
+        val endpoint = if (isAdmin) {
+            "/admin/transactions/$transactionId/pickup-schedule"
+        } else {
+            "/transactions/$transactionId/pickup-schedule"
+        }
+        val body = JSONObject().apply {
+            put("pickup_date", pickupDate ?: JSONObject.NULL)
+        }
+        return put(token, endpoint, body) { parseTransaction(it.getJSONObject("data")) }
+    }
+
+    fun forfeitAdminTransaction(token: String, transactionId: Int): Result<MarketTransaction> =
+        post(token, "/admin/transactions/$transactionId/forfeit", JSONObject()) {
+            parseTransaction(it.getJSONObject("data"))
+        }
 
     data class PayMongoCheckoutResponse(
         val checkoutSessionId: String,
@@ -626,6 +657,17 @@ internal object MarketplaceApi {
             .header("Authorization", "Bearer $token")
             .header("Accept", "application/json")
             .post(body.toString().toRequestBody(JSON))
+            .build()
+
+        return execute(request, parse)
+    }
+
+    private fun <T> put(token: String, path: String, body: JSONObject, parse: (JSONObject) -> T): Result<T> {
+        val request = Request.Builder()
+            .url("$BASE_URL$path")
+            .header("Authorization", "Bearer $token")
+            .header("Accept", "application/json")
+            .put(body.toString().toRequestBody(JSON))
             .build()
 
         return execute(request, parse)
