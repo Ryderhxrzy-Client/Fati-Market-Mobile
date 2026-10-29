@@ -44,6 +44,7 @@ import kotlinx.coroutines.withContext
 fun AdminTransactionsContent(
     onMenuClick: () -> Unit = {},
     onOpenChat: (Int) -> Unit = {},
+    initialFilter: String? = null,
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
@@ -53,7 +54,7 @@ fun AdminTransactionsContent(
     var transactions by remember { mutableStateOf<List<MarketTransaction>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    var selectedFilter by remember { mutableStateOf<String?>(null) }
+    var selectedFilter by remember(initialFilter) { mutableStateOf(initialFilter) }
     var refreshKey by remember { mutableStateOf(0) }
 
     var actionTarget by remember { mutableStateOf<Pair<MarketTransaction, String>?>(null) }
@@ -64,9 +65,12 @@ fun AdminTransactionsContent(
         if (AdminCounter.openCode == null) refreshKey++
     }
     var proofPreview by remember { mutableStateOf<String?>(null) }
+    var extendingOrder by remember { mutableStateOf<MarketTransaction?>(null) }
+    var forfeitingOrder by remember { mutableStateOf<MarketTransaction?>(null) }
 
     val filters = listOf(
         null to "All",
+        "overdue" to "Overdue",
         "payment_proof_submitted" to "Needs review",
         "pending_payment" to "Awaiting payment",
         "ready_for_pickup" to "For pickup",
@@ -101,6 +105,33 @@ fun AdminTransactionsContent(
                 actionTarget = null
                 refreshKey++
             },
+        )
+    }
+
+    extendingOrder?.let { order ->
+        PickupScheduleDialog(
+            transactionId = order.transactionId,
+            token = token,
+            current = order.pickupDate,
+            isAdmin = true,
+            onDismiss = { extendingOrder = null },
+            onSaved = {
+                extendingOrder = null
+                refreshKey++
+            }
+        )
+    }
+
+    forfeitingOrder?.let { order ->
+        ChatOrderActionDialog(
+            transaction = order,
+            action = "forfeit",
+            token = token,
+            onDismiss = { forfeitingOrder = null },
+            onDone = {
+                forfeitingOrder = null
+                refreshKey++
+            }
         )
     }
 
@@ -200,6 +231,8 @@ fun AdminTransactionsContent(
                         AdminTransactionCard(
                             transaction = transaction,
                             onAction = { action -> actionTarget = transaction to action },
+                            onExtend = { extendingOrder = transaction },
+                            onForfeit = { forfeitingOrder = transaction },
                             onViewProof = { proofPreview = it },
                             onOpenChat = { onOpenChat(transaction.itemId) },
                         )
@@ -217,6 +250,8 @@ fun AdminTransactionsContent(
 private fun AdminTransactionCard(
     transaction: MarketTransaction,
     onAction: (String) -> Unit,
+    onExtend: () -> Unit = {},
+    onForfeit: () -> Unit = {},
     onViewProof: (String) -> Unit,
     onOpenChat: () -> Unit,
 ) {
@@ -282,6 +317,15 @@ private fun AdminTransactionCard(
         }
 
         // ── The thing an admin most often needs to act on ───────────────
+        if (transaction.status == "overdue") {
+            InfoBanner(
+                title = "Overdue reservation",
+                text = "The scheduled pick-up date has passed. Choose an action: extend pick-up date, forfeit downpayment and relist item, or mark as sold.",
+                tone = StatusTone.Danger,
+                icon = Icons.Filled.EventBusy,
+            )
+        }
+
         if (transaction.awaitingProofReview) {
             InfoBanner(
                 title = "GCash proof awaiting review",
@@ -314,6 +358,14 @@ private fun AdminTransactionCard(
                 value = Money.format(transaction.amountDue),
                 emphasized = true,
             )
+            (transaction.pickupDateFormatted ?: transaction.pickupDate)?.let { sched ->
+                SummaryRow(
+                    label = "Pick-up schedule",
+                    value = sched,
+                    supporting = if (transaction.status == "overdue") "Overdue" else null,
+                    valueColor = if (transaction.status == "overdue") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
 
         if (expanded) {
@@ -368,10 +420,45 @@ private fun AdminTransactionCard(
         )
 
         // ── Actions, driven by the server's lifecycle ───────────────────
-        if (transaction.availableActions.isNotEmpty()) {
+        if (transaction.availableActions.isNotEmpty() || transaction.status == "overdue") {
             SoftDivider()
 
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                if (!transaction.isTerminal) {
+                    val scheduleText = when {
+                        transaction.status == "overdue" -> "Extend pick-up date"
+                        transaction.pickupDate != null -> "Edit pick-up date"
+                        else -> "Set pick-up date"
+                    }
+                    PrimaryButton(
+                        text = scheduleText,
+                        onClick = onExtend,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Filled.DateRange,
+                        containerColor = accents.info,
+                    )
+                }
+
+                if (transaction.canDo("complete") || transaction.status == "overdue") {
+                    PrimaryButton(
+                        text = if (transaction.status == "overdue") "Mark as Sold" else "Complete transaction",
+                        onClick = { onAction("complete") },
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = Icons.Filled.DoneAll,
+                        containerColor = accents.success,
+                    )
+                }
+
+                if (transaction.canDo("forfeit_and_relist") || transaction.canDo("cancel_and_relist") || transaction.status == "overdue") {
+                    val isUnpaid = !transaction.hasPaidDownpayment
+                    SecondaryButton(
+                        text = if (isUnpaid) "Cancel & Return to Marketplace" else "Forfeit DP & Relist",
+                        onClick = onForfeit,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentColor = MaterialTheme.colorScheme.error,
+                        icon = Icons.Filled.Cancel,
+                    )
+                }
                 if (transaction.canDo("verify_payment")) {
                     PrimaryButton(
                         text = "Verify payment",
