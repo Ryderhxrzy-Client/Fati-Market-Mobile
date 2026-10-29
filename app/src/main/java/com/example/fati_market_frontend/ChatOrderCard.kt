@@ -75,7 +75,19 @@ internal fun ChatOrderCard(
     var showProof by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
     var payingNow by remember { mutableStateOf(false) }
+    var extendingSchedule by remember { mutableStateOf(false) }
     var expanded by remember(msg.messageId) { mutableStateOf(false) }
+
+    if (extendingSchedule) {
+        PickupScheduleDialog(
+            transactionId = order.transactionId,
+            token = token,
+            current = order.pickupDate,
+            isAdmin = true,
+            onDismiss = { extendingSchedule = false },
+            onSaved = { extendingSchedule = false },
+        )
+    }
 
     if (showItem) {
         ChatItemPreviewDialog(
@@ -221,6 +233,26 @@ internal fun ChatOrderCard(
 
                 CompactOrderRow("Order total", Money.format(order.amountDue), emphasized = true)
                 CompactOrderRow("Payment method", orderPaymentMethodLabel(order))
+                (order.pickupDateFormatted ?: order.pickupDate)?.let { sched ->
+                    CompactOrderRow(
+                        label = "Pick-up schedule",
+                        value = sched,
+                        emphasized = true,
+                        valueColor = if (order.status == "overdue") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                if (order.status == "overdue") {
+                    InfoBanner(
+                        title = "Reservation Overdue",
+                        text = if (isAdmin) {
+                            "The scheduled pick-up date has passed. Please extend pick-up date, forfeit DP and relist, or mark as sold."
+                        } else {
+                            "Your scheduled pick-up date has passed. Please visit the store or contact admin to reschedule."
+                        },
+                        tone = StatusTone.Danger,
+                        icon = Icons.Filled.EventBusy,
+                    )
+                }
                 if (order.paymentMethod == "cash" && order.downpaymentRequired) {
                     val downpaymentPaid = order.paymentStatus in setOf(
                         "partially_paid",
@@ -330,7 +362,8 @@ internal fun ChatOrderCard(
                 // one, otherwise the order itself. Repeating the buttons on
                 // each card would only make Ofelia wonder which is live.
                 val carriesActions = msg.kind == "payment_submitted" ||
-                    (msg.kind == "order_placed" && order.paymentProof == null)
+                    (msg.kind == "order_placed" && order.paymentProof == null) ||
+                    order.status == "overdue" 
 
                 // The buyer's side of the same card: a GCash bill still open
                 // is payable right here, receipt upload and all.
@@ -368,7 +401,11 @@ internal fun ChatOrderCard(
                 }
 
                 if (isAdmin && carriesActions) {
-                    OrderCardActions(order) { pendingAction = it }
+                    OrderCardActions(
+                        order = order,
+                        onAction = { pendingAction = it },
+                        onExtend = { extendingSchedule = true },
+                    )
                 }
                 }
 
@@ -1210,7 +1247,11 @@ private fun OrderCardHeading(kind: String, order: MarketTransaction, expanded: B
 
 /** The decisions the server says Admin may still take on this order. */
 @Composable
-private fun OrderCardActions(order: MarketTransaction, onAction: (String) -> Unit) {
+private fun OrderCardActions(
+    order: MarketTransaction,
+    onAction: (String) -> Unit,
+    onExtend: () -> Unit = {},
+) {
     val accents = LocalMarketAccents.current
 
     if (order.isTerminal) return
@@ -1231,13 +1272,21 @@ private fun OrderCardActions(order: MarketTransaction, onAction: (String) -> Uni
     }
 
     if (approve == null && !order.canDo("complete") &&
-        !order.canDo("mark_ready_for_pickup") && decline == null
+        !order.canDo("mark_ready_for_pickup") && decline == null &&
+        order.status != "overdue"
     ) {
         return
     }
 
     SoftDivider()
-    OrderActionButtons(order = order, approve = approve, decline = decline, compact = false, onAction = onAction)
+    OrderActionButtons(
+        order = order,
+        approve = approve,
+        decline = decline,
+        compact = false,
+        onAction = onAction,
+        onExtend = onExtend,
+    )
 }
 
 /**
@@ -1253,8 +1302,40 @@ internal fun OrderActionButtons(
     decline: String?,
     compact: Boolean,
     onAction: (String) -> Unit,
+    onExtend: () -> Unit = {},
 ) {
     val accents = LocalMarketAccents.current
+
+    if (order.status == "overdue") {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            PrimaryButton(
+                text = "Extend pick-up date",
+                onClick = onExtend,
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Filled.DateRange,
+                containerColor = accents.info,
+                compact = compact,
+            )
+            PrimaryButton(
+                text = "Mark as Sold",
+                onClick = { onAction("complete") },
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Filled.DoneAll,
+                containerColor = accents.success,
+                compact = compact,
+            )
+            val isUnpaid = !order.hasPaidDownpayment
+            SecondaryButton(
+                text = if (isUnpaid) "Cancel & Return to Marketplace" else "Forfeit DP & Relist",
+                onClick = { onAction("forfeit") },
+                modifier = Modifier.fillMaxWidth(),
+                contentColor = MaterialTheme.colorScheme.error,
+                icon = Icons.Filled.Cancel,
+                compact = compact,
+            )
+        }
+        return
+    }
 
     // Approving comes first while it is open; after that, completing is the
     // handover itself. Staging ("ready for pickup") is never the main step.
@@ -1268,6 +1349,16 @@ internal fun OrderActionButtons(
                 modifier = Modifier.fillMaxWidth(),
                 icon = if (action == "complete") Icons.Filled.DoneAll else Icons.Filled.Check,
                 containerColor = accents.success,
+                compact = compact,
+            )
+        }
+
+        if (!order.isTerminal && order.status != "overdue") {
+            SecondaryButton(
+                text = if (order.pickupDate != null) "Edit pick-up date" else "Set pick-up date",
+                onClick = onExtend,
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Filled.DateRange,
                 compact = compact,
             )
         }
@@ -1580,7 +1671,7 @@ internal fun isApprovedCashPickup(
     paymentMethod: String?,
     orderStatus: String?,
 ): Boolean = paymentStatus in listOf("unpaid", "partially_paid") && paymentMethod == "cash" &&
-    (orderStatus == "reserved" || orderStatus == "ready_for_pickup")
+    (orderStatus == "reserved" || orderStatus == "ready_for_pickup" || orderStatus == "overdue")
 
 /** Everyday wording for a payment method. */
 internal fun paymentMethodLabel(method: String): String = when (method) {
@@ -1671,73 +1762,34 @@ internal fun ChatItemPreviewDialog(
 ) {
     var item by remember(itemId) { mutableStateOf<Item?>(null) }
     var loading by remember(itemId) { mutableStateOf(true) }
-    var error by remember(itemId) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(itemId) {
         val result = withContext(Dispatchers.IO) { MarketplaceApi.fetchItem(token, itemId) }
-
         when (result) {
             is MarketplaceApi.Result.Ok -> item = result.value
-            is MarketplaceApi.Result.Failure -> error = result.message
+            is MarketplaceApi.Result.Failure -> {}
         }
         loading = false
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
-            Column(
-                modifier = Modifier
-                    .padding(Spacing.lg)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(Spacing.md),
-            ) {
-                val photo = item?.photos?.firstOrNull() ?: fallbackPhoto
+    val displayItem = item ?: Item(
+        itemId = itemId,
+        sellerId = 0,
+        sellerEmail = "",
+        title = fallbackTitle,
+        description = "",
+        categoryId = 0,
+        status = "public",
+        photos = fallbackPhoto?.let { listOf(it) } ?: emptyList(),
+        createdAt = "",
+    )
 
-                if (photo != null) {
-                    AsyncImage(
-                        model = photo,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clip(MaterialTheme.shapes.small),
-                    )
-                }
-
-                Text(
-                    item?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle,
-                    style = MaterialTheme.typography.titleLarge,
-                )
-
-                item?.let { loaded ->
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        PriceTag(Money.format(loaded.publicPrice ?: loaded.sellerAskingPrice))
-                        ItemStatusPill(loaded.status, offerAccepted = loaded.offerAccepted)
-                    }
-
-                    if (loaded.rewardPoints > 0) {
-                        RewardChip(points = loaded.rewardPoints)
-                    }
-
-                    if (loaded.description.isNotBlank()) {
-                        Text(loaded.description, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-
-                if (loading) {
-                    ShimmerBox(modifier = Modifier.fillMaxWidth().height(18.dp))
-                }
-
-                error?.let {
-                    InfoBanner(text = it, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
-                }
-
-                SecondaryButton("Close", onDismiss, Modifier.fillMaxWidth())
-            }
-        }
-    }
+    ItemDetailDialog(
+        item = displayItem,
+        token = token,
+        isFavorited = false,
+        onFavoriteToggle = { _, _ -> },
+        onGoToChat = onDismiss,
+        onDismiss = onDismiss,
+    )
 }
