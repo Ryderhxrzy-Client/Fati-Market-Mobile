@@ -1,6 +1,10 @@
 package com.fati_market
 
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -96,7 +101,7 @@ import kotlinx.coroutines.withContext
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun ItemDetailDialog(
+internal fun ItemDetailScreen(
     item: Item,
     token: String,
     isFavorited: Boolean,
@@ -256,7 +261,10 @@ internal fun ItemDetailDialog(
                     if (!isLoading && detailItem.isPublic) {
                         ItemDetailPurchaseBar(
                             item = detailItem,
-                            onBuyNow = { onBuyNow(detailItem) },
+                            onBuyNow = {
+                                onDismiss()
+                                onBuyNow(detailItem)
+                            },
                         )
                     }
                 },
@@ -508,14 +516,54 @@ internal fun ItemDetailDialog(
             }
         }
     }
+}
 
 /**
- * Pinned purchase bar at the bottom of the Item Details screen.
- * Formatted identical to MarketBottomBar:
- * - Full-width Surface with rounded top corners (24.dp)
- * - 72.dp height content Row
- * - safeAreaBarBottom(floor = 12.dp) for system bar clearance
+ * Backwards-compatible dialog wrapper for surfaces that display item details
+ * as a floating dialog overlay.
  */
+@Composable
+internal fun ItemDetailDialog(
+    item: Item,
+    token: String,
+    isFavorited: Boolean,
+    onFavoriteToggle: (itemId: Int, nowFav: Boolean) -> Unit,
+    onGoToChat: () -> Unit,
+    onDismiss: () -> Unit,
+    /** Opens checkout. Absent for surfaces where buying does not apply. */
+    onBuyNow: (Item) -> Unit = {},
+    /** Used to stop a seller buying their own listing. */
+    currentUserId: Int = 0
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        val view = LocalView.current
+        SideEffect {
+            val window = (view.parent as? DialogWindowProvider)?.window
+            window?.let { w ->
+                w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                w.setDimAmount(0f)
+            }
+        }
+        ItemDetailScreen(
+            item = item,
+            token = token,
+            isFavorited = isFavorited,
+            onFavoriteToggle = onFavoriteToggle,
+            onGoToChat = onGoToChat,
+            onDismiss = onDismiss,
+            onBuyNow = onBuyNow,
+            currentUserId = currentUserId,
+        )
+    }
+}
+
+/** Fixed purchase action bar matching CheckoutScreen's CheckoutConfirmBar. */
 @Composable
 private fun ItemDetailPurchaseBar(
     item: Item,
@@ -540,27 +588,28 @@ private fun ItemDetailPurchaseBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(68.dp)
-                    .padding(horizontal = Spacing.screen, vertical = 4.dp),
+                    .heightIn(min = 72.dp)
+                    .padding(horizontal = Spacing.screen, vertical = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
-                        text = "Total amount:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
+                        text = "Total amount",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    PriceTag(item.displayPrice, size = PriceSize.Medium)
+                    PriceTag(
+                        price = item.displayPrice,
+                        size = PriceSize.Medium,
+                    )
                 }
-                Spacer(Modifier.width(Spacing.md))
+
                 PrimaryButton(
                     text = "Buy now",
-                    icon = LucideIcons.ShoppingBag,
                     onClick = onBuyNow,
                     compact = true,
                 )
