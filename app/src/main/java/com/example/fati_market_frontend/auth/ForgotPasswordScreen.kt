@@ -16,7 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.navigation.NavController
-import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.PasswordRequirementsList
+import com.fati_market.ui.components.PasswordRequirementsList
 import com.fati_market.ui.components.MarketTextField
 import com.fati_market.ui.components.PrimaryButton
 import com.fati_market.ui.components.SecondaryButton
@@ -83,6 +85,12 @@ fun ForgotPasswordScreen(navController: NavController) {
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
+
+            Spacer(Modifier.height(Spacing.sm))
+
+            PasswordRequirementsList(
+                password = newPassword,
+            )
         }
 
         notice?.let {
@@ -109,6 +117,19 @@ fun ForgotPasswordScreen(navController: NavController) {
                     if (email.isBlank()) {
                         error = "Enter your email first."
                         return@launch
+                    }
+
+                    if (codeSent) {
+                        val longEnough = newPassword.length >= 8
+                        val hasUpper = newPassword.any { it.isUpperCase() }
+                        val hasLower = newPassword.any { it.isLowerCase() }
+                        val hasDigit = newPassword.any { it.isDigit() }
+                        val hasSpecial = newPassword.any { it in "@$!%*?&" }
+
+                        if (!longEnough || !hasUpper || !hasLower || !hasDigit || !hasSpecial) {
+                            error = "Password must contain at least 8 characters, including uppercase, lowercase, number, and special character (@$!%*?&)."
+                            return@launch
+                        }
                     }
 
                     working = true

@@ -32,7 +32,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+
 import androidx.compose.material.icons.filled.ChevronRight
+
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Menu
@@ -1355,6 +1359,7 @@ fun TransactionStatusPill(
     paymentMethod: String? = null,
 ) {
     val (label, tone) = when (status) {
+        "overdue" -> "Overdue" to StatusTone.Danger
         "pending_payment" -> when (paymentMethod) {
             "cash" -> "Awaiting admin approval" to StatusTone.Warning
             else -> "Awaiting payment" to StatusTone.Warning
@@ -1952,3 +1957,68 @@ fun BrandMark(
         }
     }
 }
+
+/**
+ * Visual indicator list for password criteria.
+ * Displays each rule with a real-time checkmark and color change when satisfied.
+ */
+@Composable
+fun PasswordRequirementsList(
+    password: String,
+    confirmation: String? = null,
+    modifier: Modifier = Modifier,
+) {
+    val longEnough = password.length >= 8
+    val hasUpper = password.any { it.isUpperCase() }
+    val hasLower = password.any { it.isLowerCase() }
+    val hasDigit = password.any { it.isDigit() }
+    val hasSpecial = password.any { it in "@$!%*?&" }
+    val matches = confirmation != null && password.isNotEmpty() && password == confirmation
+
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "Password requirements:",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            PasswordCriteriaRow("At least 8 characters", longEnough)
+            PasswordCriteriaRow("One uppercase letter (A-Z)", hasUpper)
+            PasswordCriteriaRow("One lowercase letter (a-z)", hasLower)
+            PasswordCriteriaRow("One number (0-9)", hasDigit)
+            PasswordCriteriaRow("One special character (@$!%*?&)", hasSpecial)
+            if (confirmation != null) {
+                PasswordCriteriaRow("Passwords match", matches)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PasswordCriteriaRow(label: String, met: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = if (met) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+            contentDescription = null,
+            tint = if (met) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (met) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+        )
+    }
+}
+
