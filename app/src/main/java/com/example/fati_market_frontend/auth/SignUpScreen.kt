@@ -39,7 +39,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.fati_market.auth.network.registerUser
-import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.InfoBanner
+import com.fati_market.ui.components.PasswordRequirementsList
+import com.fati_market.ui.components.PasswordRequirementsList
 import com.fati_market.ui.components.MarketTextField
 import com.fati_market.ui.components.PrimaryButton
 import com.fati_market.ui.components.SecondaryButton
@@ -232,6 +234,13 @@ fun SignUpScreen(navController: NavController) {
                 keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
             )
 
+            Spacer(Modifier.height(Spacing.sm))
+
+            PasswordRequirementsList(
+                password = password,
+                confirmation = passwordConfirmation,
+            )
+
             errorMessage?.let { msg ->
                 Spacer(Modifier.height(Spacing.md))
                 InfoBanner(text = msg, tone = StatusTone.Danger, icon = Icons.Filled.ErrorOutline)
@@ -249,8 +258,20 @@ fun SignUpScreen(navController: NavController) {
                     if (firstName.isBlank()) { errorMessage = "Please enter your first name."; return@PrimaryButton }
                     if (lastName.isBlank()) { errorMessage = "Please enter your last name."; return@PrimaryButton }
                     if (email.isBlank() || !email.contains("@")) { errorMessage = "Please enter a valid email address."; return@PrimaryButton }
-                    if (password.length < 8) { errorMessage = "Password must be at least 8 characters."; return@PrimaryButton }
-                    if (password != passwordConfirmation) { errorMessage = "Passwords do not match."; return@PrimaryButton }
+                    val longEnough = password.length >= 8
+                    val hasUpper = password.any { it.isUpperCase() }
+                    val hasLower = password.any { it.isLowerCase() }
+                    val hasDigit = password.any { it.isDigit() }
+                    val hasSpecial = password.any { it in "@$!%*?&" }
+
+                    if (!longEnough || !hasUpper || !hasLower || !hasDigit || !hasSpecial) {
+                        errorMessage = "Password must be at least 8 characters and include uppercase, lowercase, number, and special character (@$!%*?&)."
+                        return@PrimaryButton
+                    }
+                    if (password != passwordConfirmation) {
+                        errorMessage = "Passwords do not match."
+                        return@PrimaryButton
+                    }
 
                     scope.launch {
                         errorMessage = null
