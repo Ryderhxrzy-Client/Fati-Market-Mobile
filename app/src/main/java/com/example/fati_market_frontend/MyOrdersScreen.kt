@@ -352,6 +352,15 @@ private fun OrderHistoryCard(
 
         SoftDivider()
 
+        if (order.status == "overdue") {
+            InfoBanner(
+                title = "Reservation Overdue",
+                text = "Your scheduled pick-up date has passed. Please visit the store or contact admin to reschedule.",
+                tone = StatusTone.Danger,
+                icon = Icons.Filled.EventBusy,
+            )
+        }
+
         // How it is being paid, and where that payment stands. A buyer
         // scanning this list wants both without opening anything.
         MarketPanel {
@@ -403,6 +412,13 @@ private fun OrderHistoryCard(
                     value = order.remainingBalanceFormatted.ifBlank {
                         Money.format(order.remainingBalance)
                     },
+                )
+            }
+            (order.pickupDateFormatted ?: order.pickupDate)?.let { sched ->
+                SummaryRow(
+                    label = "Pick-up schedule",
+                    value = sched,
+                    valueColor = if (order.status == "overdue") MaterialTheme.colorScheme.error else null,
                 )
             }
         }
@@ -832,6 +848,9 @@ internal fun ReceiptDialog(
 
                                 SummaryRow("Payment method", r.paymentMethodLabel)
                                 r.paymentReference?.let { SummaryRow("PayMongo reference", it) }
+                                (r.pickupDateFormatted ?: r.pickupDate)?.let { sched ->
+                                    SummaryRow("Pick-up schedule", sched)
+                                }
                                 if (r.rewardPointsEarned > 0) {
                                     SummaryRow(
                                         label = "Reward points earned",
