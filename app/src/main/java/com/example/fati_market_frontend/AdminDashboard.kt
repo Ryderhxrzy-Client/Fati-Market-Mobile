@@ -836,7 +836,6 @@ private fun AdminDrawerContent(
                     DrawerSubItem("Manage orders",       currentPage == DrawerPage.ManageOrders)       { onPageSelect(DrawerPage.ManageOrders) }
 
                     DrawerSubItem("Overdue orders",      currentPage == DrawerPage.OverdueOrders)      { onPageSelect(DrawerPage.OverdueOrders) }
-                    DrawerSubItem("Overdue orders",      currentPage == DrawerPage.OverdueOrders)      { onPageSelect(DrawerPage.OverdueOrders) }
                     DrawerSubItem("Points given",        currentPage == DrawerPage.PointsGiven)        { onPageSelect(DrawerPage.PointsGiven) }
                     DrawerSubItem("Points received",     currentPage == DrawerPage.PointsReceived)     { onPageSelect(DrawerPage.PointsReceived) }
                     DrawerSubItem("Cash transactions",   currentPage == DrawerPage.CashTransactions)   { onPageSelect(DrawerPage.CashTransactions) }
