@@ -190,14 +190,22 @@ internal fun AdminScanScreen(
                         } else {
                             // ── 1. The money ─────────────────────────────
                             if (current.paymentStatus != "verified") {
+                                val hasDpPaid = current.hasPaidDownpayment ||
+                                    current.downpaymentStatus in setOf("paid", "verified") ||
+                                    current.paymentStatus == "partially_paid"
                                 val payingCash = current.paymentMethod == "cash"
 
                                 InfoBanner(
-                                    title = if (payingCash) "Take the cash" else "Payment first",
+                                    title = when {
+                                        hasDpPaid -> "Collect remaining balance"
+                                        payingCash -> "Take the cash"
+                                        else -> "Payment first"
+                                    },
                                     text = when {
-                                        // This screen is the counter: the cash
-                                        // is handed over here, and completing
-                                        // the order is what records it as paid.
+                                        hasDpPaid ->
+                                            "The 50% downpayment is already paid (${Money.format(current.downpaymentAmount)}). " +
+                                                "Collect the remaining balance of ${Money.format(current.remainingBalance ?: current.amountDue)} " +
+                                                "in cash from the buyer. Completing the handover will record the order as fully paid."
                                         payingCash ->
                                             "Collect ${Money.format(current.amountDue)} from the " +
                                                 "buyer. Completing the order below records it as " +
@@ -209,7 +217,7 @@ internal fun AdminScanScreen(
                                             "This order is unpaid. It cannot be completed until " +
                                                 "the payment is verified."
                                     },
-                                    tone = if (payingCash) StatusTone.Info else StatusTone.Warning,
+                                    tone = if (hasDpPaid || payingCash) StatusTone.Info else StatusTone.Warning,
                                     icon = Icons.Filled.Payments,
                                 )
 
@@ -291,21 +299,20 @@ internal fun AdminScanScreen(
                         // Cash is settled by this very act - the buyer is at the
                         // counter handing it over - so it does not have to be
                         // verified beforehand. GCash must already have landed.
-                        val paid = current.paymentStatus == "verified" ||
-                            (current.paymentMethod == "cash" && current.paymentStatus == "unpaid")
-                        val hasPhoto = handoverPhoto != null
+                        val hasDpPaid = current.hasPaidDownpayment ||
+                            current.downpaymentStatus in setOf("paid", "verified") ||
+                            current.paymentStatus == "partially_paid"
 
-                        // No "Ready for pickup" here. That status tells a buyer
-                        // their order is waiting for them - and on this screen
-                        // the buyer is already standing at the counter with the
-                        // code scanned. The only way out is completing the
-                        // handover; the order list keeps the action for orders
-                        // the buyer has not come for yet.
+                        val paid = current.paymentStatus == "verified" ||
+                            (current.paymentMethod == "cash" && current.paymentStatus == "unpaid") ||
+                            hasDpPaid
+                        val hasPhoto = handoverPhoto != null
 
                         PrimaryButton(
                             text = when {
                                 !paid -> "Verify the payment first"
                                 !hasPhoto -> "Take the handover photo first"
+                                hasDpPaid -> "Collect ${Money.format(current.remainingBalance ?: current.amountDue)} & complete"
                                 current.paymentMethod == "cash" && current.paymentStatus == "unpaid" ->
                                     "Take payment & complete"
                                 else -> "Complete transaction"
@@ -392,11 +399,15 @@ private fun ScanOrderSummary(order: MarketTransaction) {
 
         SoftDivider()
 
+        val hasDpPaid = order.hasPaidDownpayment ||
+            order.downpaymentStatus in setOf("paid", "verified") ||
+            order.paymentStatus == "partially_paid"
+
         SummaryRow(
             "Buyer",
             order.buyerName ?: order.buyerEmail.substringBefore("@"),
         )
-        SummaryRow("Amount due", Money.format(order.amountDue), emphasized = true)
+        SummaryRow("Total order price", Money.format(order.amountDue))
 
         if (order.pointsUsed > 0) {
             SummaryRow(
@@ -406,15 +417,34 @@ private fun ScanOrderSummary(order: MarketTransaction) {
             )
         }
 
+        if (hasDpPaid) {
+            SummaryRow(
+                label = "50% Downpayment",
+                value = "Paid (${Money.format(order.downpaymentAmount)})",
+                valueColor = accents.success,
+            )
+            SummaryRow(
+                label = "Remaining cash due",
+                value = Money.format(order.remainingBalance ?: order.amountDue),
+                emphasized = true,
+            )
+        } else {
+            SummaryRow("Amount due", Money.format(order.amountDue), emphasized = true)
+        }
+
         SummaryRow("Payment", paymentMethodLabel(order.paymentMethod))
 
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            PaymentStatusPill(
-                order.paymentStatus,
-                order.isFullPointsCheckout,
-                paymentMethod = order.paymentMethod,
-                orderStatus = order.status,
-            )
+            if (hasDpPaid && order.paymentStatus != "verified") {
+                StatusPill(label = "50% DP Paid", tone = StatusTone.Success)
+            } else {
+                PaymentStatusPill(
+                    order.paymentStatus,
+                    order.isFullPointsCheckout,
+                    paymentMethod = order.paymentMethod,
+                    orderStatus = order.status,
+                )
+            }
             TransactionStatusPill(order.status, paymentMethod = order.paymentMethod)
         }
     }
