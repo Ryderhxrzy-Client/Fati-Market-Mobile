@@ -60,6 +60,10 @@ internal data class StoreHours(
         return (now.dayOfMonth..month.lengthOfMonth()).any { isBookableDay(month.atDay(it), now) }
     }
 
+    /** Whether now is past closing time (6:00 PM cutoff). */
+    fun isPastCutoff(now: ZonedDateTime): Boolean =
+        !now.toLocalTime().isBefore(closeTime)
+
     /** "Mon-Sat" for a run of days, "Mon, Wed, Fri" otherwise. */
     fun daysLabel(): String {
         val days = openDays.sorted()
