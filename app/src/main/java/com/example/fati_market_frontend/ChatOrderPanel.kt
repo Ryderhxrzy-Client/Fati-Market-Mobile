@@ -61,7 +61,24 @@ internal fun ChatOrderPanel(
     var showBuyer by remember { mutableStateOf(false) }
     var showProof by remember { mutableStateOf(false) }
     var payingNow by remember { mutableStateOf(false) }
+    var extendingSchedule by remember { mutableStateOf(false) }
     var expanded by remember(itemId, buyerId) { mutableStateOf(false) }
+
+    if (extendingSchedule) {
+        order?.let { cur ->
+            PickupScheduleDialog(
+                transactionId = cur.transactionId,
+                token = token,
+                current = cur.pickupDate,
+                isAdmin = true,
+                onDismiss = { extendingSchedule = false },
+                onSaved = {
+                    extendingSchedule = false
+                    refreshKey++
+                },
+            )
+        }
+    }
 
     LaunchedEffect(itemId, buyerId, refreshKey) {
         if (itemId <= 0 || buyerId <= 0) return@LaunchedEffect
@@ -151,6 +168,26 @@ internal fun ChatOrderPanel(
                         CompactOrderRow("Item", current.itemTitle)
                         CompactOrderRow("Order total", Money.format(current.amountDue), emphasized = true)
                         CompactOrderRow("Payment method", orderPaymentMethodLabel(current))
+                        (current.pickupDateFormatted ?: current.pickupDate)?.let { sched ->
+                            CompactOrderRow(
+                                label = "Pick-up schedule",
+                                value = sched,
+                                emphasized = true,
+                                valueColor = if (current.status == "overdue") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (current.status == "overdue") {
+                            InfoBanner(
+                                title = "Reservation Overdue",
+                                text = if (isAdmin) {
+                                    "The scheduled pick-up date has passed. Please extend pick-up date, forfeit DP and relist, or mark as sold."
+                                } else {
+                                    "Your scheduled pick-up date has passed. Please visit the store or contact admin to reschedule."
+                                },
+                                tone = StatusTone.Danger,
+                                icon = Icons.Filled.EventBusy,
+                            )
+                        }
 
                         if (current.paymentMethod == "cash" && current.downpaymentRequired) {
                             val downpaymentPaid = current.paymentStatus in setOf(
@@ -372,7 +409,7 @@ internal fun ChatOrderPanel(
                 }
             }
 
-            if (expanded && isAdmin) {
+            if ((expanded || current.status == "overdue") && isAdmin) {
                 // Admin: the decisions the server still allows, plus the two
                 // things worth a glance - who is buying, and their receipt.
                 if (!current.isTerminal) {
@@ -391,7 +428,8 @@ internal fun ChatOrderPanel(
                     }
 
                     if (approve != null || decline != null ||
-                        current.canDo("mark_ready_for_pickup") || current.canDo("complete")
+                        current.canDo("mark_ready_for_pickup") || current.canDo("complete") ||
+                        current.status == "overdue"
                     ) {
                         OrderActionButtons(
                             order = current,
@@ -399,6 +437,7 @@ internal fun ChatOrderPanel(
                             decline = decline,
                             compact = true,
                             onAction = { pendingAction = it },
+                            onExtend = { extendingSchedule = true },
                         )
                     }
                 }
@@ -550,6 +589,18 @@ internal fun ChatOrderActionDialog(
             "Tell the buyer the item is staged and waiting at the store.",
             "Mark ready",
         )
+        "forfeit", "cancel_and_relist" -> {
+            val isUnpaid = !transaction.hasPaidDownpayment
+            Triple(
+                if (isUnpaid) "Cancel & Relist Item" else "Forfeit DP & Relist",
+                if (isUnpaid) {
+                    "This overdue reservation was unpaid. Confirming will cancel this order and immediately return \"${transaction.itemTitle}\" to the public marketplace."
+                } else {
+                    "This will forfeit the buyer's downpayment, cancel this overdue reservation, and return \"${transaction.itemTitle}\" to the public marketplace."
+                },
+                if (isUnpaid) "Return to Marketplace" else "Forfeit & Relist",
+            )
+        }
         else -> Triple(
             "Cancel order",
             "The item returns to the catalog and any points spent are refunded.",
@@ -606,6 +657,8 @@ internal fun ChatOrderActionDialog(
                                     MarketplaceApi.rejectPayment(token, transaction.transactionId, reason)
                                 "mark_ready_for_pickup" ->
                                     MarketplaceApi.markReadyForPickup(token, transaction.transactionId)
+                                "forfeit", "cancel_and_relist" ->
+                                    MarketplaceApi.forfeitAdminTransaction(token, transaction.transactionId)
                                 else ->
                                     MarketplaceApi.cancelTransaction(token, transaction.transactionId, reason)
                             }
@@ -613,8 +666,18 @@ internal fun ChatOrderActionDialog(
                         working = false
 
                         when (result) {
-                            is MarketplaceApi.Result.Ok -> onDone()
-                            is MarketplaceApi.Result.Failure -> error = result.message
+                            is MarketplaceApi.Result.Ok -> {
+                                val msg = if (action in setOf("forfeit", "cancel_and_relist")) {
+                                    if (transaction.hasPaidDownpayment) "Downpayment forfeited and item returned to marketplace."
+                                    else "Order cancelled and item returned to marketplace."
+                                } else "Action completed successfully."
+                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                onDone()
+                            }
+                            is MarketplaceApi.Result.Failure -> {
+                                error = result.message
+                                android.widget.Toast.makeText(context, "Error: ${result.message}", android.widget.Toast.LENGTH_LONG).show()
+                            }
                         }
                     }
                 },
