@@ -434,6 +434,23 @@ private fun ScanOrderSummary(order: MarketTransaction) {
 
         SummaryRow("Payment", paymentMethodLabel(order.paymentMethod))
 
+        (order.pickupDateFormatted ?: order.pickupDate)?.let { sched ->
+            SummaryRow(
+                label = "Pick-up schedule",
+                value = sched,
+                valueColor = if (order.status == "overdue") MaterialTheme.colorScheme.error else null,
+            )
+        }
+
+        if (order.status == "overdue") {
+            InfoBanner(
+                title = "Reservation Overdue",
+                text = "The scheduled pick-up date has passed. Please extend pick-up date, forfeit DP and relist, or complete transaction.",
+                tone = StatusTone.Danger,
+                icon = Icons.Filled.EventBusy,
+            )
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             if (hasDpPaid && order.paymentStatus != "verified") {
                 StatusPill(label = "50% DP Paid", tone = StatusTone.Success)
