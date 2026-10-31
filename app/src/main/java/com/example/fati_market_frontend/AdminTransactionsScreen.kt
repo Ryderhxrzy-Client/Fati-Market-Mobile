@@ -67,6 +67,7 @@ fun AdminTransactionsContent(
     var proofPreview by remember { mutableStateOf<String?>(null) }
     var extendingOrder by remember { mutableStateOf<MarketTransaction?>(null) }
     var forfeitingOrder by remember { mutableStateOf<MarketTransaction?>(null) }
+    var forfeitRefundingOrder by remember { mutableStateOf<MarketTransaction?>(null) }
 
     val filters = listOf(
         null to "All",
@@ -75,6 +76,7 @@ fun AdminTransactionsContent(
         "pending_payment" to "Awaiting payment",
         "ready_for_pickup" to "For pickup",
         "completed" to "Completed",
+        "refunds" to "Refunds",
     )
 
     LaunchedEffect(selectedFilter, refreshKey) {
@@ -130,6 +132,19 @@ fun AdminTransactionsContent(
             onDismiss = { forfeitingOrder = null },
             onDone = {
                 forfeitingOrder = null
+                refreshKey++
+            }
+        )
+    }
+
+    forfeitRefundingOrder?.let { order ->
+        ChatOrderActionDialog(
+            transaction = order,
+            action = "forfeit_refund",
+            token = token,
+            onDismiss = { forfeitRefundingOrder = null },
+            onDone = {
+                forfeitRefundingOrder = null
                 refreshKey++
             }
         )
@@ -233,6 +248,7 @@ fun AdminTransactionsContent(
                             onAction = { action -> actionTarget = transaction to action },
                             onExtend = { extendingOrder = transaction },
                             onForfeit = { forfeitingOrder = transaction },
+                            onForfeitRefund = { forfeitRefundingOrder = transaction },
                             onViewProof = { proofPreview = it },
                             onOpenChat = { onOpenChat(transaction.itemId) },
                         )
@@ -252,6 +268,7 @@ private fun AdminTransactionCard(
     onAction: (String) -> Unit,
     onExtend: () -> Unit = {},
     onForfeit: () -> Unit = {},
+    onForfeitRefund: () -> Unit = {},
     onViewProof: (String) -> Unit,
     onOpenChat: () -> Unit,
 ) {
@@ -394,6 +411,23 @@ private fun AdminTransactionCard(
                     InfoBanner(text = it, tone = StatusTone.Neutral, icon = Icons.Filled.Info)
                 }
 
+                transaction.refundStatus?.let {
+                    val isCompleted = transaction.isRefundCompleted
+                    val refundAmt = transaction.refundAmountFormatted ?: Money.format(transaction.amountDue)
+                    InfoBanner(
+                        title = "Refund ${if (isCompleted) "Completed" else "Processing"} ($refundAmt)",
+                        text = if (isCompleted) {
+                            "Refund completed" + (transaction.refundReference?.let { " (Ref: $it)" } ?: "") +
+                                (transaction.refundedAt?.let { " on $it" } ?: "") + "."
+                        } else {
+                            "Refund is currently processing" + (transaction.refundReference?.let { " (Ref: $it)" } ?: "") +
+                                ". Status will update automatically when PayMongo webhook is received."
+                        },
+                        tone = if (isCompleted) StatusTone.Success else StatusTone.Info,
+                        icon = if (isCompleted) Icons.Filled.CheckCircle else Icons.Filled.HourglassTop,
+                    )
+                }
+
                 transaction.paymentReference?.let { reference ->
                     SummaryRow("GCash reference", reference)
                 }
@@ -420,7 +454,7 @@ private fun AdminTransactionCard(
         )
 
         // ── Actions, driven by the server's lifecycle ───────────────────
-        if (transaction.availableActions.isNotEmpty() || transaction.status == "overdue") {
+        if (transaction.availableActions.isNotEmpty() || transaction.status == "overdue" || transaction.canRefund) {
             SoftDivider()
 
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -439,14 +473,24 @@ private fun AdminTransactionCard(
                         icon = Icons.Filled.DoneAll,
                         containerColor = accents.success,
                     )
-                    val isUnpaid = !transaction.hasPaidDownpayment
+                    val isUnpaid = !transaction.isPaid
+                    val hasRemaining = (transaction.remainingBalance.toDoubleOrNull() ?: 0.0) > 0.0
                     SecondaryButton(
-                        text = if (isUnpaid) "Cancel & Return to Marketplace" else "Forfeit DP & Relist",
+                        text = if (isUnpaid) "Cancel & Return to Marketplace" else if (hasRemaining) "Forfeit DP & Relist" else "Forfeit Payment & Relist",
                         onClick = onForfeit,
                         modifier = Modifier.fillMaxWidth(),
                         contentColor = MaterialTheme.colorScheme.error,
                         icon = Icons.Filled.Cancel,
                     )
+                    if (!isUnpaid) {
+                        PrimaryButton(
+                            text = "Refund & Relist Item",
+                            onClick = onForfeitRefund,
+                            modifier = Modifier.fillMaxWidth(),
+                            containerColor = MaterialTheme.colorScheme.error,
+                            icon = Icons.Filled.Undo,
+                        )
+                    }
                 } else {
                     if (!transaction.isTerminal) {
                         val scheduleText = if (transaction.pickupDate != null) "Edit pick-up date" else "Set pick-up date"
@@ -500,6 +544,26 @@ private fun AdminTransactionCard(
                         )
                     }
 
+                    if (transaction.canRefund || transaction.canDo("process_refund")) {
+                        if (transaction.paymentMethod == "paymongo") {
+                            PrimaryButton(
+                                text = "Process PayMongo Refund",
+                                onClick = { onAction("refund_paymongo") },
+                                modifier = Modifier.fillMaxWidth(),
+                                icon = Icons.Filled.Payments,
+                                containerColor = accents.info,
+                            )
+                        } else {
+                            PrimaryButton(
+                                text = "Mark Refund as Sent",
+                                onClick = { onAction("refund_manual") },
+                                modifier = Modifier.fillMaxWidth(),
+                                icon = Icons.Filled.CheckCircle,
+                                containerColor = accents.success,
+                            )
+                        }
+                    }
+
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                         if (transaction.canDo("reject_payment")) {
                             SecondaryButton(
@@ -511,7 +575,7 @@ private fun AdminTransactionCard(
                         }
                         if (transaction.canDo("cancel")) {
                             SecondaryButton(
-                                text = "Cancel",
+                                text = if (transaction.isPaid) "Cancel & Refund" else "Cancel",
                                 onClick = { onAction("cancel") },
                                 modifier = Modifier.weight(1f),
                                 contentColor = MaterialTheme.colorScheme.error,
