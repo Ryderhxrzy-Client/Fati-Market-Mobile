@@ -423,9 +423,10 @@ private fun OrderHistoryCard(
             }
         }
 
-        // The backend reserves the item the moment a checkout is created, but
-        // nothing said so - the buyer had no way to know it was being held.
-        if (!order.isTerminal && order.reservedUntil != null) {
+        // The backend reserves the item the moment a checkout is created.
+        // It is held until 6:00 PM during store hours of the scheduled pickup date.
+        // If it passes 6:00 PM, it becomes overdue and admin handles relisting/extension/sale.
+        if (!order.isTerminal && order.status != "overdue" && order.reservedUntil != null) {
             val remaining = Dates.timeUntil(order.reservedUntil)
 
             if (remaining != null) {
@@ -436,13 +437,6 @@ private fun OrderHistoryCard(
                         " · $remaining left",
                     tone = if (order.paymentStatus == "unpaid") StatusTone.Warning else StatusTone.Success,
                     icon = Icons.Filled.Lock,
-                )
-            } else {
-                InfoBanner(
-                    title = "Reservation expired",
-                    text = "This hold has lapsed, so the item may go back on sale.",
-                    tone = StatusTone.Danger,
-                    icon = Icons.Filled.LockOpen,
                 )
             }
         }
