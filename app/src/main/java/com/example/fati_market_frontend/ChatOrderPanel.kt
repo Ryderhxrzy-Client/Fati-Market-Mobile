@@ -409,10 +409,38 @@ internal fun ChatOrderPanel(
                 }
             }
 
+            if (expanded && current.status == "cancelled" && current.refundStatus != null) {
+                val isCompleted = current.isRefundCompleted
+                val isFailed = current.isRefundFailed
+                val statusText = when {
+                    isCompleted -> "Refund completed"
+                    isFailed -> "Refund failed"
+                    else -> "Refund processing"
+                }
+                val tone = when {
+                    isCompleted -> StatusTone.Success
+                    isFailed -> StatusTone.Danger
+                    else -> StatusTone.Warning
+                }
+                val amountStr = current.refundAmountFormatted ?: Money.format(current.amountDue)
+                val refStr = if (!current.refundReference.isNullOrBlank()) " (Ref: ${current.refundReference})" else ""
+                val advisory = when {
+                    isCompleted -> "Refund of $amountStr has been completed$refStr."
+                    isFailed -> "Refund could not be processed automatically. Contact admin to resolve."
+                    else -> "Refund of $amountStr is being processed (typically 3–5 business days for e-wallets). If not received after 5 business days, please message in this chat."
+                }
+                InfoBanner(
+                    title = "$statusText · $amountStr",
+                    text = advisory,
+                    tone = tone,
+                    icon = if (isCompleted) Icons.Filled.CheckCircle else Icons.Filled.Info,
+                )
+            }
+
             if ((expanded || current.status == "overdue") && isAdmin) {
                 // Admin: the decisions the server still allows, plus the two
                 // things worth a glance - who is buying, and their receipt.
-                if (!current.isTerminal) {
+                if (!current.isTerminal || current.canRefund || current.canDo("process_refund")) {
                     // Two different approvals: a GCash payment that has
                     // landed, or a cash order that is only being accepted.
                     // The server offers exactly one of them.
@@ -429,7 +457,7 @@ internal fun ChatOrderPanel(
 
                     if (approve != null || decline != null ||
                         current.canDo("mark_ready_for_pickup") || current.canDo("complete") ||
-                        current.status == "overdue"
+                        current.status == "overdue" || current.canRefund || current.canDo("process_refund")
                     ) {
                         OrderActionButtons(
                             order = current,
@@ -520,7 +548,7 @@ internal fun ChatOrderActionDialog(
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val needsReason = action == "reject_payment" || action == "cancel"
+    val needsReason = action == "reject_payment" || action == "cancel" || action == "refund_manual"
 
     // Completing is a handover, not a yes/no question: the buyer has to be
     // photographed receiving the item. That is what the counter screen does
@@ -590,16 +618,49 @@ internal fun ChatOrderActionDialog(
             "Mark ready",
         )
         "forfeit", "cancel_and_relist" -> {
-            val isUnpaid = !transaction.hasPaidDownpayment
+            val isUnpaid = !transaction.isPaid
+            val hasRemaining = (transaction.remainingBalance.toDoubleOrNull() ?: 0.0) > 0.0
             Triple(
-                if (isUnpaid) "Cancel & Relist Item" else "Forfeit DP & Relist",
+                if (isUnpaid) "Cancel & Return to Marketplace" else if (hasRemaining) "Forfeit DP & Relist Item" else "Forfeit Payment & Relist Item",
                 if (isUnpaid) {
                     "This overdue reservation was unpaid. Confirming will cancel this order and immediately return \"${transaction.itemTitle}\" to the public marketplace."
+                } else if (hasRemaining) {
+                    "Are you sure? This will forfeit the downpayment, cancel this overdue transaction, and immediately return \"${transaction.itemTitle}\" to the public marketplace without refund."
                 } else {
-                    "This will forfeit the buyer's downpayment, cancel this overdue reservation, and return \"${transaction.itemTitle}\" to the public marketplace."
+                    "Are you sure? This will forfeit the payment, cancel this overdue transaction, and immediately return \"${transaction.itemTitle}\" to the public marketplace without refund."
                 },
                 if (isUnpaid) "Return to Marketplace" else "Forfeit & Relist",
             )
+        }
+        "forfeit_refund" -> Triple(
+            "Refund & Relist Overdue Order",
+            "Are you sure? This will cancel this overdue reservation, initiate an automated refund of ${transaction.refundAmountFormatted ?: Money.format(transaction.amountDue)} through PayMongo, and immediately return \"${transaction.itemTitle}\" to the public marketplace.",
+            "Refund & Relist",
+        )
+        "refund_paymongo", "process_refund" -> Triple(
+            "Process PayMongo Refund",
+            "This will initiate an automated refund of ${transaction.refundAmountFormatted ?: Money.format(transaction.amountDue)} through PayMongo. The buyer will receive the refund in their account/e-wallet within 3 to 5 business days.",
+            "Process Refund",
+        )
+        "refund_manual" -> Triple(
+            "Mark Refund as Sent",
+            "Confirm that you have manually sent the refund of ${transaction.refundAmountFormatted ?: Money.format(transaction.amountDue)} to the buyer (e.g. via GCash or cash). Please provide the reference number or transaction details below.",
+            "Confirm Refund",
+        )
+        "cancel" -> {
+            if (transaction.isPaid) {
+                Triple(
+                    "Cancel & Refund Order",
+                    "This order has been paid. Cancelling it will return the item to the catalog, refund points, and initiate a refund for ${transaction.refundAmountFormatted ?: Money.format(transaction.amountDue)}. PayMongo e-wallets will receive the refund within 3 to 5 business days.",
+                    "Cancel & Refund",
+                )
+            } else {
+                Triple(
+                    "Cancel order",
+                    "The item returns to the catalog and any points spent are refunded.",
+                    "Cancel order",
+                )
+            }
         }
         else -> Triple(
             "Cancel order",
@@ -622,9 +683,9 @@ internal fun ChatOrderActionDialog(
                     OutlinedTextField(
                         value = reason,
                         onValueChange = { reason = it; error = null },
-                        label = { Text("Reason") },
-                        placeholder = { Text("Shown to the buyer in this chat") },
-                        minLines = 2,
+                        label = { Text(if (action == "refund_manual") "Reference Number / Note" else "Reason") },
+                        placeholder = { Text(if (action == "refund_manual") "e.g., GCash Ref: 100234857" else "Shown to the buyer in this chat") },
+                        minLines = if (action == "refund_manual") 1 else 2,
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.small,
                     )
@@ -639,7 +700,7 @@ internal fun ChatOrderActionDialog(
             Button(
                 onClick = {
                     if (needsReason && reason.isBlank()) {
-                        error = "Please give a reason."
+                        error = if (action == "refund_manual") "Please provide the reference number or note." else "Please give a reason."
                         return@Button
                     }
 
@@ -659,6 +720,12 @@ internal fun ChatOrderActionDialog(
                                     MarketplaceApi.markReadyForPickup(token, transaction.transactionId)
                                 "forfeit", "cancel_and_relist" ->
                                     MarketplaceApi.forfeitAdminTransaction(token, transaction.transactionId)
+                                "forfeit_refund" ->
+                                    MarketplaceApi.forfeitAdminTransaction(token, transaction.transactionId, refund = true)
+                                "refund_paymongo", "process_refund" ->
+                                    MarketplaceApi.processAdminRefund(token, transaction.transactionId, "paymongo")
+                                "refund_manual" ->
+                                    MarketplaceApi.processAdminRefund(token, transaction.transactionId, "manual", reason)
                                 else ->
                                     MarketplaceApi.cancelTransaction(token, transaction.transactionId, reason)
                             }
@@ -667,10 +734,17 @@ internal fun ChatOrderActionDialog(
 
                         when (result) {
                             is MarketplaceApi.Result.Ok -> {
-                                val msg = if (action in setOf("forfeit", "cancel_and_relist")) {
-                                    if (transaction.hasPaidDownpayment) "Downpayment forfeited and item returned to marketplace."
-                                    else "Order cancelled and item returned to marketplace."
-                                } else "Action completed successfully."
+                                val msg = when (action) {
+                                    in setOf("forfeit", "cancel_and_relist") -> {
+                                        if (transaction.isPaid) "Payment/downpayment forfeited and item returned to marketplace."
+                                        else "Order cancelled and item returned to marketplace."
+                                    }
+                                    "forfeit_refund" -> "Overdue order cancelled, refund initiated, and item relisted."
+                                    "refund_paymongo", "process_refund" -> "PayMongo refund request submitted successfully."
+                                    "refund_manual" -> "Refund recorded and marked as sent."
+                                    "cancel" -> if (transaction.isPaid) "Order cancelled and refund initiated." else "Order cancelled."
+                                    else -> "Action completed successfully."
+                                }
                                 android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                                 onDone()
                             }
