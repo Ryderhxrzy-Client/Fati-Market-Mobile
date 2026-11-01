@@ -82,10 +82,31 @@ internal object MarketplaceApi {
         return put(token, endpoint, body) { parseTransaction(it.getJSONObject("data")) }
     }
 
-    fun forfeitAdminTransaction(token: String, transactionId: Int): Result<MarketTransaction> =
-        post(token, "/admin/transactions/$transactionId/forfeit", JSONObject()) {
+    fun forfeitAdminTransaction(token: String, transactionId: Int, refund: Boolean = false): Result<MarketTransaction> {
+        val body = JSONObject().apply {
+            if (refund) put("refund", true)
+        }
+        return post(token, "/admin/transactions/$transactionId/forfeit", body) {
             parseTransaction(it.getJSONObject("data"))
         }
+    }
+
+    fun processAdminRefund(
+        token: String,
+        transactionId: Int,
+        action: String = "paymongo",
+        referenceNumber: String? = null
+    ): Result<MarketTransaction> {
+        val body = JSONObject().apply {
+            put("action", action)
+            if (referenceNumber != null) {
+                put("reference_number", referenceNumber)
+            }
+        }
+        return post(token, "/admin/transactions/$transactionId/refund", body) {
+            parseTransaction(it.getJSONObject("data"))
+        }
+    }
 
     data class PayMongoCheckoutResponse(
         val checkoutSessionId: String,

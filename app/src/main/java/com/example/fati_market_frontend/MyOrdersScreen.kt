@@ -488,12 +488,59 @@ private fun OrderHistoryCard(
             }
         }
 
-        if (order.paymentStatus == "rejected") {
+        if (order.refundStatus != null) {
+            val isCompleted = order.isRefundCompleted
+            val isFailed = order.isRefundFailed
+            val refundAmt = order.refundAmountFormatted ?: Money.format(order.amountDue)
+            val tone = when {
+                isCompleted -> StatusTone.Success
+                isFailed -> StatusTone.Danger
+                else -> StatusTone.Info
+            }
+            val title = when {
+                isCompleted -> "Refund Completed ($refundAmt)"
+                isFailed -> "Refund Issue ($refundAmt)"
+                else -> "Refund Processing ($refundAmt)"
+            }
+            val text = when {
+                isCompleted -> {
+                    "Refund completed" +
+                        (order.refundReference?.let { " (Ref: $it)" } ?: "") +
+                        (order.refundedAt?.let { " on $it" } ?: "") +
+                        ". The amount of $refundAmt has been successfully refunded to your account."
+                }
+                isFailed -> {
+                    "Your refund could not be completed automatically. Please message the store admin in chat for assistance."
+                }
+                else -> {
+                    "Your refund of $refundAmt is currently being processed via ${order.paymentMethod.uppercase()} (typically takes 3–5 business days). If you have not received it after this period, please message the store admin in chat."
+                }
+            }
+            val icon = when {
+                isCompleted -> Icons.Filled.CheckCircle
+                isFailed -> Icons.Filled.ErrorOutline
+                else -> Icons.Filled.HourglassTop
+            }
+
+            InfoBanner(
+                title = title,
+                text = text,
+                tone = tone,
+                icon = icon,
+            )
+        } else if (order.paymentStatus == "rejected") {
             InfoBanner(
                 title = "Payment declined",
                 text = order.cancelReason ?: "The admin declined this payment.",
                 tone = StatusTone.Danger,
                 icon = Icons.Filled.ErrorOutline,
+            )
+        } else if (order.status == "cancelled" && order.cancelReason != null) {
+            InfoBanner(
+                title = "Order Cancelled",
+                text = order.cancelReason,
+                tone = StatusTone.Danger,
+                icon = Icons.Filled.Cancel,
             )
         }
 

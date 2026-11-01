@@ -321,6 +321,7 @@ internal data class MarketTransaction(
     val pickupDate: String? = null,
     val pickupDateFormatted: String? = null,
     val hasPaidDownpayment: Boolean = false,
+    val hasPaid: Boolean = false,
 
     /**
      * The signed walk-in pickup code. The buyer renders it as a QR at the
@@ -339,6 +340,13 @@ internal data class MarketTransaction(
      * paid or approved yet. Decided by the server.
      */
     val canChangePaymentMethod: Boolean = false,
+    val refundStatus: String? = null,
+    val refundAmount: String? = null,
+    val refundAmountFormatted: String? = null,
+    val refundReason: String? = null,
+    val refundReference: String? = null,
+    val refundedAt: String? = null,
+    val canRefund: Boolean = false,
 ) {
     val awaitingProofReview: Boolean get() = paymentStatus == "proof_submitted"
     val isTerminal: Boolean get() = status in listOf("completed", "cancelled", "rejected")
@@ -346,14 +354,22 @@ internal data class MarketTransaction(
     val isPaid: Boolean
         get() = paymentStatus in listOf("verified", "paid", "partially_paid") ||
             hasPaidDownpayment ||
+            hasPaid ||
             downpaymentStatus in listOf("verified", "paid")
+
+    val isUnpaid: Boolean get() = !isPaid
+
+    val amountDueFormatted: String get() = Money.format(amountDue)
+
+    val isRefundProcessing: Boolean get() = refundStatus in listOf("pending", "processing")
+    val isRefundCompleted: Boolean get() = refundStatus == "completed"
+    val isRefundFailed: Boolean get() = refundStatus == "failed"
 
     val isReadyForPickup: Boolean
         get() = status == "ready_for_pickup" || pickupStatus == "ready"
 
     fun canDo(action: String): Boolean {
         if (!availableActions.contains(action)) return false
-        if (action == "cancel" && isPaid) return false
         if (action == "mark_ready_for_pickup" && isReadyForPickup) return false
         return true
     }
@@ -416,10 +432,18 @@ internal fun parseTransaction(obj: JSONObject): MarketTransaction {
         pickupDate = str("pickup_date"),
         pickupDateFormatted = str("pickup_date_formatted"),
         hasPaidDownpayment = obj.optBoolean("has_paid_downpayment", false),
+        hasPaid = obj.optBoolean("has_paid", obj.optBoolean("has_paid_downpayment", false)),
         qrCode = str("qr_code"),
         handoverPhoto = str("handover_photo"),
         completedAt = str("completed_at"),
         canChangePaymentMethod = obj.optBoolean("can_change_payment_method", false),
+        refundStatus = str("refund_status"),
+        refundAmount = str("refund_amount"),
+        refundAmountFormatted = str("refund_amount_formatted"),
+        refundReason = str("refund_reason"),
+        refundReference = str("refund_reference"),
+        refundedAt = str("refunded_at"),
+        canRefund = obj.optBoolean("can_refund", false),
     )
 }
 
