@@ -101,7 +101,11 @@ class MainActivity : ComponentActivity() {
                     // The banner wraps the whole app so a push that arrives
                     // while the user is inside it shows here rather than as a
                     // system notification over the screen they are using.
-                    InAppNotificationHost {
+                    InAppNotificationHost(
+                        onOpenChat = { itemId, senderId ->
+                            ChatNavigator.open(itemId, senderId)
+                        },
+                    ) {
                         AppNavigation(
                             isDarkMode = isDarkMode,
                             onThemeToggle = {

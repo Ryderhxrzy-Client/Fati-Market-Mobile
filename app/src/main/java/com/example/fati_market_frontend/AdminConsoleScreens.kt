@@ -462,6 +462,7 @@ internal fun NotificationsDialog(
      * plain reading, which is what Admin gets - they have the orders screen.
      */
     onOpenOrder: ((Int) -> Unit)? = null,
+    onOpenChat: ((itemId: Int, itemTitle: String, itemPhoto: String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val accents = LocalMarketAccents.current
@@ -483,19 +484,98 @@ internal fun NotificationsDialog(
                 // A buyer's notifications are their orders moving: the same
                 // rows My Orders draws, read as a timeline.
                 when (val mine = MarketplaceApi.fetchMyTransactions(token)) {
-                    is MarketplaceApi.Result.Ok -> MarketplaceApi.Result.Ok(
-                        mine.value.map { order ->
-                            ActivityEntry(
-                                action = if (order.isTerminal) "update" else "purchase",
-                                user = paymentMethodLabel(order.paymentMethod),
-                                description = order.itemTitle + " · " +
-                                    transactionStatusLabel(order.status),
-                                resourceType = "order",
-                                resourceId = order.transactionId,
-                                timestamp = order.completedAt ?: order.createdAt,
+                    is MarketplaceApi.Result.Ok -> {
+                        val entries = mutableListOf<ActivityEntry>()
+                        mine.value.forEach { order ->
+                            if (order.isRefundCompleted) {
+                                entries.add(
+                                    ActivityEntry(
+                                        action = "refund",
+                                        user = (order.refundReference?.let { "Ref: $it · " } ?: "") + paymentMethodLabel(order.paymentMethod),
+                                        description = "${order.itemTitle} · Refund Completed (${order.refundAmountFormatted ?: Money.format(order.amountDue)})",
+                                        resourceType = "order",
+                                        resourceId = order.transactionId,
+                                        timestamp = order.refundedAt ?: order.completedAt ?: order.createdAt,
+                                        itemId = order.itemId,
+                                        itemTitle = order.itemTitle,
+                                        itemPhoto = order.itemPhoto ?: "",
+                                    )
+                                )
+                            } else if (order.isRefundProcessing) {
+                                entries.add(
+                                    ActivityEntry(
+                                        action = "refund_processing",
+                                        user = paymentMethodLabel(order.paymentMethod),
+                                        description = "${order.itemTitle} · Refund Processing (${order.refundAmountFormatted ?: Money.format(order.amountDue)})",
+                                        resourceType = "order",
+                                        resourceId = order.transactionId,
+                                        timestamp = order.completedAt ?: order.createdAt,
+                                        itemId = order.itemId,
+                                        itemTitle = order.itemTitle,
+                                        itemPhoto = order.itemPhoto ?: "",
+                                    )
+                                )
+                            } else if (order.status == "cancelled") {
+                                entries.add(
+                                    ActivityEntry(
+                                        action = "cancelled",
+                                        user = (order.cancelReason?.let { "$it · " } ?: "") + paymentMethodLabel(order.paymentMethod),
+                                        description = "${order.itemTitle} · Order Cancelled",
+                                        resourceType = "order",
+                                        resourceId = order.transactionId,
+                                        timestamp = order.completedAt ?: order.createdAt,
+                                        itemId = order.itemId,
+                                        itemTitle = order.itemTitle,
+                                        itemPhoto = order.itemPhoto ?: "",
+                                    )
+                                )
+                            } else if (order.status == "completed") {
+                                entries.add(
+                                    ActivityEntry(
+                                        action = "completed",
+                                        user = paymentMethodLabel(order.paymentMethod),
+                                        description = "${order.itemTitle} · Order Completed",
+                                        resourceType = "order",
+                                        resourceId = order.transactionId,
+                                        timestamp = order.completedAt ?: order.createdAt,
+                                        itemId = order.itemId,
+                                        itemTitle = order.itemTitle,
+                                        itemPhoto = order.itemPhoto ?: "",
+                                    )
+                                )
+                            } else if (order.status in listOf("ready_for_pickup", "ready")) {
+                                entries.add(
+                                    ActivityEntry(
+                                        action = "ready",
+                                        user = paymentMethodLabel(order.paymentMethod),
+                                        description = "${order.itemTitle} · Ready for Pick-up",
+                                        resourceType = "order",
+                                        resourceId = order.transactionId,
+                                        timestamp = order.createdAt,
+                                        itemId = order.itemId,
+                                        itemTitle = order.itemTitle,
+                                        itemPhoto = order.itemPhoto ?: "",
+                                    )
+                                )
+                            }
+
+                            // Also include the original order placement entry
+                            entries.add(
+                                ActivityEntry(
+                                    action = "purchase",
+                                    user = paymentMethodLabel(order.paymentMethod),
+                                    description = "${order.itemTitle} · Order Placed (${Money.format(order.amountDue)})",
+                                    resourceType = "order",
+                                    resourceId = order.transactionId,
+                                    timestamp = order.createdAt,
+                                    itemId = order.itemId,
+                                    itemTitle = order.itemTitle,
+                                    itemPhoto = order.itemPhoto ?: "",
+                                )
                             )
-                        },
-                    )
+                        }
+                        MarketplaceApi.Result.Ok(entries.sortedByDescending { it.timestamp })
+                    }
                     is MarketplaceApi.Result.Failure -> mine
                 }
             }
@@ -561,8 +641,14 @@ internal fun NotificationsDialog(
                             val handler = onOpenOrder
 
                             val open: (() -> Unit)? =
-                                if (handler != null && line.resourceType == "order") {
-                                    { handler(line.resourceId) }
+                                if (line.resourceType == "order") {
+                                    if (onOpenChat != null && line.itemId > 0) {
+                                        { onOpenChat(line.itemId, line.itemTitle, line.itemPhoto) }
+                                    } else if (handler != null) {
+                                        { handler(line.resourceId) }
+                                    } else {
+                                        null
+                                    }
                                 } else {
                                     null
                                 }
@@ -573,13 +659,21 @@ internal fun NotificationsDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Icon(
-                                        if (line.action == "purchase") {
-                                            Icons.Filled.ShoppingCart
-                                        } else {
-                                            Icons.Filled.Notifications
+                                        when (line.action) {
+                                            "refund" -> Icons.Filled.CheckCircle
+                                            "refund_processing" -> Icons.Filled.HourglassTop
+                                            "cancelled" -> Icons.Filled.Cancel
+                                            "completed" -> Icons.Filled.CheckCircle
+                                            "purchase" -> Icons.Filled.ShoppingCart
+                                            else -> Icons.Filled.Notifications
                                         },
                                         null,
-                                        tint = accents.info,
+                                        tint = when (line.action) {
+                                            "refund", "completed" -> accents.success
+                                            "cancelled" -> MaterialTheme.colorScheme.error
+                                            "refund_processing" -> accents.info
+                                            else -> accents.info
+                                        },
                                         modifier = Modifier.size(22.dp),
                                     )
 
@@ -597,7 +691,7 @@ internal fun NotificationsDialog(
 
                                         if (open != null) {
                                             Text(
-                                                "Tap to open this order",
+                                                if (onOpenChat != null && line.itemId > 0) "Tap to view in chat" else "Tap to open this order",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.primary,
                                             )

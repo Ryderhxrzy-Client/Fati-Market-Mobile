@@ -105,7 +105,11 @@ fun InAppNotificationHost(
                     onDismiss = { current = null },
                     onOpen = {
                         current = null
-                        onOpenOrder(notification.transactionId)
+                        if (notification.itemId > 0) {
+                            onOpenChat(notification.itemId, 0)
+                        } else {
+                            onOpenOrder(notification.transactionId)
+                        }
                     },
                 )
 

@@ -316,8 +316,12 @@ internal fun ChatOrderCard(
                         TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
                     }
 
+                    val isRefundMessage = msg.message.contains("refund", ignoreCase = true)
+
                     // ── An admin decision / order update banner ─────────
-                    if (msg.kind == "order_update") {
+                    // Suppress danger/red order_update banner if the message is specifically about the refund
+                    // to prevent duplicate red + green banners on refund completion.
+                    if (msg.kind == "order_update" && !isRefundMessage) {
                         val tone = when (statusThen) {
                             "cancelled", "rejected" -> StatusTone.Danger
                             "completed" -> StatusTone.Success
@@ -334,9 +338,10 @@ internal fun ChatOrderCard(
                         )
                     }
 
-                    // Refund banner ONLY if this message is the cancellation with refund, or is live card cancelled with refund
+                    // Refund banner: show on refund update message or latest live card that was cancelled with refund
                     val isCancellationMsg = statusThen in setOf("cancelled", "rejected") || (isLiveOrderCard && order.status == "cancelled")
-                    if (isCancellationMsg && order.refundStatus != null) {
+                    val showRefundBanner = isRefundMessage || (isCancellationMsg && isLiveOrderCard && order.refundStatus != null)
+                    if (showRefundBanner && order.refundStatus != null) {
                         order.refundStatus?.let {
                             val isCompleted = order.isRefundCompleted
                             val refundAmt = order.refundAmountFormatted ?: Money.format(order.amountDue)
@@ -352,6 +357,12 @@ internal fun ChatOrderCard(
                                 icon = if (isCompleted) Icons.Filled.CheckCircle else Icons.Filled.HourglassTop,
                             )
                         }
+                    } else if (isRefundMessage && order.refundStatus == null) {
+                        InfoBanner(
+                            text = msg.message,
+                            tone = StatusTone.Success,
+                            icon = Icons.Filled.CheckCircle,
+                        )
                     }
 
                     // ── The GCash receipt, when one has been sent ────────────

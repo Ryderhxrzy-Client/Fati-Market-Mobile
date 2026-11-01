@@ -611,6 +611,9 @@ internal data class ActivityEntry(
     /** The other person in the event, where there is one. */
     val subject: ActivityPerson? = null,
     val details: List<ActivityDetail> = emptyList(),
+    val itemId: Int = 0,
+    val itemTitle: String = "",
+    val itemPhoto: String = "",
 )
 
 private fun parseActivityPerson(obj: JSONObject?): ActivityPerson? {

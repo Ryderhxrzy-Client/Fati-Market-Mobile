@@ -43,7 +43,10 @@ import kotlinx.coroutines.withContext
  * on screen or download as a PDF to show at the store.
  */
 @Composable
-internal fun MyOrdersScreen(onDismiss: () -> Unit) {
+internal fun MyOrdersScreen(
+    onDismiss: () -> Unit,
+    onOpenChat: ((itemId: Int, itemTitle: String, itemPhoto: String) -> Unit)? = null,
+) {
     BackHandler(onBack = onDismiss)
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -51,7 +54,10 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
-            MyOrdersContent(topBar = { MarketPageTopBar("My Orders", onDismiss) })
+            MyOrdersContent(
+                topBar = { MarketPageTopBar("My Orders", onDismiss) },
+                onOpenChat = onOpenChat,
+            )
         }
     }
 }
@@ -64,7 +70,10 @@ internal fun MyOrdersScreen(onDismiss: () -> Unit) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
+internal fun MyOrdersContent(
+    topBar: @Composable () -> Unit,
+    onOpenChat: ((itemId: Int, itemTitle: String, itemPhoto: String) -> Unit)? = null,
+) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("fatimarket_prefs", 0) }
     val token = remember { prefs.getString("auth_token", "") ?: "" }
@@ -228,6 +237,7 @@ internal fun MyOrdersContent(topBar: @Composable () -> Unit) {
                                 OrderHistoryCard(
                                     order = order,
                                     onViewReceipt = { openReceiptFor = order },
+                                    onOpenChat = onOpenChat?.let { fn -> { fn(order.itemId, order.itemTitle, order.itemPhoto ?: "") } },
                                     onPay = {
                                         if (order.paymentMethod == "paymongo" ||
                                             (order.paymentMethod == "cash" && order.downpaymentRequired)
@@ -293,6 +303,7 @@ private fun OrderHistoryCard(
     onViewReceipt: () -> Unit,
     onPay: () -> Unit,
     onChangePayment: () -> Unit,
+    onOpenChat: (() -> Unit)? = null,
 ) {
     val accents = LocalMarketAccents.current
 
@@ -605,6 +616,15 @@ private fun OrderHistoryCard(
         // counter to pull this order up, take the handover photo, and
         // complete it - and for a cash order, to take the payment first.
         PickupQrButton(order = order, modifier = Modifier.fillMaxWidth())
+
+        if (onOpenChat != null) {
+            SecondaryButton(
+                text = "Chat with store",
+                onClick = onOpenChat,
+                modifier = Modifier.fillMaxWidth(),
+                icon = Icons.Filled.Chat,
+            )
+        }
     }
 }
 

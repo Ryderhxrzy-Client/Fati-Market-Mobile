@@ -180,6 +180,54 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
         if (linkedPersonalEmail.isBlank() && !promptedForEmail) askingPersonalEmail = true
     }
 
+    LaunchedEffect(Unit) {
+        ChatNavigator.events.collect { event ->
+            if (event.itemId > 0) {
+                showMyOrders = false
+                showFavorites = false
+                showMyListings = false
+                selectedDetailItem = null
+                checkoutItem = null
+                chatConversation = Conversation(
+                    otherUserId = event.otherUserId,
+                    otherUserEmail = "",
+                    firstName = "Ofelia's Store",
+                    lastName = "",
+                    profilePicture = "",
+                    itemId = event.itemId,
+                    itemTitle = event.itemTitle.ifBlank { "Item #${event.itemId}" },
+                    itemPhoto = event.itemPhoto,
+                    latestMessage = "",
+                    lastMessageAt = "",
+                    messageCount = 0,
+                )
+                selectedTab = StudentTab.CHAT
+            }
+        }
+    }
+
+    val openChatForItem: (Int, String, String) -> Unit = { itemId, itemTitle, itemPhoto ->
+        showMyOrders = false
+        showFavorites = false
+        showMyListings = false
+        selectedDetailItem = null
+        checkoutItem = null
+        chatConversation = Conversation(
+            otherUserId = 0,
+            otherUserEmail = "",
+            firstName = "Ofelia's Store",
+            lastName = "",
+            profilePicture = "",
+            itemId = itemId,
+            itemTitle = itemTitle.ifBlank { "Item #$itemId" },
+            itemPhoto = itemPhoto,
+            latestMessage = "",
+            lastMessageAt = "",
+            messageCount = 0,
+        )
+        selectedTab = StudentTab.CHAT
+    }
+
     if (askingPersonalEmail) {
         PersonalEmailDialog(
             onDismiss = {
@@ -362,6 +410,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                                 onFavoritedIdsChange = { favoritedIds = it },
                                 onFavoritesClick     = { showFavorites = true },
                                 onGoToChat           = { selectedTab = StudentTab.CHAT },
+                                onGoToChatForItem    = openChatForItem,
                                 onOpenOrders         = { selectStudentTab(StudentTab.ORDERS) },
                                 onOpenProfile        = { selectStudentTab(StudentTab.PROFILE) },
                                 onSell               = { selectStudentTab(StudentTab.ADD_ITEM) },
@@ -381,6 +430,7 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
                                 onOpenListings   = { showMyListings = true },
                             )
                             StudentTab.ORDERS   -> MyOrdersContent(
+                                onOpenChat = openChatForItem,
                                 topBar = {
                                     MarketHeader(
                                         title = "My Orders",
@@ -463,7 +513,10 @@ fun StudentDashboard(isDarkMode: Boolean, onThemeToggle: () -> Unit, onLogout: (
         }
 
         if (showMyOrders) {
-            MyOrdersScreen(onDismiss = { showMyOrders = false })
+            MyOrdersScreen(
+                onDismiss = { showMyOrders = false },
+                onOpenChat = openChatForItem,
+            )
         }
 
         if (showFavorites) {
@@ -492,6 +545,7 @@ private fun StudentHomeContent(
     onFavoritedIdsChange: (Set<Int>) -> Unit,
     onFavoritesClick: () -> Unit,
     onGoToChat: () -> Unit = {},
+    onGoToChatForItem: (itemId: Int, itemTitle: String, itemPhoto: String) -> Unit = { _, _, _ -> },
     onOpenOrders: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
     onSell: () -> Unit = {},
@@ -606,6 +660,10 @@ private fun StudentHomeContent(
             onDismiss = { showNotifications = false },
             // A line saying an order moved should take the buyer to it.
             onOpenOrder = { showNotifications = false; onOpenOrders() },
+            onOpenChat = { itemId, itemTitle, itemPhoto ->
+                showNotifications = false
+                onGoToChatForItem(itemId, itemTitle, itemPhoto)
+            },
         )
     }
 
@@ -997,6 +1055,7 @@ private fun PointsStrip(
 private fun StudentMyListingsContent(
     onMenuClick: () -> Unit,
     onGoToChat: () -> Unit = {},
+    onGoToChatForItem: (itemId: Int, itemTitle: String, itemPhoto: String) -> Unit = { _, _, _ -> },
     onSell: () -> Unit = {},
 ) {
     val context = LocalContext.current
