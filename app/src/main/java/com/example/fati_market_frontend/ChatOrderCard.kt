@@ -320,6 +320,26 @@ internal fun ChatOrderCard(
                     TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
                 }
 
+                val isCancelledWithRefund = order.status == "cancelled" && order.refundStatus != null
+                val shouldShowRefundBanner = (isLiveOrderCard || msg.kind in setOf("order_update", "order_cancelled")) && isCancelledWithRefund
+                if (shouldShowRefundBanner) {
+                    order.refundStatus?.let {
+                        val isCompleted = order.isRefundCompleted
+                        val refundAmt = order.refundAmountFormatted ?: Money.format(order.amountDue)
+                        InfoBanner(
+                            title = "Refund ${if (isCompleted) "Completed" else "Processing"} ($refundAmt)",
+                            text = if (isCompleted) {
+                                "Refund was processed successfully" + (order.refundReference?.let { " (Ref: $it)" } ?: "") +
+                                    (order.refundedAt?.let { " on $it" } ?: "") + "."
+                            } else {
+                                "Your refund of $refundAmt is currently being processed via ${order.paymentMethod.uppercase()} (typically takes 3–5 business days). If you have not received it after this period, please message the store admin in chat."
+                            },
+                            tone = if (isCompleted) StatusTone.Success else StatusTone.Info,
+                            icon = if (isCompleted) Icons.Filled.CheckCircle else Icons.Filled.HourglassTop,
+                        )
+                    }
+                }
+
                 // ── The GCash receipt, when one has been sent ────────────
                 if (msg.kind == "payment_submitted" || order.paymentProof != null) {
                     order.paymentReference?.let { reference ->
@@ -1254,7 +1274,7 @@ private fun OrderCardActions(
 ) {
     val accents = LocalMarketAccents.current
 
-    if (order.isTerminal) return
+    if (order.isTerminal && !order.canRefund && !order.canDo("process_refund")) return
 
     val decline = when {
         order.canDo("reject_payment") -> "reject_payment"
@@ -1324,15 +1344,26 @@ internal fun OrderActionButtons(
                 containerColor = accents.success,
                 compact = compact,
             )
-            val isUnpaid = !order.hasPaidDownpayment
+            val isUnpaid = !order.isPaid
+            val hasRemaining = (order.remainingBalance.toDoubleOrNull() ?: 0.0) > 0.0
             SecondaryButton(
-                text = if (isUnpaid) "Cancel & Return to Marketplace" else "Forfeit DP & Relist",
+                text = if (isUnpaid) "Cancel & Return to Marketplace" else if (hasRemaining) "Forfeit DP & Relist" else "Forfeit Payment & Relist",
                 onClick = { onAction("forfeit") },
                 modifier = Modifier.fillMaxWidth(),
                 contentColor = MaterialTheme.colorScheme.error,
                 icon = Icons.Filled.Cancel,
                 compact = compact,
             )
+            if (!isUnpaid) {
+                PrimaryButton(
+                    text = "Refund & Relist Item",
+                    onClick = { onAction("forfeit_refund") },
+                    modifier = Modifier.fillMaxWidth(),
+                    containerColor = MaterialTheme.colorScheme.error,
+                    icon = Icons.Filled.Undo,
+                    compact = compact,
+                )
+            }
         }
         return
     }
@@ -1369,6 +1400,33 @@ internal fun OrderActionButtons(
             decline?.let { add(it) }
         }
 
+        if (order.canRefund || order.canDo("process_refund")) {
+            if (order.paymentMethod == "paymongo") {
+                PrimaryButton(
+                    text = "Process PayMongo Refund",
+                    onClick = { onAction("refund_paymongo") },
+                    modifier = Modifier.fillMaxWidth(),
+                    containerColor = accents.info,
+                    compact = compact,
+                )
+                SecondaryButton(
+                    text = "Mark Refund as Sent",
+                    onClick = { onAction("refund_manual") },
+                    modifier = Modifier.fillMaxWidth(),
+                    contentColor = accents.success,
+                    compact = compact,
+                )
+            } else {
+                PrimaryButton(
+                    text = "Mark Refund as Sent",
+                    onClick = { onAction("refund_manual") },
+                    modifier = Modifier.fillMaxWidth(),
+                    containerColor = accents.success,
+                    compact = compact,
+                )
+            }
+        }
+
         if (secondary.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 secondary.forEach { action ->
@@ -1388,7 +1446,7 @@ internal fun OrderActionButtons(
                             compact = compact,
                         )
                         else -> SecondaryButton(
-                            text = "Decline",
+                            text = if (action == "cancel" && order.isPaid) "Cancel & Refund" else if (action == "cancel") "Cancel order" else "Decline",
                             onClick = { onAction(action) },
                             modifier = Modifier.weight(1f),
                             contentColor = MaterialTheme.colorScheme.error,
