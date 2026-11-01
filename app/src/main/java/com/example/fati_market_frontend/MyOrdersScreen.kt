@@ -276,11 +276,11 @@ private enum class OrderFilter(val label: String) {
     fun matches(order: MarketTransaction): Boolean = when (this) {
         All -> true
         // Still owes money, or the proof was declined and must be redone.
-        ToPay -> order.paymentStatus == "unpaid" && !order.isTerminal
+        ToPay -> !order.isTerminal && order.paymentStatus == "unpaid"
         // Submitted, waiting on the admin.
-        Pending -> order.paymentStatus == "proof_submitted" || order.paymentStatus == "partially_paid"
+        Pending -> !order.isTerminal && (order.paymentStatus == "proof_submitted" || order.paymentStatus == "partially_paid")
         // Payment settled but not yet handed over.
-        Paid -> order.paymentStatus == "verified" && order.status != "completed"
+        Paid -> !order.isTerminal && order.paymentStatus == "verified"
         Completed -> order.status == "completed"
         Cancelled -> order.status == "cancelled" || order.status == "rejected"
     }

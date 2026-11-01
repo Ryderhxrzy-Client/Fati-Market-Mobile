@@ -71,6 +71,23 @@ internal fun ChatOrderCard(
     val token = remember { prefs.getString("auth_token", "") ?: "" }
     val isAdmin = remember { (prefs.getString("user_role", "") ?: "").equals("admin", true) }
 
+    val paymentThen = if (
+        order.paymentMethod == "cash" && order.paymentStatus == "partially_paid"
+    ) {
+        "partially_paid"
+    } else {
+        msg.paymentStatusAt ?: when (msg.kind) {
+            "order_placed" -> if (order.isFullPointsCheckout) "verified" else "unpaid"
+            "payment_submitted" -> "proof_submitted"
+            else -> order.paymentStatus
+        }
+    }
+    val statusThen = msg.orderStatusAt ?: when (msg.kind) {
+        "order_placed" -> "pending_payment"
+        "payment_submitted" -> "payment_proof_submitted"
+        else -> order.status
+    }
+
     var showItem by remember { mutableStateOf(false) }
     var showProof by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<String?>(null) }
@@ -153,202 +170,224 @@ internal fun ChatOrderCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .clickable { expanded = !expanded }
+                        .clickable(enabled = msg.kind != "order_update") { expanded = !expanded }
                         .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 ) {
                     OrderCardHeading(msg.kind, order, expanded)
                 }
 
-                Column(
-                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-                ) {
-
-                // ── The item, and the way through to it ──────────────────
-                Row(
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.small)
-                        .clickable { showItem = true }
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ItemThumbnail(order.itemPhoto, thumbnailSize = 44.dp)
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            order.itemTitle,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            if (order.paymentMethod == "cash" && order.downpaymentRequired) {
-                                val downpaymentState = if (
-                                    order.paymentStatus in setOf("partially_paid", "paid", "verified")
-                                ) "paid" else "unpaid"
-                                val balanceState = if (
-                                    order.paymentStatus in setOf("paid", "verified")
-                                ) "paid" else "unpaid"
-
-                                Money.format(order.downpaymentAmount) + " $downpaymentState · " +
-                                    Money.format(order.remainingBalance) + " $balanceState"
-                            } else {
-                                Money.format(order.amountDue) + " · " + paymentStateLabel(
-                                    paymentStatus = order.paymentStatus,
-                                    isFullPointsCheckout = order.isFullPointsCheckout,
-                                    paymentMethod = order.paymentMethod,
-                                    orderStatus = order.status,
-                                )
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-
-                    TextButton(
-                        onClick = { showItem = true },
-                        modifier = Modifier.heightIn(min = 36.dp),
-                        contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 0.dp),
+                if (msg.kind == "order_update") {
+                    Column(
+                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                     ) {
-                        Text("View item", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
+                        }
 
-                if (expanded) {
-                    SoftDivider()
-
-                // ── The money ────────────────────────────────────────────
-                CompactOrderRow("Price", Money.format(order.subtotal))
-
-                if (order.pointsUsed > 0) {
-                    CompactOrderRow(
-                        label = "${order.pointsUsed} point(s) used",
-                        value = "−" + Money.format(order.pointsDiscountAmount),
-                        valueColor = accents.reward,
-                    )
-                }
-
-                CompactOrderRow("Order total", Money.format(order.amountDue), emphasized = true)
-                CompactOrderRow("Payment method", orderPaymentMethodLabel(order))
-                (order.pickupDateFormatted ?: order.pickupDate)?.let { sched ->
-                    CompactOrderRow(
-                        label = "Pick-up schedule",
-                        value = sched,
-                        emphasized = true,
-                        valueColor = if (order.status == "overdue") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                if (order.status == "overdue") {
-                    InfoBanner(
-                        title = "Reservation Overdue",
-                        text = if (isAdmin) {
-                            "The scheduled pick-up date has passed. Please extend pick-up date, forfeit DP and relist, or mark as sold."
-                        } else {
-                            "Your scheduled pick-up date has passed. Please visit the store or contact admin to reschedule."
-                        },
-                        tone = StatusTone.Danger,
-                        icon = Icons.Filled.EventBusy,
-                    )
-                }
-                if (order.paymentMethod == "cash" && order.downpaymentRequired) {
-                    val downpaymentPaid = order.paymentStatus in setOf(
-                        "partially_paid",
-                        "paid",
-                        "verified",
-                    )
-                    val balancePaid = order.paymentStatus in setOf("paid", "verified")
-
-                    CompactOrderRow(
-                        "PayMongo downpayment",
-                        Money.format(order.downpaymentAmount) +
-                            if (downpaymentPaid) " · Paid" else " · Unpaid",
-                        valueColor = if (downpaymentPaid) {
-                            accents.success
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        },
-                        emphasized = true,
-                    )
-                    CompactOrderRow(
-                        "Cash balance at pickup",
-                        Money.format(order.remainingBalance) +
-                            if (balancePaid) " · Paid" else " · Unpaid",
-                        valueColor = if (balancePaid) {
-                            accents.success
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        },
-                        emphasized = true,
-                    )
-                }
-
-                // ── Paid, or not, at the time of writing ─────────────────
-                // The thread is a history: this line keeps the state it
-                // recorded. Older messages, posted before the snapshot
-                // existed, fall back to what their kind implies.
-                val paymentThen = if (
-                    order.paymentMethod == "cash" && order.paymentStatus == "partially_paid"
-                ) {
-                    "partially_paid"
-                } else {
-                    msg.paymentStatusAt ?: when (msg.kind) {
-                        "order_placed" -> if (order.isFullPointsCheckout) "verified" else "unpaid"
-                        "payment_submitted" -> "proof_submitted"
-                        else -> order.paymentStatus
-                    }
-                }
-                val statusThen = msg.orderStatusAt ?: when (msg.kind) {
-                    "order_placed" -> "pending_payment"
-                    "payment_submitted" -> "payment_proof_submitted"
-                    else -> order.status
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    PaymentStatusPill(
-                        paymentThen,
-                        order.isFullPointsCheckout,
-                        paymentMethod = order.paymentMethod,
-                        orderStatus = statusThen,
-                    )
-                    TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
-                }
-
-                val isCancelledWithRefund = order.status == "cancelled" && order.refundStatus != null
-                val shouldShowRefundBanner = (isLiveOrderCard || msg.kind in setOf("order_update", "order_cancelled")) && isCancelledWithRefund
-                if (shouldShowRefundBanner) {
-                    order.refundStatus?.let {
-                        val isCompleted = order.isRefundCompleted
-                        val refundAmt = order.refundAmountFormatted ?: Money.format(order.amountDue)
+                        val tone = when (statusThen) {
+                            "cancelled", "rejected" -> StatusTone.Danger
+                            "completed" -> StatusTone.Success
+                            else -> StatusTone.Info
+                        }
                         InfoBanner(
-                            title = "Refund ${if (isCompleted) "Completed" else "Processing"} ($refundAmt)",
-                            text = if (isCompleted) {
-                                "Refund was processed successfully" + (order.refundReference?.let { " (Ref: $it)" } ?: "") +
-                                    (order.refundedAt?.let { " on $it" } ?: "") + "."
-                            } else {
-                                "Your refund of $refundAmt is currently being processed via ${order.paymentMethod.uppercase()} (typically takes 3–5 business days). If you have not received it after this period, please message the store admin in chat."
+                            text = msg.message,
+                            tone = tone,
+                            icon = when (statusThen) {
+                                "cancelled", "rejected" -> Icons.Filled.Cancel
+                                "completed" -> Icons.Filled.CheckCircle
+                                else -> Icons.Filled.Notifications
                             },
-                            tone = if (isCompleted) StatusTone.Success else StatusTone.Info,
-                            icon = if (isCompleted) Icons.Filled.CheckCircle else Icons.Filled.HourglassTop,
+                        )
+
+                        // Refund banner ONLY if this update is the cancellation with refund, or is live card cancelled with refund
+                        val isCancellationMsg = statusThen in setOf("cancelled", "rejected") || (isLiveOrderCard && order.status == "cancelled")
+                        if (isCancellationMsg && order.refundStatus != null) {
+                            order.refundStatus?.let {
+                                val isCompleted = order.isRefundCompleted
+                                val refundAmt = order.refundAmountFormatted ?: Money.format(order.amountDue)
+                                InfoBanner(
+                                    title = "Refund ${if (isCompleted) "Completed" else "Processing"} ($refundAmt)",
+                                    text = if (isCompleted) {
+                                        "Refund was processed successfully" + (order.refundReference?.let { " (Ref: $it)" } ?: "") +
+                                            (order.refundedAt?.let { " on $it" } ?: "") + "."
+                                    } else {
+                                        "Your refund of $refundAmt is currently being processed via ${order.paymentMethod.uppercase()} (typically takes 3–5 business days). If you have not received it after this period, please message the store admin in chat."
+                                    },
+                                    tone = if (isCompleted) StatusTone.Success else StatusTone.Info,
+                                    icon = if (isCompleted) Icons.Filled.CheckCircle else Icons.Filled.HourglassTop,
+                                )
+                            }
+                        }
+
+                        if (isAdmin && isLiveOrderCard && (!order.isTerminal || order.canRefund || order.canDo("process_refund"))) {
+                            OrderCardActions(
+                                order = order,
+                                onAction = { pendingAction = it },
+                                onExtend = { extendingSchedule = true },
+                            )
+                        }
+
+                        Text(
+                            timeAgo(msg.sentAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.align(Alignment.End),
                         )
                     }
-                }
+                } else {
+                    Column(
+                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    ) {
 
-                // ── The GCash receipt, when one has been sent ────────────
-                if (msg.kind == "payment_submitted" || order.paymentProof != null) {
-                    order.paymentReference?.let { reference ->
-                        CompactOrderRow("Reference", reference)
+                    // ── The item, and the way through to it ──────────────────
+                    Row(
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable { showItem = true }
+                            .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ItemThumbnail(order.itemPhoto, thumbnailSize = 44.dp)
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                order.itemTitle,
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                if (order.paymentMethod == "cash" && order.downpaymentRequired) {
+                                    val downpaymentState = if (
+                                        paymentThen in setOf("partially_paid", "paid", "verified")
+                                    ) "paid" else "unpaid"
+                                    val balanceState = if (
+                                        paymentThen in setOf("paid", "verified")
+                                    ) "paid" else "unpaid"
+
+                                    Money.format(order.downpaymentAmount) + " $downpaymentState · " +
+                                        Money.format(order.remainingBalance) + " $balanceState"
+                                } else {
+                                    Money.format(order.amountDue) + " · " + paymentStateLabel(
+                                        paymentStatus = paymentThen,
+                                        isFullPointsCheckout = order.isFullPointsCheckout,
+                                        paymentMethod = order.paymentMethod,
+                                        orderStatus = statusThen,
+                                    )
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                        TextButton(
+                            onClick = { showItem = true },
+                            modifier = Modifier.heightIn(min = 36.dp),
+                            contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 0.dp),
+                        ) {
+                            Text("View item", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
 
-                    order.paymentProof?.let { proof ->
+                    if (expanded) {
+                        SoftDivider()
+
+                    // ── The money ────────────────────────────────────────────
+                    CompactOrderRow("Price", Money.format(order.subtotal))
+
+                    if (order.pointsUsed > 0) {
+                        CompactOrderRow(
+                            label = "${order.pointsUsed} point(s) used",
+                            value = "−" + Money.format(order.pointsDiscountAmount),
+                            valueColor = accents.reward,
+                        )
+                    }
+
+                    CompactOrderRow("Order total", Money.format(order.amountDue), emphasized = true)
+                    CompactOrderRow("Payment method", orderPaymentMethodLabel(order))
+                    (order.pickupDateFormatted ?: order.pickupDate)?.let { sched ->
+                        CompactOrderRow(
+                            label = "Pick-up schedule",
+                            value = sched,
+                            emphasized = true,
+                            valueColor = if (order.status == "overdue") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    if (order.status == "overdue") {
+                        InfoBanner(
+                            title = "Reservation Overdue",
+                            text = if (isAdmin) {
+                                "The scheduled pick-up date has passed. Please extend pick-up date, forfeit DP and relist, or mark as sold."
+                            } else {
+                                "Your scheduled pick-up date has passed. Please visit the store or contact admin to reschedule."
+                            },
+                            tone = StatusTone.Danger,
+                            icon = Icons.Filled.EventBusy,
+                        )
+                    }
+                    if (order.paymentMethod == "cash" && order.downpaymentRequired) {
+                        val downpaymentPaid = order.paymentStatus in setOf(
+                            "partially_paid",
+                            "paid",
+                            "verified",
+                        )
+                        val balancePaid = order.paymentStatus in setOf("paid", "verified")
+
+                        CompactOrderRow(
+                            "PayMongo downpayment",
+                            Money.format(order.downpaymentAmount) +
+                                if (downpaymentPaid) " · Paid" else " · Unpaid",
+                            valueColor = if (downpaymentPaid) {
+                                accents.success
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                            emphasized = true,
+                        )
+                        CompactOrderRow(
+                            "Cash balance at pickup",
+                            Money.format(order.remainingBalance) +
+                                if (balancePaid) " · Paid" else " · Unpaid",
+                            valueColor = if (balancePaid) {
+                                accents.success
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                            emphasized = true,
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PaymentStatusPill(
+                            paymentThen,
+                            order.isFullPointsCheckout,
+                            paymentMethod = order.paymentMethod,
+                            orderStatus = statusThen,
+                        )
+                        TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
+                    }
+
+                    // ── The GCash receipt, when one has been sent ────────────
+                    if (msg.kind == "payment_submitted" && order.paymentProof != null) {
+                        order.paymentReference?.let { reference ->
+                            CompactOrderRow("Reference", reference)
+                        }
+
                         AsyncImage(
-                            model = proof,
+                            model = order.paymentProof,
                             contentDescription = "Payment receipt",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -363,78 +402,66 @@ internal fun ChatOrderCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                }
 
-                // ── An admin decision, in the buyer's own thread ─────────
-                if (msg.kind == "order_update") {
-                    InfoBanner(
-                        text = msg.message,
-                        tone = when (order.status) {
-                            "cancelled", "rejected" -> StatusTone.Danger
-                            "completed" -> StatusTone.Success
-                            else -> StatusTone.Info
-                        },
+                    // Every card in a thread points at the same order, so only one
+                    // of them offers the decisions: the receipt if the buyer sent
+                    // one, otherwise the order itself. Repeating the buttons on
+                    // each card would only make Ofelia wonder which is live.
+                    val carriesActions = msg.kind == "payment_submitted" ||
+                        (msg.kind == "order_placed" && order.paymentProof == null) ||
+                        order.status == "overdue"
+
+                    // The buyer's side of the same card: a GCash bill still open
+                    // is payable right here, receipt upload and all.
+                    val buyerCanPay = !isAdmin &&
+                        order.paymentMethod == "gcash" &&
+                        !order.isTerminal &&
+                        (order.paymentStatus == "unpaid" || order.paymentStatus == "rejected")
+
+                    if (buyerCanPay && carriesActions) {
+                        SoftDivider()
+                        PrimaryButton(
+                            text = if (order.paymentStatus == "rejected") "Send payment again" else "Pay with GCash",
+                            onClick = { payingNow = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = Icons.Filled.QrCode2,
+                        )
+                    }
+
+                    // Once the order is approved the buyer's next move is the
+                    // counter, so the code sits on the card that told them so -
+                    // on the one card carrying the decisions, not repeated down
+                    // the whole thread.
+                    val carriesPickup = carriesActions || isLiveOrderCard
+
+                    if (!isAdmin && carriesPickup && order.isCollectable()) {
+                        SoftDivider()
+                        PickupQrButton(order = order, modifier = Modifier.fillMaxWidth())
+                    }
+
+                    // Where to go, on the same live card, once the order is one
+                    // to collect: the store's pin, with directions a tap away.
+                    if (carriesPickup && order.isCollectable()) {
+                        SoftDivider()
+                        PickupLocationRow()
+                    }
+
+                    if (isAdmin && carriesActions) {
+                        OrderCardActions(
+                            order = order,
+                            onAction = { pendingAction = it },
+                            onExtend = { extendingSchedule = true },
+                        )
+                    }
+                    }
+
+                    Text(
+                        timeAgo(msg.sentAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.align(Alignment.End),
                     )
-                }
-
-                // Every card in a thread points at the same order, so only one
-                // of them offers the decisions: the receipt if the buyer sent
-                // one, otherwise the order itself. Repeating the buttons on
-                // each card would only make Ofelia wonder which is live.
-                val carriesActions = msg.kind == "payment_submitted" ||
-                    (msg.kind == "order_placed" && order.paymentProof == null) ||
-                    order.status == "overdue" 
-
-                // The buyer's side of the same card: a GCash bill still open
-                // is payable right here, receipt upload and all.
-                val buyerCanPay = !isAdmin &&
-                    order.paymentMethod == "gcash" &&
-                    !order.isTerminal &&
-                    (order.paymentStatus == "unpaid" || order.paymentStatus == "rejected")
-
-                if (buyerCanPay && carriesActions) {
-                    SoftDivider()
-                    PrimaryButton(
-                        text = if (order.paymentStatus == "rejected") "Send payment again" else "Pay with GCash",
-                        onClick = { payingNow = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = Icons.Filled.QrCode2,
-                    )
-                }
-
-                // Once the order is approved the buyer's next move is the
-                // counter, so the code sits on the card that told them so -
-                // on the one card carrying the decisions, not repeated down
-                // the whole thread.
-                val carriesPickup = carriesActions || isLiveOrderCard
-
-                if (!isAdmin && carriesPickup && order.isCollectable()) {
-                    SoftDivider()
-                    PickupQrButton(order = order, modifier = Modifier.fillMaxWidth())
-                }
-
-                // Where to go, on the same live card, once the order is one
-                // to collect: the store's pin, with directions a tap away.
-                if (carriesPickup && order.isCollectable()) {
-                    SoftDivider()
-                    PickupLocationRow()
-                }
-
-                if (isAdmin && carriesActions) {
-                    OrderCardActions(
-                        order = order,
-                        onAction = { pendingAction = it },
-                        onExtend = { extendingSchedule = true },
-                    )
-                }
-                }
-
-                Text(
-                    timeAgo(msg.sentAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.align(Alignment.End),
-                )
+                    }
                 }
             }
         }
@@ -1255,12 +1282,14 @@ private fun OrderCardHeading(kind: String, order: MarketTransaction, expanded: B
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Icon(
-                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                if (expanded) "Collapse order" else "Expand order",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
+            if (kind != "order_update") {
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    if (expanded) "Collapse order" else "Expand order",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
