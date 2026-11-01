@@ -553,6 +553,13 @@ private fun AdminTransactionCard(
                                 icon = Icons.Filled.Payments,
                                 containerColor = accents.info,
                             )
+                            SecondaryButton(
+                                text = "Mark Refund as Sent",
+                                onClick = { onAction("refund_manual") },
+                                modifier = Modifier.fillMaxWidth(),
+                                icon = Icons.Filled.CheckCircle,
+                                contentColor = accents.success,
+                            )
                         } else {
                             PrimaryButton(
                                 text = "Mark Refund as Sent",
