@@ -170,136 +170,72 @@ internal fun ChatOrderCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .clickable(enabled = msg.kind != "order_update") { expanded = !expanded }
+                        .clickable { expanded = !expanded }
                         .padding(horizontal = Spacing.md, vertical = Spacing.xs),
                 ) {
                     OrderCardHeading(msg.kind, order, expanded)
                 }
 
-                if (msg.kind == "order_update") {
-                    Column(
-                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
-                        }
+                Column(
+                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                ) {
 
-                        val tone = when (statusThen) {
-                            "cancelled", "rejected" -> StatusTone.Danger
-                            "completed" -> StatusTone.Success
-                            else -> StatusTone.Info
-                        }
-                        InfoBanner(
-                            text = msg.message,
-                            tone = tone,
-                            icon = when (statusThen) {
-                                "cancelled", "rejected" -> Icons.Filled.Cancel
-                                "completed" -> Icons.Filled.CheckCircle
-                                else -> Icons.Filled.Notifications
-                            },
-                        )
+                // ── The item, and the way through to it ──────────────────
+                Row(
+                    modifier = Modifier
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable { showItem = true }
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ItemThumbnail(order.itemPhoto, thumbnailSize = 44.dp)
 
-                        // Refund banner ONLY if this update is the cancellation with refund, or is live card cancelled with refund
-                        val isCancellationMsg = statusThen in setOf("cancelled", "rejected") || (isLiveOrderCard && order.status == "cancelled")
-                        if (isCancellationMsg && order.refundStatus != null) {
-                            order.refundStatus?.let {
-                                val isCompleted = order.isRefundCompleted
-                                val refundAmt = order.refundAmountFormatted ?: Money.format(order.amountDue)
-                                InfoBanner(
-                                    title = "Refund ${if (isCompleted) "Completed" else "Processing"} ($refundAmt)",
-                                    text = if (isCompleted) {
-                                        "Refund was processed successfully" + (order.refundReference?.let { " (Ref: $it)" } ?: "") +
-                                            (order.refundedAt?.let { " on $it" } ?: "") + "."
-                                    } else {
-                                        "Your refund of $refundAmt is currently being processed via ${order.paymentMethod.uppercase()} (typically takes 3–5 business days). If you have not received it after this period, please message the store admin in chat."
-                                    },
-                                    tone = if (isCompleted) StatusTone.Success else StatusTone.Info,
-                                    icon = if (isCompleted) Icons.Filled.CheckCircle else Icons.Filled.HourglassTop,
-                                )
-                            }
-                        }
-
-                        if (isAdmin && isLiveOrderCard && (!order.isTerminal || order.canRefund || order.canDo("process_refund"))) {
-                            OrderCardActions(
-                                order = order,
-                                onAction = { pendingAction = it },
-                                onExtend = { extendingSchedule = true },
-                            )
-                        }
-
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            timeAgo(msg.sentAt),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.align(Alignment.End),
+                            order.itemTitle,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            if (order.paymentMethod == "cash" && order.downpaymentRequired) {
+                                val downpaymentState = if (
+                                    paymentThen in setOf("partially_paid", "paid", "verified")
+                                ) "paid" else "unpaid"
+                                val balanceState = if (
+                                    paymentThen in setOf("paid", "verified")
+                                ) "paid" else "unpaid"
+
+                                Money.format(order.downpaymentAmount) + " $downpaymentState · " +
+                                    Money.format(order.remainingBalance) + " $balanceState"
+                            } else {
+                                Money.format(order.amountDue) + " · " + paymentStateLabel(
+                                    paymentStatus = paymentThen,
+                                    isFullPointsCheckout = order.isFullPointsCheckout,
+                                    paymentMethod = order.paymentMethod,
+                                    orderStatus = statusThen,
+                                )
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                } else {
-                    Column(
-                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+
+                    TextButton(
+                        onClick = { showItem = true },
+                        modifier = Modifier.heightIn(min = 36.dp),
+                        contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 0.dp),
                     ) {
-
-                    // ── The item, and the way through to it ──────────────────
-                    Row(
-                        modifier = Modifier
-                            .clip(MaterialTheme.shapes.small)
-                            .clickable { showItem = true }
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ItemThumbnail(order.itemPhoto, thumbnailSize = 44.dp)
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                order.itemTitle,
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                if (order.paymentMethod == "cash" && order.downpaymentRequired) {
-                                    val downpaymentState = if (
-                                        paymentThen in setOf("partially_paid", "paid", "verified")
-                                    ) "paid" else "unpaid"
-                                    val balanceState = if (
-                                        paymentThen in setOf("paid", "verified")
-                                    ) "paid" else "unpaid"
-
-                                    Money.format(order.downpaymentAmount) + " $downpaymentState · " +
-                                        Money.format(order.remainingBalance) + " $balanceState"
-                                } else {
-                                    Money.format(order.amountDue) + " · " + paymentStateLabel(
-                                        paymentStatus = paymentThen,
-                                        isFullPointsCheckout = order.isFullPointsCheckout,
-                                        paymentMethod = order.paymentMethod,
-                                        orderStatus = statusThen,
-                                    )
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-
-                        TextButton(
-                            onClick = { showItem = true },
-                            modifier = Modifier.heightIn(min = 36.dp),
-                            contentPadding = PaddingValues(horizontal = Spacing.xs, vertical = 0.dp),
-                        ) {
-                            Text("View item", style = MaterialTheme.typography.labelSmall)
-                        }
+                        Text("View item", style = MaterialTheme.typography.labelSmall)
                     }
+                }
 
-                    if (expanded) {
-                        SoftDivider()
+                if (expanded) {
+                    SoftDivider()
 
                     // ── The money ────────────────────────────────────────────
                     CompactOrderRow("Price", Money.format(order.subtotal))
@@ -380,6 +316,44 @@ internal fun ChatOrderCard(
                         TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
                     }
 
+                    // ── An admin decision / order update banner ─────────
+                    if (msg.kind == "order_update") {
+                        val tone = when (statusThen) {
+                            "cancelled", "rejected" -> StatusTone.Danger
+                            "completed" -> StatusTone.Success
+                            else -> StatusTone.Info
+                        }
+                        InfoBanner(
+                            text = msg.message,
+                            tone = tone,
+                            icon = when (statusThen) {
+                                "cancelled", "rejected" -> Icons.Filled.Cancel
+                                "completed" -> Icons.Filled.CheckCircle
+                                else -> Icons.Filled.Notifications
+                            },
+                        )
+                    }
+
+                    // Refund banner ONLY if this message is the cancellation with refund, or is live card cancelled with refund
+                    val isCancellationMsg = statusThen in setOf("cancelled", "rejected") || (isLiveOrderCard && order.status == "cancelled")
+                    if (isCancellationMsg && order.refundStatus != null) {
+                        order.refundStatus?.let {
+                            val isCompleted = order.isRefundCompleted
+                            val refundAmt = order.refundAmountFormatted ?: Money.format(order.amountDue)
+                            InfoBanner(
+                                title = "Refund ${if (isCompleted) "Completed" else "Processing"} ($refundAmt)",
+                                text = if (isCompleted) {
+                                    "Refund was processed successfully" + (order.refundReference?.let { " (Ref: $it)" } ?: "") +
+                                        (order.refundedAt?.let { " on $it" } ?: "") + "."
+                                } else {
+                                    "Your refund of $refundAmt is currently being processed via ${order.paymentMethod.uppercase()} (typically takes 3–5 business days). If you have not received it after this period, please message the store admin in chat."
+                                },
+                                tone = if (isCompleted) StatusTone.Success else StatusTone.Info,
+                                icon = if (isCompleted) Icons.Filled.CheckCircle else Icons.Filled.HourglassTop,
+                            )
+                        }
+                    }
+
                     // ── The GCash receipt, when one has been sent ────────────
                     if (msg.kind == "payment_submitted" && order.paymentProof != null) {
                         order.paymentReference?.let { reference ->
@@ -403,16 +377,9 @@ internal fun ChatOrderCard(
                         )
                     }
 
-                    // Every card in a thread points at the same order, so only one
-                    // of them offers the decisions: the receipt if the buyer sent
-                    // one, otherwise the order itself. Repeating the buttons on
-                    // each card would only make Ofelia wonder which is live.
-                    val carriesActions = msg.kind == "payment_submitted" ||
-                        (msg.kind == "order_placed" && order.paymentProof == null) ||
-                        order.status == "overdue"
+                    val carriesActions = (isLiveOrderCard || order.status == "overdue") &&
+                        (msg.kind == "payment_submitted" || (msg.kind == "order_placed" && order.paymentProof == null) || msg.kind == "order_update")
 
-                    // The buyer's side of the same card: a GCash bill still open
-                    // is payable right here, receipt upload and all.
                     val buyerCanPay = !isAdmin &&
                         order.paymentMethod == "gcash" &&
                         !order.isTerminal &&
@@ -428,19 +395,13 @@ internal fun ChatOrderCard(
                         )
                     }
 
-                    // Once the order is approved the buyer's next move is the
-                    // counter, so the code sits on the card that told them so -
-                    // on the one card carrying the decisions, not repeated down
-                    // the whole thread.
-                    val carriesPickup = carriesActions || isLiveOrderCard
+                    val carriesPickup = (carriesActions || isLiveOrderCard) && order.isCollectable()
 
                     if (!isAdmin && carriesPickup && order.isCollectable()) {
                         SoftDivider()
                         PickupQrButton(order = order, modifier = Modifier.fillMaxWidth())
                     }
 
-                    // Where to go, on the same live card, once the order is one
-                    // to collect: the store's pin, with directions a tap away.
                     if (carriesPickup && order.isCollectable()) {
                         SoftDivider()
                         PickupLocationRow()
@@ -453,15 +414,14 @@ internal fun ChatOrderCard(
                             onExtend = { extendingSchedule = true },
                         )
                     }
-                    }
+                }
 
-                    Text(
-                        timeAgo(msg.sentAt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.align(Alignment.End),
-                    )
-                    }
+                Text(
+                    timeAgo(msg.sentAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.align(Alignment.End),
+                )
                 }
             }
         }
@@ -1282,14 +1242,12 @@ private fun OrderCardHeading(kind: String, order: MarketTransaction, expanded: B
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (kind != "order_update") {
-                Icon(
-                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                    if (expanded) "Collapse order" else "Expand order",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+            Icon(
+                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                if (expanded) "Collapse order" else "Expand order",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
