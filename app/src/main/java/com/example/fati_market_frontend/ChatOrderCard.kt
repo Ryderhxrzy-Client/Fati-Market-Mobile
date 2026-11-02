@@ -200,7 +200,7 @@ internal fun ChatOrderCard(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            if (order.paymentMethod == "cash" && order.downpaymentRequired) {
+                            if (order.paymentMethod == "cash" && (order.downpaymentRequired || (order.downpaymentAmount.toDoubleOrNull() ?: 0.0) > 0.0)) {
                                 val downpaymentState = if (
                                     paymentThen in setOf("partially_paid", "paid", "verified")
                                 ) "paid" else "unpaid"
@@ -210,12 +210,15 @@ internal fun ChatOrderCard(
 
                                 Money.format(order.downpaymentAmount) + " $downpaymentState · " +
                                     Money.format(order.remainingBalance) + " $balanceState"
+                            } else if (order.paymentMethod in setOf("paymongo", "gcash")) {
+                                val isPaid = paymentThen in setOf("paid", "verified")
+                                Money.format(order.amountDue) + " · " + (if (isPaid) "Paid via PayMongo" else "Unpaid via PayMongo")
                             } else {
                                 Money.format(order.amountDue) + " · " + paymentStateLabel(
                                     paymentStatus = paymentThen,
                                     isFullPointsCheckout = order.isFullPointsCheckout,
                                     paymentMethod = order.paymentMethod,
-                                    orderStatus = statusThen,
+                                    orderStatus = if (order.status in setOf("cancelled", "rejected")) order.status else statusThen,
                                 )
                             },
                             style = MaterialTheme.typography.bodySmall,
@@ -270,7 +273,7 @@ internal fun ChatOrderCard(
                             icon = Icons.Filled.EventBusy,
                         )
                     }
-                    if (order.paymentMethod == "cash" && order.downpaymentRequired) {
+                    if (order.paymentMethod == "cash" && (order.downpaymentRequired || (order.downpaymentAmount.toDoubleOrNull() ?: 0.0) > 0.0)) {
                         val downpaymentPaid = order.paymentStatus in setOf(
                             "partially_paid",
                             "paid",
@@ -300,8 +303,22 @@ internal fun ChatOrderCard(
                             },
                             emphasized = true,
                         )
+                    } else if (order.paymentMethod in setOf("paymongo", "gcash")) {
+                        val isPaid = order.paymentStatus in setOf("paid", "verified")
+                        CompactOrderRow(
+                            "PayMongo balance",
+                            Money.format(order.amountDue) +
+                                if (isPaid) " · Paid" else " · Unpaid",
+                            valueColor = if (isPaid) {
+                                accents.success
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                            emphasized = true,
+                        )
                     }
 
+                    val effectiveStatus = if (order.status in setOf("cancelled", "rejected")) order.status else statusThen
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
@@ -311,9 +328,24 @@ internal fun ChatOrderCard(
                             paymentThen,
                             order.isFullPointsCheckout,
                             paymentMethod = order.paymentMethod,
-                            orderStatus = statusThen,
+                            orderStatus = effectiveStatus,
                         )
-                        TransactionStatusPill(statusThen, paymentMethod = order.paymentMethod)
+                        TransactionStatusPill(effectiveStatus, paymentMethod = order.paymentMethod)
+                    }
+
+                    val isUnpaidOnline = (order.paymentMethod in setOf("paymongo", "gcash") && order.paymentStatus !in setOf("paid", "verified")) ||
+                        (order.paymentMethod == "cash" && (order.downpaymentRequired || (order.downpaymentAmount.toDoubleOrNull() ?: 0.0) > 0.0) && order.paymentStatus !in setOf("partially_paid", "paid", "verified"))
+                    if (isUnpaidOnline && order.status !in setOf("cancelled", "rejected")) {
+                        InfoBanner(
+                            title = "Payment Pending",
+                            text = if (order.paymentMethod == "cash") {
+                                "Awaiting PayMongo downpayment of ${Money.format(order.downpaymentAmount)}."
+                            } else {
+                                "Awaiting online payment of ${Money.format(order.amountDue)} via PayMongo."
+                            },
+                            tone = StatusTone.Warning,
+                            icon = Icons.Filled.Pending,
+                        )
                     }
 
                     val isRefundMessage = msg.message.contains("refund", ignoreCase = true)
@@ -1679,6 +1711,7 @@ internal fun PaymentStatusPill(
     orderStatus: String? = null,
 ) {
     val tone = when {
+        orderStatus == "cancelled" || orderStatus == "rejected" -> StatusTone.Neutral
         paymentStatus == "verified" -> StatusTone.Success
         paymentStatus == "partially_paid" -> StatusTone.Info
         paymentStatus == "rejected" -> StatusTone.Danger
@@ -1711,6 +1744,8 @@ internal fun paymentStateLabel(
     orderStatus: String? = null,
     isFullPointsCheckout: Boolean = false,
 ): String = when {
+    orderStatus == "cancelled" -> "Order Cancelled"
+    orderStatus == "rejected" -> "Order Rejected"
     isFullPointsCheckout && paymentStatus == "verified" -> "Paid with points"
     paymentStatus == "verified" -> "Paid"
     paymentStatus == "partially_paid" -> "Partially paid"

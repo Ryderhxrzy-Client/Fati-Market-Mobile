@@ -112,6 +112,12 @@ internal fun ChatOrderPanel(
 
     val current = order ?: return
 
+    // Completed, cancelled, or rejected orders have no pending decisions in this chat.
+    // Suppress the header banner so it does not stay pinned as "Waiting for approval" or "Unpaid".
+    if (current.isTerminal || current.status in setOf("completed", "cancelled", "rejected")) {
+        return
+    }
+
     // ── Buyer profile ───────────────────────────────────────────────────
     if (showBuyer) {
         Dialog(onDismissRequest = { showBuyer = false }) {
@@ -189,7 +195,7 @@ internal fun ChatOrderPanel(
                             )
                         }
 
-                        if (current.paymentMethod == "cash" && current.downpaymentRequired) {
+                        if (current.paymentMethod == "cash" && (current.downpaymentRequired || (current.downpaymentAmount.toDoubleOrNull() ?: 0.0) > 0.0)) {
                             val downpaymentPaid = current.paymentStatus in setOf(
                                 "partially_paid",
                                 "paid",
@@ -217,6 +223,15 @@ internal fun ChatOrderPanel(
                                 } else {
                                     MaterialTheme.colorScheme.error
                                 },
+                                emphasized = true,
+                            )
+                        } else if (current.paymentMethod in setOf("paymongo", "gcash")) {
+                            val isPaid = current.paymentStatus in setOf("paid", "verified")
+                            CompactOrderRow(
+                                label = "PayMongo balance",
+                                value = Money.format(current.amountDue) +
+                                    if (isPaid) " · Paid" else " · Unpaid",
+                                valueColor = if (isPaid) accents.success else MaterialTheme.colorScheme.error,
                                 emphasized = true,
                             )
                         }
@@ -342,11 +357,15 @@ internal fun ChatOrderPanel(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        if (current.paymentMethod == "cash" && current.downpaymentRequired) {
+                        if (current.paymentMethod == "cash" && (current.downpaymentRequired || (current.downpaymentAmount.toDoubleOrNull() ?: 0.0) > 0.0)) {
                             val paid = current.paymentStatus in setOf("partially_paid", "paid", "verified")
                             Money.format(current.downpaymentAmount) +
                                 (if (paid) " paid · " else " unpaid · ") +
                                 Money.format(current.remainingBalance) + " cash due"
+                        } else if (current.paymentMethod in setOf("paymongo", "gcash")) {
+                            val paid = current.paymentStatus in setOf("paid", "verified")
+                            Money.format(current.amountDue) +
+                                (if (paid) " paid · PayMongo" else " unpaid · PayMongo")
                         } else {
                             Money.format(current.amountDue) + " · " +
                                 orderPaymentMethodLabel(current)
@@ -373,7 +392,7 @@ internal fun ChatOrderPanel(
                 )
             }
 
-            if (expanded && current.paymentMethod == "cash" && current.downpaymentRequired) {
+            if (expanded && (current.paymentMethod == "cash" && (current.downpaymentRequired || (current.downpaymentAmount.toDoubleOrNull() ?: 0.0) > 0.0))) {
                 val downpaymentPaid = current.paymentStatus in setOf(
                     "partially_paid",
                     "paid",
@@ -404,6 +423,19 @@ internal fun ChatOrderPanel(
                         } else {
                             MaterialTheme.colorScheme.error
                         },
+                        emphasized = true,
+                    )
+                }
+            } else if (expanded && current.paymentMethod in setOf("paymongo", "gcash")) {
+                val isPaid = current.paymentStatus in setOf("paid", "verified")
+                MarketPanel(
+                    contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = Spacing.xs),
+                ) {
+                    CompactOrderRow(
+                        label = "PayMongo balance",
+                        value = Money.format(current.amountDue) +
+                            if (isPaid) " · Paid" else " · Unpaid",
+                        valueColor = if (isPaid) accents.success else MaterialTheme.colorScheme.error,
                         emphasized = true,
                     )
                 }
