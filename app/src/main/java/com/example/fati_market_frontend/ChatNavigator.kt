@@ -9,6 +9,7 @@ internal data class OpenChatEvent(
     val itemPhoto: String = "",
 )
 
+
 internal object ChatNavigator {
     val events = MutableSharedFlow<OpenChatEvent>(extraBufferCapacity = 8)
 
