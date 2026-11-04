@@ -60,9 +60,35 @@ internal data class StoreHours(
         return (now.dayOfMonth..month.lengthOfMonth()).any { isBookableDay(month.atDay(it), now) }
     }
 
-    /** Whether now is past closing time (6:00 PM cutoff). */
-    fun isPastCutoff(now: ZonedDateTime): Boolean =
-        !now.toLocalTime().isBefore(closeTime)
+    /**
+     * Whether today can no longer take a pick-up: the store is closed today,
+     * or it is already at or past closing time, in the store's own [zone].
+     *
+     * Before opening on an open day is NOT past cutoff: an order placed at
+     * 12:24 AM on a Wednesday can still be picked up that same Wednesday.
+     */
+    fun isPastCutoff(now: ZonedDateTime): Boolean {
+        val local = now.withZoneSameInstant(zone)
+
+        return local.dayOfWeek.value !in openDays || !local.toLocalTime().isBefore(closeTime)
+    }
+
+    /** The first open day on or after [date]. */
+    fun nextOpenDayFrom(date: LocalDate): LocalDate {
+        var day = date
+        while (day.dayOfWeek.value !in openDays) day = day.plusDays(1)
+        return day
+    }
+
+    /**
+     * The first day a pick-up/meet-up can be scheduled: today while the store
+     * can still take one, otherwise the next open day (skipping closed days).
+     */
+    fun earliestPickupDate(now: ZonedDateTime): LocalDate {
+        val today = now.withZoneSameInstant(zone).toLocalDate()
+
+        return nextOpenDayFrom(if (isPastCutoff(now)) today.plusDays(1) else today)
+    }
 
     /** "Mon-Sat" for a run of days, "Mon, Wed, Fri" otherwise. */
     fun daysLabel(): String {
@@ -76,6 +102,18 @@ internal data class StoreHours(
                 "${name(days.first())}-${name(days.last())}"
             else -> days.joinToString(", ") { name(it) }
         }
+    }
+
+    companion object {
+        /** The backend's own defaults, used until GET /api/store/hours answers. */
+        val DEFAULT = StoreHours(
+            openTime = LocalTime.of(8, 0),
+            closeTime = LocalTime.of(18, 0),
+            openDays = (1..6).toSet(),
+            slotMinutes = 30,
+            label = "8:00 AM - 6:00 PM",
+            zone = ZoneId.of("Asia/Manila"),
+        )
     }
 }
 

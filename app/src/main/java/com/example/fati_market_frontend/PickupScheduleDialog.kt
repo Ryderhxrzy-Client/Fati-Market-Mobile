@@ -59,26 +59,14 @@ internal fun PickupDatePickerModal(
     val now = remember(loaded) {
         if (loaded != null) ZonedDateTime.now(loaded.zone) else ZonedDateTime.now()
     }
-    val openDays = loaded?.openDays ?: setOf(1, 2, 3, 4, 5, 6)
-    val isClosedOrPastCutoff = loaded?.isPastCutoff(now) ?: false
+    val hours = loaded ?: StoreHours.DEFAULT
+    val openDays = hours.openDays
+    val isClosedOrPastCutoff = hours.isPastCutoff(now)
 
-    // Earliest selectable date calculation
-    val earliestDate: LocalDate = remember(now, openDays, isClosedOrPastCutoff, isAdmin) {
-        if (isAdmin) {
-            var cand = now.toLocalDate()
-            while (!openDays.contains(cand.dayOfWeek.value)) {
-                cand = cand.plusDays(1)
-            }
-            cand
-        } else if (!isClosedOrPastCutoff && openDays.contains(now.dayOfWeek.value)) {
-            now.toLocalDate()
-        } else {
-            var cand = now.toLocalDate().plusDays(1)
-            while (!openDays.contains(cand.dayOfWeek.value)) {
-                cand = cand.plusDays(1)
-            }
-            cand
-        }
+    // Earliest selectable date: the admin may still book today after closing;
+    // a buyer gets today only while the store can still take a pick-up.
+    val earliestDate: LocalDate = remember(hours, now, isAdmin) {
+        if (isAdmin) hours.nextOpenDayFrom(now.toLocalDate()) else hours.earliestPickupDate(now)
     }
 
     // Default to earliestDate if current is null or in the past

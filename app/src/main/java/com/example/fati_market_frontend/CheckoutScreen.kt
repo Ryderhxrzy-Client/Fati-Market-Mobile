@@ -39,7 +39,6 @@ import androidx.compose.ui.text.style.TextAlign
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -110,27 +109,17 @@ internal fun CheckoutScreen(
     val isFullPoints = amountDue.signum() == 0
     val rewardOnCompletion = quote?.rewardPointsOnCompletion ?: item.rewardPoints
 
-    val now = remember(storeHours) {
-        val zone = storeHours?.zone ?: ZoneId.of("Asia/Manila")
-        ZonedDateTime.now(zone)
-    }
-    val openDays = storeHours?.openDays ?: setOf(1, 2, 3, 4, 5, 6)
-    val isPastCutoff = quote?.isPastCutoff == true || runCatching {
-        val cal = java.util.Calendar.getInstance()
-        cal.get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.SUNDAY ||
-        cal.get(java.util.Calendar.HOUR_OF_DAY) >= 18
-    }.getOrDefault(false)
+    // Store hours and the clock are read in the store's own timezone, so the
+    // phone's locale does not decide whether Ofelia's store is open. The
+    // server's verdict in the quote still wins: a date the app offers must be
+    // one the server will accept.
+    val hours = storeHours ?: StoreHours.DEFAULT
+    val now = remember(hours) { ZonedDateTime.now(hours.zone) }
+    val isPastCutoff = quote?.isPastCutoff == true || hours.isPastCutoff(now)
 
-    val earliestDate: LocalDate = remember(now, openDays, isPastCutoff) {
-        if (!isPastCutoff && openDays.contains(now.dayOfWeek.value)) {
-            now.toLocalDate()
-        } else {
-            var cand = now.toLocalDate().plusDays(1)
-            while (!openDays.contains(cand.dayOfWeek.value)) {
-                cand = cand.plusDays(1)
-            }
-            cand
-        }
+    val earliestDate: LocalDate = remember(hours, now, isPastCutoff) {
+        val today = now.toLocalDate()
+        hours.nextOpenDayFrom(if (isPastCutoff) today.plusDays(1) else today)
     }
 
     var selectedPickupDate by remember(earliestDate) { mutableStateOf(earliestDate) }
